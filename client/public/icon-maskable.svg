@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Marquee">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1c130a"/>
+      <stop offset="55%" stop-color="#0e0a06"/>
+      <stop offset="100%" stop-color="#08080a"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd17a"/>
+      <stop offset="55%" stop-color="#f5a524"/>
+      <stop offset="100%" stop-color="#c47c0e"/>
+    </linearGradient>
+    <linearGradient id="slate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1411"/>
+      <stop offset="100%" stop-color="#0a0707"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full bleed bg for maskable purpose -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Inner content scaled to ~70% so it lives in the maskable safe zone -->
+  <g transform="translate(76 76) scale(0.703)">
+    <ellipse cx="256" cy="296" rx="190" ry="150" fill="#f5a524" opacity="0.14"/>
+
+    <rect x="72" y="222" width="368" height="222" rx="16" fill="url(#slate)" stroke="url(#gold)" stroke-width="5"/>
+
+    <g stroke="url(#gold)" stroke-linecap="round" stroke-width="4" opacity="0.55">
+      <line x1="112" y1="286" x2="400" y2="286"/>
+      <line x1="112" y1="332" x2="316" y2="332"/>
+      <line x1="112" y1="378" x2="400" y2="378"/>
+      <line x1="112" y1="424" x2="276" y2="424"/>
+    </g>
+
+    <path d="
+      M 76 224
+      L 440 147
+      L 432 64
+      L 64 141
+      Z"
+      fill="url(#slate)"
+      stroke="url(#gold)"
+      stroke-width="5"
+      stroke-linejoin="round"/>
+
+    <circle cx="76" cy="224" r="10" fill="url(#gold)"/>
+  </g>
+</svg>

@@ -1,0 +1,62 @@
+# Marquee — self-contained stack (Postgres bundled).
+# Data persists in the named volume `marquee_pgdata`.
+#
+# Run from the repo root so compose loads `.env`:
+#   docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+
+services:
+  postgres:
+    # Pinned to digest so rebuilds are reproducible. Bump manually for upstream
+    # security patches: docker pull postgres:16-alpine && docker inspect …
+    image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
+    container_name: marquee-postgres
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marqueeadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-marquee}
+    volumes:
+      - marquee_pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"   # 5433 on host to avoid clashing with existing Postgres on Tank
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marqueeadmin} -d ${POSTGRES_DB:-marquee}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  marquee:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: marquee
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Override DATABASE_URL so the in-container app talks to the `postgres` service hostname,
+      # not whatever localhost-flavored URL is in .env for local dev.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-marqueeadmin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-marquee}
+      # Backup worker writes here daily; mounted from host below. Leave empty
+      # to disable automated backups.
+      BACKUP_DIR: ${BACKUP_DIR:-/backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - ${BACKUP_HOST_PATH:-./backups}:/backups
+    ports:
+      - "${APP_HOST_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:alpine doesn't ship curl/wget — use node's built-in fetch.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  marquee_pgdata:

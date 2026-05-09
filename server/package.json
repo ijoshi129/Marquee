@@ -1,0 +1,28 @@
+{
+  "name": "marquee-server",
+  "version": "0.1.0",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "parse-fixture": "node scripts/parse-fixture.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.1",
+    "helmet": "^8.1.0",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.5",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "pino-pretty": "^13.1.3"
+  }
+}

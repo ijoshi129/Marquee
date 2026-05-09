@@ -1,0 +1,177 @@
+const express = require('express');
+const logger = require('../logger');
+const { pool } = require('../db');
+
+const router = express.Router();
+
+function monthBounds(monthParam) {
+  const now = new Date();
+  let year = now.getUTCFullYear();
+  let month = now.getUTCMonth();
+  if (monthParam) {
+    const m = /^(\d{4})-(\d{2})$/.exec(monthParam);
+    if (!m) throw new Error('month must be YYYY-MM');
+    year = Number(m[1]);
+    month = Number(m[2]) - 1;
+  }
+  return {
+    start: new Date(Date.UTC(year, month, 1)),
+    end: new Date(Date.UTC(year, month + 1, 1)),
+    label: `${year}-${String(month + 1).padStart(2, '0')}`,
+  };
+}
+
+function periodBounds(period, monthParam) {
+  if (period === 'all') {
+    return {
+      start: new Date(Date.UTC(2000, 0, 1)),
+      end: new Date(Date.UTC(2100, 0, 1)),
+      label: 'all',
+    };
+  }
+  if (period === 'year') {
+    const year = (monthParam ? Number(monthParam.slice(0, 4)) : null) || new Date().getUTCFullYear();
+    return {
+      start: new Date(Date.UTC(year, 0, 1)),
+      end: new Date(Date.UTC(year + 1, 0, 1)),
+      label: String(year),
+    };
+  }
+  return monthBounds(monthParam);
+}
+
+router.get('/', async (req, res) => {
+  try {
+    const period = req.query.period || 'month';
+    const { start, end, label } = periodBounds(period, req.query.month);
+
+    const watchesQ = await pool.query(
+      `SELECT w.id, w.title, w.rating, w.watched_at, t.name AS theater_name, tc.payload AS tmdb
+       FROM watches w
+       LEFT JOIN theaters t ON t.id = w.theater_id
+       LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+       WHERE w.status = 'watched'
+         AND w.watched_at >= $1 AND w.watched_at < $2
+       ORDER BY w.watched_at DESC`,
+      [start.toISOString(), end.toISOString()]
+    );
+
+    const watches = watchesQ.rows;
+    const count = watches.length;
+
+    let totalRuntime = 0;
+    const genreCounts = new Map();
+    const theaterCounts = new Map();
+    const directorCounts = new Map();
+    const monthBuckets = new Map(); // 'YYYY-MM' -> count
+    let ratingSum = 0;
+    let ratingCount = 0;
+
+    for (const w of watches) {
+      const t = w.tmdb || {};
+      if (typeof t.runtime_minutes === 'number') totalRuntime += t.runtime_minutes;
+      for (const g of t.genres || []) {
+        genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
+      }
+      if (w.theater_name) {
+        theaterCounts.set(w.theater_name, (theaterCounts.get(w.theater_name) || 0) + 1);
+      }
+      if (t.director) {
+        directorCounts.set(t.director, (directorCounts.get(t.director) || 0) + 1);
+      }
+      if (typeof w.rating === 'number') {
+        ratingSum += w.rating;
+        ratingCount++;
+      }
+      if (w.watched_at) {
+        const d = new Date(w.watched_at);
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        monthBuckets.set(key, (monthBuckets.get(key) || 0) + 1);
+      }
+    }
+
+    const recent = watches.slice(0, 6).map((w) => ({
+      id: w.id,
+      title: w.tmdb?.title || w.title,
+      poster_url: w.tmdb?.poster_url || null,
+      rating: w.rating,
+      watched_at: w.watched_at,
+      theater_name: w.theater_name,
+    }));
+
+    const response = {
+      period,
+      label,
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+      count,
+      total_runtime_minutes: totalRuntime,
+      average_rating: ratingCount ? Math.round((ratingSum / ratingCount) * 10) / 10 : null,
+      genres: [...genreCounts.entries()]
+        .map(([name, n]) => ({ name, count: n }))
+        .sort((a, b) => b.count - a.count),
+      theaters: [...theaterCounts.entries()]
+        .map(([name, n]) => ({ name, count: n }))
+        .sort((a, b) => b.count - a.count),
+      recent,
+    };
+
+    // Year-in-Review extras when not viewing a single month.
+    if (period !== 'month') {
+      // Pick a sensible window for the monthly chart:
+      //   - period='year': always show 12 months of that year (zero-buckets included).
+      //   - period='all':  from the earliest actual watched_at (or its month) up to
+      //                    the current calendar month, so we don't show 20 years of
+      //                    pre-data zeros.
+      const monthly = [];
+      let cursor;
+      let stop;
+      if (period === 'year') {
+        cursor = new Date(start);
+        stop = new Date(end);
+      } else {
+        // period='all'
+        const earliestMs = watches.reduce((min, w) => {
+          const t = w.watched_at ? new Date(w.watched_at).getTime() : Infinity;
+          return t < min ? t : min;
+        }, Infinity);
+        const earliest = Number.isFinite(earliestMs) ? new Date(earliestMs) : new Date();
+        cursor = new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
+        const now = new Date();
+        stop = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      }
+      while (cursor < stop && monthly.length < 240) {
+        const key = `${cursor.getUTCFullYear()}-${String(
+          cursor.getUTCMonth() + 1
+        ).padStart(2, '0')}`;
+        monthly.push({ month: key, count: monthBuckets.get(key) || 0 });
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+      }
+      const trimmed = monthly;
+
+      const topRated = watches
+        .filter((w) => typeof w.rating === 'number' && w.rating === 5)
+        .slice(0, 12)
+        .map((w) => ({
+          id: w.id,
+          title: w.tmdb?.title || w.title,
+          poster_url: w.tmdb?.poster_url || null,
+          watched_at: w.watched_at,
+        }));
+
+      response.top_directors = [...directorCounts.entries()]
+        .map(([name, n]) => ({ name, count: n }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+      response.monthly_breakdown = trimmed;
+      response.top_rated = topRated;
+    }
+
+    res.json(response);
+  } catch (err) {
+    logger.error({ err: err }, 'stats');
+    res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
+module.exports = router;
