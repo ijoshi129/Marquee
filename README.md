@@ -64,12 +64,30 @@ Everything is set in `.env` at the repo root. The fields are also marked inline 
 | `APP_HOST_PORT` | `3000` | Host port the app listens on. Change if 3000 is taken. |
 | `POSTGRES_HOST_PORT` | `5433` | Host port for the bundled Postgres. Change only if 5433 is taken. |
 | `BACKUP_RETENTION_DAYS` | `30` | How many days of backups to keep. Older files are pruned. |
+| `ADMIN_API_TOKEN` | unset | Optional bearer token required by the database export/import API. Strongly recommended if the app is reachable beyond localhost. |
+| `DATABASE_IMPORT_LIMIT` | `200mb` | Maximum request body size accepted by the database import API. |
 
 To restore from a backup file:
 
 ```bash
 gunzip < backups/marquee-2026-01-15.sql.gz \
   | docker exec -i marquee-postgres psql -U marqueeadmin marquee
+```
+
+You can also use the local API for one-off backups/restores:
+
+```bash
+# Export a restorable gzipped SQL dump.
+curl -fsS http://127.0.0.1:3000/api/admin/database/export \
+  -o marquee-db.sql.gz
+
+# If ADMIN_API_TOKEN is set, add:
+#   -H "Authorization: Bearer $ADMIN_API_TOKEN"
+
+# Restore that dump into the live database. This replaces the current DB contents.
+curl -fsS -X POST http://127.0.0.1:3000/api/admin/database/import \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @marquee-db.sql.gz
 ```
 
 ## What to expect on first launch
@@ -116,6 +134,8 @@ docker exec marquee node -e "require('./workers/backup').runBackup().then(p => c
 | `GET /api/search-suggest?q=` | Grouped suggestions: films, directors, theatres, genres. |
 | `GET /api/stats?period=all\|year\|month&month=YYYY-MM` | Aggregate stats. Drives the in-app Year-in-Review. |
 | `GET /api/export[?download=0]` | Full JSON dump of all watches, theatres, and TMDB cache. Triggers a browser download by default; pass `download=0` to inline. |
+| `GET /api/admin/database/export` | Gzipped PostgreSQL SQL dump for full database backup. |
+| `POST /api/admin/database/import` | Restore a gzipped/plain SQL dump into the live database. Destructive; replaces current DB contents when using app-created dumps. |
 
 All `/api/*` routes are rate-limited to 600 req/min per IP.
 

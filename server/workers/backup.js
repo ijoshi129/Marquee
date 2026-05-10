@@ -31,7 +31,13 @@ async function runBackup() {
   return await new Promise((resolve, reject) => {
     const dump = spawn(
       'pg_dump',
-      [process.env.DATABASE_URL, '--no-owner', '--no-privileges'],
+      [
+        '--no-owner',
+        '--no-privileges',
+        '--clean',
+        '--if-exists',
+        process.env.DATABASE_URL,
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'] }
     );
     const gzip = spawn('gzip', ['-9'], { stdio: ['pipe', 'pipe', 'inherit'] });

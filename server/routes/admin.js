@@ -1,4 +1,7 @@
 const express = require('express');
+const { spawn } = require('node:child_process');
+const { Readable } = require('node:stream');
+const zlib = require('node:zlib');
 const logger = require('../logger');
 const { pool } = require('../db');
 const { simpleParser } = require('mailparser');
@@ -10,6 +13,19 @@ const matcher = require('../services/matcher');
 const poller = require('../workers/email-poller');
 
 const router = express.Router();
+
+const IMPORT_LIMIT = process.env.DATABASE_IMPORT_LIMIT || '200mb';
+
+function requireAdminToken(req, res, next) {
+  const token = process.env.ADMIN_API_TOKEN;
+  if (!token) return next();
+
+  const auth = req.get('authorization') || '';
+  const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1];
+  const supplied = bearer || req.get('x-admin-token');
+  if (supplied === token) return next();
+  return res.status(401).json({ error: 'Admin token required' });
+}
 
 // List email_log rows. Filter ?status=failed|ok|pending and ?type=reservation|thankyou|unknown.
 router.get('/email-log', async (req, res) => {
@@ -125,5 +141,118 @@ router.post('/poll-now', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// GET /api/admin/database/export — stream a restorable Postgres SQL dump.
+// The dump is gzipped and includes DROP statements, so importing it into a
+// non-empty Marquee database replaces the app tables with the backup contents.
+router.get('/database/export', requireAdminToken, async (req, res) => {
+  const filename = `marquee-db-${new Date().toISOString().slice(0, 10)}.sql.gz`;
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  const dump = spawn(
+    'pg_dump',
+    [
+      '--no-owner',
+      '--no-privileges',
+      '--clean',
+      '--if-exists',
+      process.env.DATABASE_URL,
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] }
+  );
+  const gzip = zlib.createGzip({ level: 9 });
+
+  let dumpErr = '';
+  dump.stderr.on('data', (chunk) => {
+    dumpErr += chunk.toString();
+  });
+  dump.on('error', (err) => {
+    logger.error({ err }, 'database export spawn failed');
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    else res.destroy(err);
+  });
+  dump.on('close', (code) => {
+    if (code !== 0) {
+      const err = new Error(`pg_dump exit ${code}: ${dumpErr.trim()}`);
+      logger.error({ err }, 'database export failed');
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+      else res.destroy(err);
+    }
+  });
+  gzip.on('error', (err) => {
+    logger.error({ err }, 'database export gzip failed');
+    res.destroy(err);
+  });
+  req.on('close', () => {
+    if (!res.writableEnded) dump.kill('SIGTERM');
+  });
+
+  dump.stdout.pipe(gzip).pipe(res);
+});
+
+// POST /api/admin/database/import — restore a dump produced by the export API
+// or daily backup worker. Send the file body as application/gzip (or
+// application/octet-stream for either gzipped or plain SQL).
+router.post(
+  '/database/import',
+  requireAdminToken,
+  express.raw({
+    type: [
+      'application/gzip',
+      'application/x-gzip',
+      'application/octet-stream',
+      'application/sql',
+      'text/plain',
+    ],
+    limit: IMPORT_LIMIT,
+  }),
+  async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: 'SQL dump body is required' });
+      }
+
+      const isGzip = req.body[0] === 0x1f && req.body[1] === 0x8b;
+      const sql = isGzip ? zlib.gunzipSync(req.body) : req.body;
+      if (
+        !/PostgreSQL database dump|CREATE TABLE|COPY .* FROM stdin|INSERT INTO|DROP TABLE/i.test(
+          sql.toString('utf8', 0, 65536)
+        )
+      ) {
+        return res.status(400).json({ error: 'Body does not look like a SQL dump' });
+      }
+
+      const psql = spawn(
+        'psql',
+        ['--set', 'ON_ERROR_STOP=1', '--quiet', process.env.DATABASE_URL],
+        { stdio: ['pipe', 'ignore', 'pipe'] }
+      );
+
+      let stderr = '';
+      psql.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      const restore = new Promise((resolve, reject) => {
+        psql.on('error', reject);
+        psql.on('close', (code) => {
+          if (code !== 0) {
+            reject(new Error(`psql exit ${code}: ${stderr.trim()}`));
+          } else {
+            resolve();
+          }
+        });
+      });
+      Readable.from(sql).pipe(psql.stdin);
+      await restore;
+
+      logger.info({ bytes: req.body.length, gzipped: isGzip }, 'database import completed');
+      res.json({ ok: true, bytes: req.body.length, gzipped: isGzip });
+    } catch (err) {
+      logger.error({ err }, 'database import failed');
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 
 module.exports = router;

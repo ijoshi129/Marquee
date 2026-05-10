@@ -10,11 +10,12 @@ const { pool } = require('../db');
 const logger = require('../logger');
 const tmdb = require('./tmdb');
 
-const REDDIT_UA = 'marquee/0.1 by /u/ishaan42';
+const REDDIT_UA = 'marquee/0.1 self-hosted movie tracker';
 const SEARCH_URL =
   'https://www.reddit.com/r/AMCsAList/search.json?q=screen+unseen+megathread&restrict_sr=1&sort=new&t=year';
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const LOOKUP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/New_York';
 // postId → { entries, predecessorUrls, fetchedAt }
 const threadCache = new Map();
 let currentMegathreadCache = null; // { id, fetchedAt }
@@ -71,6 +72,53 @@ function parseDateString(s) {
     `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const dates = [fmt(d1)];
   if (m[3]) dates.push(fmt(parseInt(m[3], 10)));
+  return dates;
+}
+
+function formatDateInTimeZone(value, timeZone = LOOKUP_TIME_ZONE) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const get = (type) => parts.find((p) => p.type === type)?.value;
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    return year && month && day ? `${year}-${month}-${day}` : null;
+  } catch (err) {
+    logger.error({ err }, `unseen-lookup: invalid timezone ${timeZone}`);
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+function addDaysToIsoDate(isoDate, days) {
+  const d = new Date(`${isoDate}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function lookupDatesForWatch(w) {
+  const dates = [];
+  const push = (date) => {
+    if (date && !dates.includes(date)) dates.push(date);
+  };
+
+  if (w.showtime) {
+    push(formatDateInTimeZone(w.showtime));
+    push(new Date(w.showtime).toISOString().slice(0, 10));
+  } else if (w.watched_at) {
+    const localDate = formatDateInTimeZone(w.watched_at);
+    push(localDate);
+    push(addDaysToIsoDate(localDate, -1));
+    push(new Date(w.watched_at).toISOString().slice(0, 10));
+  }
+
   return dates;
 }
 
@@ -261,14 +309,21 @@ async function resolveAndAssign(watchId, opts = {}) {
   if (!m) return { resolved: false, reason: 'not an AMC Screen/Scream Unseen' };
   const type = m[1].toLowerCase();
 
-  const showDate = w.showtime || w.watched_at;
-  if (!showDate) return { resolved: false, reason: 'no date' };
-  const isoDate = new Date(showDate).toISOString().slice(0, 10);
+  const lookupDates = lookupDatesForWatch(w);
+  if (!lookupDates.length) return { resolved: false, reason: 'no date' };
 
-  const entry = await lookupByDate(isoDate, type);
+  let entry = null;
+  let isoDate = null;
+  for (const date of lookupDates) {
+    entry = await lookupByDate(date, type);
+    if (entry) {
+      isoDate = date;
+      break;
+    }
+  }
   if (!entry) {
     logger.info(
-      `unseen-lookup: no megathread entry for ${isoDate} (${type}) — watch ${watchId}`
+      `unseen-lookup: no megathread entry for ${lookupDates.join(', ')} (${type}) — watch ${watchId}`
     );
     return { resolved: false, reason: 'no megathread entry' };
   }
@@ -315,5 +370,11 @@ module.exports = {
   parseDateString,
   clearCaches,
   // exported for tests/scripts
-  _internal: { loadThread, findCurrentMegathreadId, threadCache },
+  _internal: {
+    loadThread,
+    findCurrentMegathreadId,
+    threadCache,
+    formatDateInTimeZone,
+    lookupDatesForWatch,
+  },
 };
