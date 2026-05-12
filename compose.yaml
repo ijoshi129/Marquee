@@ -4,6 +4,11 @@
 #   docker compose pull    # fetch newer image
 #   docker compose up -d   # apply
 
+# Pin the project + volume names so they don't depend on the install
+# directory. Moving the compose file between hosts/paths keeps the
+# Postgres data volume (`marquee_pgdata`) discoverable.
+name: marquee
+
 services:
   postgres:
     image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
@@ -54,3 +59,4 @@ services:
 
 volumes:
   marquee_pgdata:
+    name: marquee_pgdata
