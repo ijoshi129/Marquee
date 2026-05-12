@@ -19,7 +19,7 @@ const TIEBREAKER_OFFSET_HOURS = 2; // typical post-show email delay
 
 // Insert a new pending watch row from a parsed reservation.
 async function ingestReservation({ fields, gmail_message_id }) {
-  const { title, theater_name, showtime, order_number } = fields;
+  const { title, theater_name, showtime, order_number, tags: parsedTags } = fields;
   const theater = await upsertTheater(theater_name);
 
   // Idempotency: same reservation email or same order_number.
@@ -50,13 +50,15 @@ async function ingestReservation({ fields, gmail_message_id }) {
     needsReview = true;
   }
 
+  const tags = Array.isArray(parsedTags) ? parsedTags : [];
+
   const insert = await pool.query(
     `INSERT INTO watches
        (tmdb_id, title, theater_id, showtime, status, source,
-        reservation_email_id, order_number, tmdb_needs_review)
-     VALUES ($1, $2, $3, $4, 'pending', 'amc_email', $5, $6, $7)
+        reservation_email_id, order_number, tmdb_needs_review, tags)
+     VALUES ($1, $2, $3, $4, 'pending', 'amc_email', $5, $6, $7, $8)
      RETURNING id`,
-    [tmdbId, title, theater?.id || null, showtime, gmail_message_id, order_number || null, needsReview]
+    [tmdbId, title, theater?.id || null, showtime, gmail_message_id, order_number || null, needsReview, tags]
   );
   return { watch_id: insert.rows[0].id, deduped: false };
 }
@@ -134,6 +136,10 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
   }
 
   if (chosen) {
+    // Thank-you emails are the typical carrier for <img alt="..."> format
+    // badges (BigD, RealD 3D, etc.). Merge those into the row's existing
+    // tags so we don't lose anything that arrived only in this email.
+    const incomingTags = Array.isArray(fields.tags) ? fields.tags : [];
     if (chosen.status === 'pending') {
       // Standard promote: status flip plus watched_at = thank-you receive time
       // (best available proxy for actual watch time).
@@ -142,9 +148,13 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
          SET status = 'watched',
              watched_at = $1,
              thankyou_email_id = $2,
+             tags = (
+               SELECT array_agg(DISTINCT t)
+               FROM unnest(coalesce(tags, '{}'::text[]) || $4::text[]) AS t
+             ),
              updated_at = NOW()
          WHERE id = $3`,
-        [recv.toISOString(), gmail_message_id, chosen.id]
+        [recv.toISOString(), gmail_message_id, chosen.id, incomingTags]
       );
     } else {
       // Already auto-watched by pending-expirer step 1. Link the thank-you,
@@ -155,9 +165,13 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
         `UPDATE watches
          SET thankyou_email_id = $1,
              acknowledged = TRUE,
+             tags = (
+               SELECT array_agg(DISTINCT t)
+               FROM unnest(coalesce(tags, '{}'::text[]) || $3::text[]) AS t
+             ),
              updated_at = NOW()
          WHERE id = $2`,
-        [gmail_message_id, chosen.id]
+        [gmail_message_id, chosen.id, incomingTags]
       );
     }
     // Enrich via TMDB if not yet enriched
@@ -184,13 +198,15 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
     logger.error({ err: err }, 'TMDB enrichment failed during walk-up (non-fatal)');
   }
 
+  const tags = Array.isArray(fields.tags) ? fields.tags : [];
+
   const insert = await pool.query(
     `INSERT INTO watches
        (tmdb_id, title, theater_id, status, source,
-        thankyou_email_id, watched_at, tmdb_needs_review)
-     VALUES ($1, $2, $3, 'watched', 'amc_email', $4, $5, $6)
+        thankyou_email_id, watched_at, tmdb_needs_review, tags)
+     VALUES ($1, $2, $3, 'watched', 'amc_email', $4, $5, $6, $7)
      RETURNING id`,
-    [tmdbId, title, theater?.id || null, gmail_message_id, recv.toISOString(), needsReview]
+    [tmdbId, title, theater?.id || null, gmail_message_id, recv.toISOString(), needsReview, tags]
   );
 
   maybeResolveUnseen(insert.rows[0].id, title);

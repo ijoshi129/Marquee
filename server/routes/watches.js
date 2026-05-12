@@ -12,6 +12,7 @@ const SELECT_WATCH = `
     w.id, w.tmdb_id, w.title, w.showtime,
     w.status, w.source, w.rating, w.notes, w.tmdb_needs_review,
     w.reservation_email_id, w.thankyou_email_id,
+    w.tags,
     w.watched_at, w.created_at, w.updated_at,
     t.id  AS theater_id,
     t.name AS theater_name,
@@ -110,13 +111,11 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Format / special tag (Screen Unseen, Scream Unseen, regular).
-    if (req.query.format === 'screen_unseen') {
-      where.push(`w.title ILIKE 'AMC %Screen Unseen%'`);
-    } else if (req.query.format === 'scream_unseen') {
-      where.push(`w.title ILIKE 'AMC %Scream Unseen%'`);
-    } else if (req.query.format === 'regular') {
-      where.push(`w.title NOT ILIKE 'AMC %Unseen%'`);
+    // Tag filter — exact match in the tags array. Replaces the older
+    // `format` param that ILIKE-matched the title for Screen/Scream Unseen.
+    if (req.query.tag) {
+      params.push(req.query.tag);
+      where.push(`$${params.length} = ANY(w.tags)`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -176,6 +175,7 @@ router.post('/', async (req, res) => {
       notes,
       watched_at,
       status,
+      tags,
       tmdb_id: explicitTmdbId,
     } = req.body || {};
 
@@ -218,8 +218,8 @@ router.post('/', async (req, res) => {
     const insert = await pool.query(
       `INSERT INTO watches
         (tmdb_id, title, showtime, theater_id, status, source,
-         rating, notes, tmdb_needs_review, watched_at)
-       VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, $8, $9)
+         rating, notes, tmdb_needs_review, watched_at, tags)
+       VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         tmdbId,
@@ -231,6 +231,7 @@ router.post('/', async (req, res) => {
         notes || null,
         needsReview,
         finalWatchedAt,
+        Array.isArray(tags) ? tags : [],
       ]
     );
 
@@ -245,7 +246,7 @@ router.post('/', async (req, res) => {
 // PATCH /api/watches/:id — update mutable fields
 const PATCH_FIELDS = [
   'title', 'rating', 'notes', 'status', 'watched_at',
-  'showtime', 'acknowledged',
+  'showtime', 'acknowledged', 'tags',
 ];
 
 router.patch('/:id', async (req, res) => {
