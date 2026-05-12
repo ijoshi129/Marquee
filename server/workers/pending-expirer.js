@@ -1,7 +1,7 @@
 // Daily cron + post-poll sweep that settles the lifecycle of AMC-email-driven
 // watches after their showtime passes.
 //
-// Three stages, all driven by the row's `showtime`:
+// Two stages, both driven by the row's `showtime`:
 //
 //   1. showtime + 24h  →  flip pending → watched silently. Reasoning:
 //      cancellation emails arrive instantly when you cancel, so a row that's
@@ -16,10 +16,9 @@
 //      thank-you email, surface a bulletin prompt asking the user to confirm
 //      ("I went" / "No-show" / "I cancelled it"). Thank-yous can be 1–4 days
 //      late or never arrive, so this is the cross-check on step 1's assumption.
-//      Skips rows the user has already engaged with (rated, noted, or touched).
-//
-//   3. showtime + 30d  →  stop nagging. Force acknowledged=TRUE on any still
-//      un-confirmed row. The user's had a month; assume they went and move on.
+//      The prompt persists indefinitely — until the user clicks one of the
+//      three actions or explicitly dismisses. Skips rows the user has already
+//      engaged with (rated, noted, or touched).
 //
 // Manual entries (source='manual') are never touched — those are explicit user
 // choices that shouldn't auto-mutate.
@@ -30,7 +29,6 @@ const { pool } = require('../db');
 
 const AUTO_WATCHED_AFTER_HOURS = 24;
 const NEEDS_CONFIRM_DAYS = 4;
-const STOP_NAGGING_DAYS = 30;
 const EMAIL_LOG_RETENTION_DAYS = 730; // 2 years
 
 async function expireOnce() {
@@ -52,6 +50,7 @@ async function expireOnce() {
   }
 
   // (2) Watched + no thank-you + past confirm window → surface bulletin prompt.
+  // No upper bound: the prompt stays in the bulletin until the user resolves it.
   const confirmR = await pool.query(
     `UPDATE watches
      SET acknowledged = FALSE, updated_at = NOW()
@@ -61,7 +60,6 @@ async function expireOnce() {
        AND acknowledged = TRUE
        AND showtime IS NOT NULL
        AND showtime < NOW() - INTERVAL '${NEEDS_CONFIRM_DAYS} days'
-       AND showtime >= NOW() - INTERVAL '${STOP_NAGGING_DAYS} days'
        AND rating IS NULL
        AND notes IS NULL
        AND created_at = updated_at
@@ -73,27 +71,9 @@ async function expireOnce() {
     );
   }
 
-  // (3) Stop-nagging cap: force-ack anything past the cutoff.
-  const settledR = await pool.query(
-    `UPDATE watches
-     SET acknowledged = TRUE, updated_at = NOW()
-     WHERE status = 'watched'
-       AND source = 'amc_email'
-       AND thankyou_email_id IS NULL
-       AND acknowledged = FALSE
-       AND showtime < NOW() - INTERVAL '${STOP_NAGGING_DAYS} days'
-     RETURNING id`
-  );
-  if (settledR.rowCount > 0) {
-    logger.info(
-      `pending-expirer: auto-acknowledged ${settledR.rowCount} row(s) past ${STOP_NAGGING_DAYS}d`
-    );
-  }
-
   return {
     watched: watchedR.rowCount,
     confirm: confirmR.rowCount,
-    settled: settledR.rowCount,
   };
 }
 
