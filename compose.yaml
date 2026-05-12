@@ -1,19 +1,15 @@
-# Registry-backed deployment. Pulls the prebuilt marquee image from GHCR
-# rather than building locally.
-#
-# Image is published by .github/workflows/build-and-publish.yml on every
-# push to main (tag :latest) and on every git tag v* (tag :{semver}).
-# Pin to :0.2.0 / :0.2 if you want a stable release; pin to :latest to
-# track main.
+# Pulls the prebuilt marquee image from GHCR. No local build step.
 #
 # Bring up:
 #   docker compose --env-file .env up -d
-# Update:
+# Update to whatever :latest currently points at on GHCR:
 #   docker compose --env-file .env pull
 #   docker compose --env-file .env up -d
 #
-# The Quick Start in the README uses docker/docker-compose.yml which
-# builds from source instead — pick whichever fits your workflow.
+# New images are published manually by the maintainer with
+# `docker buildx build --push` (see README "Publishing a new image").
+# Pin to :0.2.0 / :0.2 in the image: line below if you want a frozen
+# version instead of tracking :latest.
 
 services:
   postgres:
