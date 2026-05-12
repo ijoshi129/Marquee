@@ -33,16 +33,60 @@ The email poller logs into Gmail via IMAP and requires an app-specific password 
 
 ## Quick start
 
+Two paths — pick one. The **registry image** path is recommended unless you actively want to build from source.
+
+### Option A: Registry image (recommended)
+
+Pulls a prebuilt image from GitHub Container Registry. Fastest first launch, cleanest updates.
+
 ```bash
 git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
 cp .env.example .env
 # Fill in the Required vars listed in the Configuration section below.
-docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+docker compose --env-file .env up -d
 ```
 
 Open `http://localhost:3000`. If port 3000 is taken, set `APP_HOST_PORT` in `.env` first.
 
-For a registry-backed deployment example (pull a pre-built image instead of building locally), see [`compose.yaml`](compose.yaml).
+### Option B: Build from source
+
+Rebuilds the image locally each time. Useful if you're modifying the code.
+
+```bash
+git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
+cp .env.example .env
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+```
+
+## Updating
+
+### If you installed via Option A (registry)
+
+```bash
+cd marquee
+docker compose --env-file .env pull
+docker compose --env-file .env up -d
+```
+
+`pull_policy: always` is set on the marquee service, so `up -d` alone will also re-check the registry. The Postgres data volume (`marquee_pgdata`) is preserved across updates. New schema migrations apply automatically on container boot.
+
+### If you installed via Option B (source build)
+
+```bash
+cd marquee
+git pull
+docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+```
+
+### After updating to a version that adds new tag extraction
+
+Run the tag backfill once to pick up format tags on your existing rows:
+
+```bash
+docker exec marquee node scripts/backfill-tags.js
+```
+
+It's idempotent — re-running is a no-op.
 
 ## Configuration
 
