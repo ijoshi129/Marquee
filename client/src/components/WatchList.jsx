@@ -2,11 +2,16 @@ import { useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
 
-// AMC promotional/special-event detector. The original email title is preserved
-// in `w.title` even after a TMDB match, so this stays accurate.
-export function specialTag(title) {
-  if (!title) return null;
-  const m = /amc\s+(screen|scream)\s+unseen/i.exec(title);
+// AMC promotional/special-event detector. Authoritatively reads the row's
+// `tags` array (user-set or auto-extracted), with a regex fallback against
+// the original email title for legacy rows that pre-date tags. Returns
+// "Screen Unseen" / "Scream Unseen" / null.
+export function specialTag(w) {
+  if (!w) return null;
+  if (w.tags?.includes('Scream Unseen')) return 'Scream Unseen';
+  if (w.tags?.includes('Screen Unseen')) return 'Screen Unseen';
+  if (!w.title) return null;
+  const m = /amc\s+(screen|scream)\s+unseen/i.exec(w.title);
   if (m) {
     const word = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
     return `${word} Unseen`;
@@ -78,7 +83,7 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
     }
   }
 
-  const tag = specialTag(w.title);
+  const tag = specialTag(w);
   const isScream = !!tag && /scream/i.test(tag);
   const displayTitle = w.tmdb?.title || w.title;
   const year = w.tmdb?.release_year;
