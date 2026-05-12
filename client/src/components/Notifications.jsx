@@ -32,9 +32,12 @@ const PILL_LABEL = {
   confirm: 'Did you go?',
 };
 
+const UNDO_TIMEOUT_MS = 8000;
+
 export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatch }) {
   const [items, setItems] = useState([]);
   const [busyId, setBusyId] = useState(null);
+  const [undo, setUndo] = useState(null); // { watch, prev, label, timer }
 
   useEffect(() => {
     api
@@ -43,63 +46,71 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
       .catch((err) => console.error('notifications fetch failed:', err));
   }, [refreshKey]);
 
-  if (!items.length) return null;
+  useEffect(() => () => {
+    if (undo?.timer) clearTimeout(undo.timer);
+  }, [undo]);
+
+  if (!items.length && !undo) return null;
 
   function removeFromList(id) {
     setItems((rows) => rows.filter((r) => r.id !== id));
   }
 
-  async function markWatched(w) {
+  function scheduleUndo(watch, prev, label) {
+    setUndo((current) => {
+      if (current?.timer) clearTimeout(current.timer);
+      const timer = setTimeout(() => setUndo(null), UNDO_TIMEOUT_MS);
+      return { watch, prev, label, timer };
+    });
+  }
+
+  async function runAction(w, patch, label) {
     setBusyId(w.id);
+    const prev = {
+      status: w.status,
+      acknowledged: w.acknowledged ?? false,
+      watched_at: w.watched_at ?? null,
+    };
     try {
-      const updated = await api.updateWatch(w.id, { status: 'watched' });
+      const updated = await api.updateWatch(w.id, patch);
       onWatchUpdated?.(updated);
       removeFromList(w.id);
+      scheduleUndo(w, prev, label);
     } catch (err) {
-      console.error('mark watched:', err);
+      console.error(label, err);
     } finally {
       setBusyId(null);
     }
   }
 
-  async function markMissed(w) {
-    setBusyId(w.id);
-    try {
-      const updated = await api.updateWatch(w.id, { status: 'no_show' });
-      onWatchUpdated?.(updated);
-      removeFromList(w.id);
-    } catch (err) {
-      console.error('mark missed:', err);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function markCancelled(w) {
-    setBusyId(w.id);
-    try {
-      const updated = await api.updateWatch(w.id, { status: 'cancelled' });
-      onWatchUpdated?.(updated);
-      removeFromList(w.id);
-    } catch (err) {
-      console.error('mark cancelled:', err);
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const markWatched = (w) => runAction(w, { status: 'watched' }, 'mark watched');
+  const markMissed = (w) => runAction(w, { status: 'no_show' }, 'mark missed');
+  const markCancelled = (w) => runAction(w, { status: 'cancelled' }, 'mark cancelled');
+  const dismiss = (w) => runAction(w, { acknowledged: true }, 'dismiss');
 
   function identify(w) {
     onSelectWatch?.(w);
     removeFromList(w.id);
   }
 
-  async function dismiss(w) {
-    setBusyId(w.id);
+  async function runUndo() {
+    if (!undo) return;
+    const { watch, prev, timer } = undo;
+    if (timer) clearTimeout(timer);
+    setUndo(null);
+    setBusyId(watch.id);
     try {
-      await api.updateWatch(w.id, { acknowledged: true });
-      removeFromList(w.id);
+      const updated = await api.updateWatch(watch.id, {
+        status: prev.status,
+        acknowledged: prev.acknowledged,
+        watched_at: prev.watched_at,
+      });
+      onWatchUpdated?.(updated);
+      setItems((rows) =>
+        rows.some((r) => r.id === updated.id) ? rows : [updated, ...rows]
+      );
     } catch (err) {
-      console.error('dismiss:', err);
+      console.error('undo:', err);
     } finally {
       setBusyId(null);
     }
@@ -133,6 +144,30 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
       : hasConfirm
       ? `${items.length} watch${items.length === 1 ? '' : 'es'} unconfirmed — did you actually go?`
       : `${items.length} reservation${items.length === 1 ? '' : 's'} flipped — were you actually there?`;
+
+  const undoSnack = undo && (
+    <div className="notif-undo" role="status">
+      <span className="notif-undo-text">
+        “{undo.watch.tmdb?.title || undo.watch.title}” updated.
+      </span>
+      <button
+        type="button"
+        className="link-quiet"
+        onClick={runUndo}
+        disabled={busyId === undo.watch.id}
+      >
+        Undo
+      </button>
+    </div>
+  );
+
+  if (!items.length) {
+    return (
+      <aside className="notif-panel notif-panel-empty" role="complementary">
+        {undoSnack}
+      </aside>
+    );
+  }
 
   return (
     <aside className="notif-panel" role="complementary">
@@ -224,6 +259,7 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
           );
         })}
       </ul>
+      {undoSnack}
     </aside>
   );
 }

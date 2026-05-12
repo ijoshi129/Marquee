@@ -1277,6 +1277,30 @@ main {
   align-items: center;
   gap: 6px;
 }
+.notif-undo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-mute);
+}
+.notif-undo-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notif-panel-empty {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.notif-panel-empty .notif-undo {
+  padding-top: 0;
+  border-top: none;
+}
 
 /* ============================================================
    Buttons (shared)
