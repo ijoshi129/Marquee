@@ -1,62 +1,100 @@
-// Daily cron + post-poll sweep that ages out stale `pending` watches.
+// Daily cron + post-poll sweep that settles the lifecycle of AMC-email-driven
+// watches after their showtime passes.
 //
-// Two windows:
-//   1. showtime > 30 days ago  →  flip to 'watched' silently (auto-ack).
-//      Old reservation, no thank-you and no cancellation in the inbox →
-//      overwhelmingly likely the user attended and the thank-you was just
-//      deleted/archived. No reason to bug them.
-//   2. showtime 7–30 days ago  →  stays 'pending', but un-acknowledge so it
-//      surfaces in the bulletin asking "did you go or did you miss it?".
-//      User picks "I went" (→ watched) or "Missed it" (→ no_show).
+// Three stages, all driven by the row's `showtime`:
 //
-// The 7–30d sweep only fires on rows the user hasn't touched yet
-// (created_at = updated_at), so dismissing a notification doesn't
-// repeatedly re-flag the same row.
+//   1. showtime + 24h  →  flip pending → watched silently. Reasoning:
+//      cancellation emails arrive instantly when you cancel, so a row that's
+//      still 'pending' a day after showtime almost certainly means the user
+//      attended (or no-showed). We default to watched because that's the
+//      common case; the 4-day check below catches the rest.
+//      NOTE: deliberately does NOT bump `updated_at`, so the
+//      `created_at = updated_at` guard on step 2 still detects "user hasn't
+//      touched this row" correctly.
+//
+//   2. showtime + 4d  →  if the row is 'watched' but never received a
+//      thank-you email, surface a bulletin prompt asking the user to confirm
+//      ("I went" / "No-show" / "I cancelled it"). Thank-yous can be 1–4 days
+//      late or never arrive, so this is the cross-check on step 1's assumption.
+//      Skips rows the user has already engaged with (rated, noted, or touched).
+//
+//   3. showtime + 30d  →  stop nagging. Force acknowledged=TRUE on any still
+//      un-confirmed row. The user's had a month; assume they went and move on.
+//
+// Manual entries (source='manual') are never touched — those are explicit user
+// choices that shouldn't auto-mutate.
 
 const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 
-const ASSUMED_WATCHED_DAYS = 30;
-const NEEDS_CONFIRM_DAYS = 7;
+const AUTO_WATCHED_AFTER_HOURS = 24;
+const NEEDS_CONFIRM_DAYS = 4;
+const STOP_NAGGING_DAYS = 30;
 const EMAIL_LOG_RETENTION_DAYS = 730; // 2 years
 
 async function expireOnce() {
-  // (1) Old reservations → assumed watched.
+  // (1) Past-showtime pending → silently watched.
   const watchedR = await pool.query(
     `UPDATE watches
      SET status = 'watched',
-         acknowledged = TRUE,
-         watched_at = COALESCE(watched_at, showtime),
-         updated_at = NOW()
+         watched_at = COALESCE(watched_at, showtime)
      WHERE status = 'pending'
+       AND source = 'amc_email'
        AND showtime IS NOT NULL
-       AND showtime < NOW() - INTERVAL '${ASSUMED_WATCHED_DAYS} days'
+       AND showtime < NOW() - INTERVAL '${AUTO_WATCHED_AFTER_HOURS} hours'
      RETURNING id`
   );
   if (watchedR.rowCount > 0) {
     logger.info(
-      `pending-expirer: marked ${watchedR.rowCount} as watched (showtime > ${ASSUMED_WATCHED_DAYS}d ago)`
+      `pending-expirer: auto-watched ${watchedR.rowCount} row(s) (showtime > ${AUTO_WATCHED_AFTER_HOURS}h ago)`
     );
   }
 
-  // (2) Recent stale reservations → still pending, but flag for user confirmation.
+  // (2) Watched + no thank-you + past confirm window → surface bulletin prompt.
   const confirmR = await pool.query(
     `UPDATE watches
      SET acknowledged = FALSE, updated_at = NOW()
-     WHERE status = 'pending'
+     WHERE status = 'watched'
+       AND source = 'amc_email'
+       AND thankyou_email_id IS NULL
+       AND acknowledged = TRUE
        AND showtime IS NOT NULL
        AND showtime < NOW() - INTERVAL '${NEEDS_CONFIRM_DAYS} days'
-       AND showtime >= NOW() - INTERVAL '${ASSUMED_WATCHED_DAYS} days'
-       AND created_at = updated_at`
+       AND showtime >= NOW() - INTERVAL '${STOP_NAGGING_DAYS} days'
+       AND rating IS NULL
+       AND notes IS NULL
+       AND created_at = updated_at
+     RETURNING id`
   );
   if (confirmR.rowCount > 0) {
     logger.info(
-      `pending-expirer: flagged ${confirmR.rowCount} pending watches for user confirmation (${NEEDS_CONFIRM_DAYS}-${ASSUMED_WATCHED_DAYS}d ago)`
+      `pending-expirer: flagged ${confirmR.rowCount} row(s) for confirmation (showtime > ${NEEDS_CONFIRM_DAYS}d ago, no thank-you email)`
     );
   }
 
-  return { watched: watchedR.rowCount, confirm: confirmR.rowCount };
+  // (3) Stop-nagging cap: force-ack anything past the cutoff.
+  const settledR = await pool.query(
+    `UPDATE watches
+     SET acknowledged = TRUE, updated_at = NOW()
+     WHERE status = 'watched'
+       AND source = 'amc_email'
+       AND thankyou_email_id IS NULL
+       AND acknowledged = FALSE
+       AND showtime < NOW() - INTERVAL '${STOP_NAGGING_DAYS} days'
+     RETURNING id`
+  );
+  if (settledR.rowCount > 0) {
+    logger.info(
+      `pending-expirer: auto-acknowledged ${settledR.rowCount} row(s) past ${STOP_NAGGING_DAYS}d`
+    );
+  }
+
+  return {
+    watched: watchedR.rowCount,
+    confirm: confirmR.rowCount,
+    settled: settledR.rowCount,
+  };
 }
 
 // Delete email_log rows older than the retention window. The raw_html column

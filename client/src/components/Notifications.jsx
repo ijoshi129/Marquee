@@ -13,13 +13,15 @@ function fmtDate(iso) {
 
 // Four flavors of notification:
 //   - 'identify': Screen/Scream Unseen the auto-resolver couldn't figure out
-//   - 'confirm':  pending reservation aged 7-30d — did you go or miss it?
+//   - 'confirm':  AMC-email watch auto-marked past showtime with no thank-you
+//                 email after 4 days — did you go, no-show, or cancel?
 //   - 'no_show' / 'cancelled':  reservation flipped, "were you there?"
 function notifKind(w) {
   if (w.status === 'no_show') return 'no_show';
   if (w.status === 'cancelled') return 'cancelled';
-  if (w.status === 'pending') return 'confirm';
   if (specialTag(w.title) && !w.tmdb_id) return 'identify';
+  if (w.status === 'watched' && !w.thankyou_email_id) return 'confirm';
+  if (w.status === 'pending') return 'confirm'; // defensive — shouldn't appear under the new lifecycle
   return 'other';
 }
 
@@ -73,6 +75,19 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
     }
   }
 
+  async function markCancelled(w) {
+    setBusyId(w.id);
+    try {
+      const updated = await api.updateWatch(w.id, { status: 'cancelled' });
+      onWatchUpdated?.(updated);
+      removeFromList(w.id);
+    } catch (err) {
+      console.error('mark cancelled:', err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function identify(w) {
     onSelectWatch?.(w);
     removeFromList(w.id);
@@ -116,7 +131,7 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
       : hasIdentify
       ? `${items.length} Screen Unseen${items.length === 1 ? '' : 's'} — what did you actually see?`
       : hasConfirm
-      ? `${items.length} reservation${items.length === 1 ? '' : 's'} aged out — did you go?`
+      ? `${items.length} watch${items.length === 1 ? '' : 'es'} unconfirmed — did you actually go?`
       : `${items.length} reservation${items.length === 1 ? '' : 's'} flipped — were you actually there?`;
 
   return (
@@ -174,7 +189,15 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
                       onClick={() => markMissed(w)}
                       disabled={busyId === w.id}
                     >
-                      Missed it
+                      No-show
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => markCancelled(w)}
+                      disabled={busyId === w.id}
+                    >
+                      I cancelled it
                     </button>
                   </>
                 ) : (
