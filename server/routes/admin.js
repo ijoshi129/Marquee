@@ -11,14 +11,25 @@ const thankyouParser = require('../parsers/amc-thankyou');
 const cancellationParser = require('../parsers/amc-cancellation');
 const matcher = require('../services/matcher');
 const poller = require('../workers/email-poller');
+const pendingExpirer = require('../workers/pending-expirer');
+const backup = require('../workers/backup');
 
 const router = express.Router();
 
 const IMPORT_LIMIT = process.env.DATABASE_IMPORT_LIMIT || '200mb';
 
+// Fail-closed: the database export/import endpoints are destructive, so we
+// refuse to serve them unless an explicit token is configured. A missing token
+// previously allowed requests through, which is unsafe for any deployment
+// reachable beyond localhost.
 function requireAdminToken(req, res, next) {
   const token = process.env.ADMIN_API_TOKEN;
-  if (!token) return next();
+  if (!token) {
+    return res.status(503).json({
+      error:
+        'ADMIN_API_TOKEN must be set in the server environment to use the database admin API',
+    });
+  }
 
   const auth = req.get('authorization') || '';
   const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -223,31 +234,56 @@ router.post(
         return res.status(400).json({ error: 'Body does not look like a SQL dump' });
       }
 
-      const psql = spawn(
-        'psql',
-        ['--set', 'ON_ERROR_STOP=1', '--quiet', process.env.DATABASE_URL],
-        { stdio: ['pipe', 'ignore', 'pipe'] }
-      );
+      // Pause background workers so they don't write to tables psql is in the
+      // middle of dropping/recreating. We restart them in `finally` regardless
+      // of outcome. In-flight queries that started before stop() will still
+      // race the restore, but new scheduled invocations won't fire.
+      poller.stop();
+      pendingExpirer.stop();
+      backup.stop();
+      try {
+        // --single-transaction wraps the entire dump in BEGIN/COMMIT so a
+        // failure mid-restore rolls back instead of leaving the DB partially
+        // restored. pg_dump --clean output is structured to be transaction-safe.
+        const psql = spawn(
+          'psql',
+          [
+            '--set',
+            'ON_ERROR_STOP=1',
+            '--single-transaction',
+            '--quiet',
+            process.env.DATABASE_URL,
+          ],
+          { stdio: ['pipe', 'ignore', 'pipe'] }
+        );
 
-      let stderr = '';
-      psql.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
-      });
-      const restore = new Promise((resolve, reject) => {
-        psql.on('error', reject);
-        psql.on('close', (code) => {
-          if (code !== 0) {
-            reject(new Error(`psql exit ${code}: ${stderr.trim()}`));
-          } else {
-            resolve();
-          }
+        let stderr = '';
+        psql.stderr.on('data', (chunk) => {
+          stderr += chunk.toString();
         });
-      });
-      Readable.from(sql).pipe(psql.stdin);
-      await restore;
+        const restore = new Promise((resolve, reject) => {
+          psql.on('error', reject);
+          psql.on('close', (code) => {
+            if (code !== 0) {
+              reject(new Error(`psql exit ${code}: ${stderr.trim()}`));
+            } else {
+              resolve();
+            }
+          });
+        });
+        Readable.from(sql).pipe(psql.stdin);
+        await restore;
 
-      logger.info({ bytes: req.body.length, gzipped: isGzip }, 'database import completed');
-      res.json({ ok: true, bytes: req.body.length, gzipped: isGzip });
+        logger.info(
+          { bytes: req.body.length, gzipped: isGzip },
+          'database import completed'
+        );
+        res.json({ ok: true, bytes: req.body.length, gzipped: isGzip });
+      } finally {
+        poller.start();
+        pendingExpirer.start();
+        backup.start();
+      }
     } catch (err) {
       logger.error({ err }, 'database import failed');
       res.status(500).json({ error: err.message });
