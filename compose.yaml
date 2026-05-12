@@ -1,14 +1,19 @@
-# Registry-backed deployment example.
+# Registry-backed deployment. Pulls the prebuilt marquee image from GHCR
+# rather than building locally.
 #
-# Use this if you've already built and pushed the marquee image to your own
-# registry (Docker Hub, GHCR, a private Unraid registry, etc.) and want to
-# deploy from there instead of building locally each time.
+# Image is published by .github/workflows/build-and-publish.yml on every
+# push to main (tag :latest) and on every git tag v* (tag :{semver}).
+# Pin to :0.2.0 / :0.2 if you want a stable release; pin to :latest to
+# track main.
 #
-# Swap `registry.example.com/marquee:latest` for your actual image, then:
+# Bring up:
+#   docker compose --env-file .env up -d
+# Update:
+#   docker compose --env-file .env pull
 #   docker compose --env-file .env up -d
 #
-# The default `docker/docker-compose.yml` builds from source and is what the
-# README's Quick Start uses.
+# The Quick Start in the README uses docker/docker-compose.yml which
+# builds from source instead — pick whichever fits your workflow.
 
 services:
   postgres:
@@ -31,7 +36,10 @@ services:
       retries: 5
 
   marquee:
-    image: registry.example.com/marquee:latest
+    image: ghcr.io/ijoshi129/marquee:latest
+    # Always check the registry for a newer :latest on `docker compose up`,
+    # so updates are picked up without an explicit `docker compose pull`.
+    pull_policy: always
     container_name: marquee
     restart: unless-stopped
     env_file: ./.env
