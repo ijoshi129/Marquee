@@ -33,11 +33,7 @@ The email poller logs into Gmail via IMAP and requires an app-specific password 
 
 ## Quick start
 
-Two paths — pick one. The **registry image** path is recommended unless you actively want to build from source.
-
-### Option A: Registry image (recommended)
-
-Pulls a prebuilt image from GitHub Container Registry. Fastest first launch, cleanest updates.
+Pulls a prebuilt image from GitHub Container Registry (`ghcr.io/ijoshi129/marquee`). No local build step.
 
 ```bash
 git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
@@ -48,19 +44,9 @@ docker compose --env-file .env up -d
 
 Open `http://localhost:3000`. If port 3000 is taken, set `APP_HOST_PORT` in `.env` first.
 
-### Option B: Build from source
-
-Rebuilds the image locally each time. Useful if you're modifying the code.
-
-```bash
-git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
-cp .env.example .env
-docker compose -f docker/docker-compose.yml --env-file .env up -d --build
-```
-
 ## Updating
 
-### If you installed via Option A (registry)
+### Pulling a newer image
 
 ```bash
 cd marquee
@@ -70,13 +56,23 @@ docker compose --env-file .env up -d
 
 `pull_policy: always` is set on the marquee service, so `up -d` alone will also re-check the registry. The Postgres data volume (`marquee_pgdata`) is preserved across updates. New schema migrations apply automatically on container boot.
 
-### If you installed via Option B (source build)
+By default `compose.yaml` tracks `:latest`. To freeze to a known release, edit the `image:` line to e.g. `ghcr.io/ijoshi129/marquee:0.2.0` and re-run `docker compose up -d`.
+
+### Publishing a new image (maintainer)
+
+Image updates aren't automated — when you want to ship code changes, build and push manually from a machine with Docker + buildx + GHCR auth:
 
 ```bash
-cd marquee
-git pull
-docker compose -f docker/docker-compose.yml --env-file .env up -d --build
+echo "$GITHUB_PAT" | docker login ghcr.io -u ijoshi129 --password-stdin
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -f docker/Dockerfile \
+  -t ghcr.io/ijoshi129/marquee:latest \
+  --push .
 ```
+
+The `$GITHUB_PAT` needs `write:packages` scope. Hosts running `compose.yaml` will pick up the new image on their next `docker compose pull && up -d`.
 
 ### After updating to a version that adds new tag extraction
 
