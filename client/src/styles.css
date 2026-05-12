@@ -422,6 +422,33 @@ main {
 }
 
 /* Cadence bars */
+.yir-bars-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.yir-bars-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+.yir-bars-row.with-year {
+  grid-template-columns: 52px 1fr;
+  gap: 16px;
+}
+.yir-bars-year {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--fg-mute);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  /* nudge up so the label sits with the bars themselves, not the trailing
+     month + count labels beneath each bar */
+  padding-bottom: 28px;
+  justify-content: flex-end;
+}
 .yir-bars {
   display: grid;
   grid-template-columns: repeat(12, 1fr);

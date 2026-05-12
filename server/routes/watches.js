@@ -95,6 +95,12 @@ router.get('/', async (req, res) => {
       where.push(`tc.payload->'genres' ? $${params.length}`);
     }
 
+    // Director: exact match against TMDB-cached director name.
+    if (req.query.director) {
+      params.push(req.query.director);
+      where.push(`tc.payload->>'director' = $${params.length}`);
+    }
+
     // Minimum rating.
     if (req.query.min_rating) {
       const n = parseInt(req.query.min_rating, 10);

@@ -130,13 +130,16 @@ router.get('/', async (req, res) => {
         cursor = new Date(start);
         stop = new Date(end);
       } else {
-        // period='all'
+        // period='all'. Start at January of the earliest year so the timeline
+        // is calendar-year aligned — the client groups it into per-year rows
+        // for the cadence chart and that grouping only reads cleanly when
+        // each year starts with January.
         const earliestMs = watches.reduce((min, w) => {
           const t = w.watched_at ? new Date(w.watched_at).getTime() : Infinity;
           return t < min ? t : min;
         }, Infinity);
         const earliest = Number.isFinite(earliestMs) ? new Date(earliestMs) : new Date();
-        cursor = new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
+        cursor = new Date(Date.UTC(earliest.getUTCFullYear(), 0, 1));
         const now = new Date();
         stop = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
       }

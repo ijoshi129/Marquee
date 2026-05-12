@@ -158,40 +158,27 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
         </div>
       ) : (
         <div className="yir-body">
-          <div className="yir-pulse">
-            <div className="yir-pulse-stat">
-              <span className="num">{stats.count}</span>
-              <span className="lbl">films</span>
+          {/* The pulse stats duplicate the top overview row when viewing the
+              all-time view — same count / runtime / avg★. Hide it there. */}
+          {year !== null && (
+            <div className="yir-pulse">
+              <div className="yir-pulse-stat">
+                <span className="num">{stats.count}</span>
+                <span className="lbl">films</span>
+              </div>
+              <div className="yir-pulse-stat">
+                <span className="num">{fmtRuntime(stats.total_runtime_minutes)}</span>
+                <span className="lbl">in the dark</span>
+              </div>
+              <div className="yir-pulse-stat">
+                <span className="num">{stats.average_rating ?? '—'}</span>
+                <span className="lbl">avg ★</span>
+              </div>
             </div>
-            <div className="yir-pulse-stat">
-              <span className="num">{fmtRuntime(stats.total_runtime_minutes)}</span>
-              <span className="lbl">in the dark</span>
-            </div>
-            <div className="yir-pulse-stat">
-              <span className="num">{stats.average_rating ?? '—'}</span>
-              <span className="lbl">avg ★</span>
-            </div>
-          </div>
+          )}
 
           <YIRSection title="Cadence">
-            <div className="yir-bars">
-              {stats.monthly_breakdown.map((m) => {
-                const idx = parseInt(m.month.slice(5, 7), 10) - 1;
-                const tall = m.count === max && max > 0;
-                return (
-                  <div key={m.month} className="yir-bar-cell" title={`${MONTH_NAMES[idx]}: ${m.count}`}>
-                    <div className="yir-bar-axis">
-                      <div
-                        className={`yir-bar-fill ${tall ? 'peak' : ''}`}
-                        style={{ height: `${(m.count / max) * 100}%` }}
-                      />
-                    </div>
-                    <div className="yir-bar-month">{MONTH_NAMES[idx]}</div>
-                    <div className="yir-bar-count">{m.count || ''}</div>
-                  </div>
-                );
-              })}
-            </div>
+            <CadenceChart breakdown={stats.monthly_breakdown} max={max} />
           </YIRSection>
 
           <div className="yir-cols">
@@ -232,6 +219,59 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CadenceChart({ breakdown, max }) {
+  // Group monthly entries by year. Server returns entries Jan-aligned for
+  // period='all', so each year's chunk starts in January (zero-counts for
+  // unlogged months at the start of the earliest year, trailing empties for
+  // unfinished current year).
+  const grouped = [];
+  for (const m of breakdown) {
+    const yr = m.month.slice(0, 4);
+    const last = grouped[grouped.length - 1];
+    if (!last || last[0] !== yr) grouped.push([yr, [m]]);
+    else last[1].push(m);
+  }
+  // Hide year rows with zero watches across all months. With multiple
+  // populated years separated by an empty year, the empty row would just be
+  // dead space — user explicitly wants only years with activity.
+  const byYear = grouped.filter(([, months]) => months.some((m) => m.count > 0));
+  const showYearLabels = byYear.length > 1;
+  return (
+    <div className="yir-bars-stack">
+      {byYear.map(([yr, months]) => (
+        <div
+          key={yr}
+          className={`yir-bars-row ${showYearLabels ? 'with-year' : ''}`}
+        >
+          {showYearLabels && <div className="yir-bars-year">{yr}</div>}
+          <div className="yir-bars">
+            {months.map((m) => {
+              const idx = parseInt(m.month.slice(5, 7), 10) - 1;
+              const tall = m.count === max && max > 0;
+              return (
+                <div
+                  key={m.month}
+                  className="yir-bar-cell"
+                  title={`${MONTH_NAMES[idx]} ${yr}: ${m.count}`}
+                >
+                  <div className="yir-bar-axis">
+                    <div
+                      className={`yir-bar-fill ${tall ? 'peak' : ''}`}
+                      style={{ height: `${(m.count / max) * 100}%` }}
+                    />
+                  </div>
+                  <div className="yir-bar-month">{MONTH_NAMES[idx]}</div>
+                  <div className="yir-bar-count">{m.count || ''}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

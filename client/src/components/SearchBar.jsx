@@ -42,6 +42,8 @@ export default function SearchBar({
   onSortKey,
   genre,
   onGenre,
+  director,
+  onDirector,
   minRating,
   onMinRating,
   format,
@@ -121,12 +123,13 @@ export default function SearchBar({
 
   function clearFilters() {
     onGenre(null);
+    if (onDirector) onDirector(null);
     onMinRating(null);
     onFormat('all');
   }
 
   const filtersActive =
-    !!genre || !!minRating || (format && format !== 'all');
+    !!genre || !!director || !!minRating || (format && format !== 'all');
 
   const showSuggestionList =
     showSuggest &&
