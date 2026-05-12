@@ -33,56 +33,24 @@ The email poller logs into Gmail via IMAP and requires an app-specific password 
 
 ## Quick start
 
-Pulls a prebuilt image from GitHub Container Registry (`ghcr.io/ijoshi129/marquee`). No local build step.
-
 ```bash
 git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
 cp .env.example .env
 # Fill in the Required vars listed in the Configuration section below.
-docker compose --env-file .env up -d
+docker compose up -d
 ```
 
 Open `http://localhost:3000`. If port 3000 is taken, set `APP_HOST_PORT` in `.env` first.
 
 ## Updating
 
-### Pulling a newer image
-
 ```bash
 cd marquee
-docker compose --env-file .env pull
-docker compose --env-file .env up -d
+docker compose pull
+docker compose up -d
 ```
 
-`pull_policy: always` is set on the marquee service, so `up -d` alone will also re-check the registry. The Postgres data volume (`marquee_pgdata`) is preserved across updates. New schema migrations apply automatically on container boot.
-
-By default `compose.yaml` tracks `:latest`. To freeze to a known release, edit the `image:` line to e.g. `ghcr.io/ijoshi129/marquee:0.2.0` and re-run `docker compose up -d`.
-
-### Publishing a new image (maintainer)
-
-Image updates aren't automated — when you want to ship code changes, build and push manually from a machine with Docker + buildx + GHCR auth:
-
-```bash
-echo "$GITHUB_PAT" | docker login ghcr.io -u ijoshi129 --password-stdin
-
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -f docker/Dockerfile \
-  -t ghcr.io/ijoshi129/marquee:latest \
-  --push .
-```
-
-The `$GITHUB_PAT` needs `write:packages` scope. Hosts running `compose.yaml` will pick up the new image on their next `docker compose pull && up -d`.
-
-### After updating to a version that adds new tag extraction
-
-Run the tag backfill once to pick up format tags on your existing rows:
-
-```bash
-docker exec marquee node scripts/backfill-tags.js
-```
-
-It's idempotent — re-running is a no-op.
+The Postgres data volume (`marquee_pgdata`) is preserved across updates. New schema migrations apply automatically on container boot.
 
 ## Configuration
 
