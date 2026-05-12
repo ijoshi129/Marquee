@@ -1770,6 +1770,207 @@ input[type='date'].input-naked { color-scheme: dark; }
 
 .rate-field { padding: 8px 0; }
 
+/* Tag chip editor — ticket-counter aesthetic. Chips read like printed
+   labels on a film canister: mono caps, snug, with subtle warm tint. */
+.tag-editor {
+  position: relative;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color 0.2s var(--ease-out);
+}
+.tag-editor:focus-within { border-color: var(--accent); }
+
+.tag-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 6px;
+  cursor: text;
+  min-height: 28px;
+}
+
+/* Selected chip — small label with the warm amber wash. Pops in via
+   tag-pop-in keyframe whenever a fresh chip mounts. */
+.tag-chip {
+  --chip-pad-y: 5px;
+  --chip-pad-x: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--chip-pad-y) 6px var(--chip-pad-y) var(--chip-pad-x);
+  background: var(--accent-soft);
+  color: var(--pill-fg);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1;
+  position: relative;
+  animation: tag-pop-in 0.22s var(--ease-out);
+  transition: border-color 0.18s var(--ease-out),
+              background 0.18s var(--ease-out);
+}
+.tag-chip::before {
+  /* fine bottom-edge marquee bulb glow */
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.tag-chip:hover {
+  border-color: var(--accent-glow);
+  background: rgba(245, 165, 36, 0.18);
+}
+
+.tag-chip-remove {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--pill-fg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.45;
+  transition: opacity 0.15s var(--ease-out),
+              color 0.15s var(--ease-out),
+              transform 0.15s var(--ease-out);
+}
+.tag-chip:hover .tag-chip-remove { opacity: 1; }
+.tag-chip-remove:hover {
+  color: var(--accent);
+  transform: scale(1.15);
+}
+
+.tag-input {
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  padding: 5px 0;
+  outline: none;
+  flex: 1;
+  min-width: 140px;
+}
+.tag-input::placeholder {
+  color: var(--fg-mute);
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+/* Palette drawer — opens beneath the chip row like a film-canister tray.
+   Thin amber rule across the top, monospace eyebrow inside, dim items
+   that glow warm on hover. */
+.tag-palette {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 10px;
+  background:
+    linear-gradient(180deg, rgba(245, 165, 36, 0.06) 0%, transparent 80%),
+    var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  border-top: 1px solid var(--accent-glow);
+  border-radius: var(--radius-sm);
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 20;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow:
+    0 18px 36px -20px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  animation: tag-drawer-open 0.22s var(--ease-out);
+}
+
+.tag-palette-item {
+  border: 1px solid transparent;
+  background: var(--bg-tint);
+  color: var(--fg-mute);
+  border-radius: 4px;
+  padding: 6px 11px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s var(--ease-out),
+              color 0.16s var(--ease-out),
+              border-color 0.16s var(--ease-out),
+              transform 0.12s var(--ease-out);
+}
+.tag-palette-item:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-glow);
+  transform: translateY(-1px);
+}
+.tag-palette-item:active { transform: translateY(0); }
+
+/* Selected state (used by the filter rail when this tag is the active filter). */
+.tag-palette-item.is-on {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.tag-palette-item.is-on:hover {
+  background: var(--accent);
+  color: var(--accent-fg);
+  transform: none;
+}
+
+@keyframes tag-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tag-drawer-open {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tag filter rail in the SearchBar filters panel — same vocabulary as the
+   palette items but without the drawer chrome. Flows horizontally with
+   wrap. */
+.tag-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .form-error {
   color: var(--danger);
   background: var(--danger-soft);

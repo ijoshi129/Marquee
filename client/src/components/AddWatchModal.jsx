@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
 import Backdrop from './Backdrop';
+import TagEditor from './TagEditor';
 
 function todayLocalDate() {
   const d = new Date();
@@ -22,6 +23,7 @@ export default function AddWatchModal({ onClose, onCreated }) {
   const [watchedDate, setWatchedDate] = useState(todayLocalDate());
   const [rating, setRating] = useState(null);
   const [notes, setNotes] = useState('');
+  const [tags, setTags] = useState([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
   const titleRef = useRef(null);
@@ -109,6 +111,7 @@ export default function AddWatchModal({ onClose, onCreated }) {
         watched_at,
         rating: rating || undefined,
         notes: notes.trim() || undefined,
+        tags: tags.length ? tags : undefined,
         status: 'watched',
       });
       onCreated(created);
@@ -238,6 +241,11 @@ export default function AddWatchModal({ onClose, onCreated }) {
               rows={3}
               placeholder="optional"
             />
+          </div>
+
+          <div className="sheet-field">
+            <label className="sheet-label">Tags</label>
+            <TagEditor tags={tags} onChange={setTags} />
           </div>
 
           {err && <div className="form-error">{err}</div>}

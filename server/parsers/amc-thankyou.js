@@ -5,6 +5,7 @@
 //   "Thank You for Visiting <Theater> We hope you enjoyed seeing <Title>"
 
 const { load, clean, bodyText } = require('./util');
+const { extractTags, extractFormatsFromHtml } = require('../utils/normalize');
 
 const THEATER_RE = /Thank\s*You\s+for\s+Visiting\s+(AMC\s+[^.]+?)\s+(?:We\s+hope|Don'?t\s+Miss|This\s+email|$)/i;
 const TITLE_RE   = /We\s+hope\s+you\s+(?:enjoyed\s+seeing|liked|loved)\s+(.+?)(?:\s+Don'?t\s+Miss|\s+This\s+email|\s+Sent\s+from|$)/i;
@@ -36,13 +37,17 @@ function parse({ subject, html, text }) {
     }
   }
 
+  // Format tags from both title and any <img alt="..."> badges. Thank-you
+  // emails are the most common carrier for badges (BigD, RealD 3D, etc.).
+  const tags = [...new Set([...extractTags(title), ...extractFormatsFromHtml(html)])];
+
   const ok = !!(title && theater_name);
   return {
     ok,
     error: ok
       ? null
       : `missing required fields: ${[!title && 'title', !theater_name && 'theater_name'].filter(Boolean).join(', ')}`,
-    fields: { title, theater_name },
+    fields: { title, theater_name, tags },
   };
 }
 

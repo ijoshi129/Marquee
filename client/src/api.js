@@ -37,4 +37,5 @@ export const api = {
   stats: (params = {}) => request(`/api/stats${qs(params)}`),
   notifications: () => request('/api/watches/notifications'),
   searchSuggest: (q) => request(`/api/search-suggest?q=${encodeURIComponent(q || '')}`),
+  tags: () => request('/api/tags'),
 };

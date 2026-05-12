@@ -26,13 +26,6 @@ const RATING_OPTIONS = [
   { key: 'r5', label: '★5', value: 5 },
 ];
 
-const FORMAT_OPTIONS = [
-  { key: 'all', label: 'All' },
-  { key: 'regular', label: 'Regular' },
-  { key: 'screen_unseen', label: 'Screen Unseen' },
-  { key: 'scream_unseen', label: 'Scream Unseen' },
-];
-
 export default function SearchBar({
   q,
   onQ,
@@ -44,10 +37,10 @@ export default function SearchBar({
   onGenre,
   director,
   onDirector,
+  tag,
+  onTag,
   minRating,
   onMinRating,
-  format,
-  onFormat,
   onGenreClick,
 }) {
   const [text, setText] = useState(q);
@@ -55,6 +48,7 @@ export default function SearchBar({
   const [showSuggest, setShowSuggest] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [genreOptions, setGenreOptions] = useState(null);
+  const [tagOptions, setTagOptions] = useState(null);
   const blurTimeout = useRef(null);
 
   useEffect(() => setText(q), [q]);
@@ -91,6 +85,14 @@ export default function SearchBar({
       .catch(() => setGenreOptions([]));
   }, [filtersOpen, genreOptions]);
 
+  useEffect(() => {
+    if (!filtersOpen || tagOptions !== null) return;
+    api
+      .tags()
+      .then((rows) => setTagOptions((rows || []).map((r) => r.name)))
+      .catch(() => setTagOptions([]));
+  }, [filtersOpen, tagOptions]);
+
   function pickSuggestion(value) {
     setText(value);
     onQ(value);
@@ -124,12 +126,11 @@ export default function SearchBar({
   function clearFilters() {
     onGenre(null);
     if (onDirector) onDirector(null);
+    if (onTag) onTag(null);
     onMinRating(null);
-    onFormat('all');
   }
 
-  const filtersActive =
-    !!genre || !!director || !!minRating || (format && format !== 'all');
+  const filtersActive = !!genre || !!director || !!tag || !!minRating;
 
   const showSuggestionList =
     showSuggest &&
@@ -328,16 +329,23 @@ export default function SearchBar({
           </div>
 
           <div className="filter-row">
-            <label className="filter-label">Format</label>
-            <div className="status-rail compact">
-              {FORMAT_OPTIONS.map((f) => (
+            <label className="filter-label">Tag</label>
+            <div className="tag-rail">
+              <button
+                type="button"
+                className={`tag-palette-item ${!tag ? 'is-on' : ''}`}
+                onClick={() => onTag && onTag(null)}
+              >
+                All
+              </button>
+              {(tagOptions || []).map((name) => (
                 <button
-                  key={f.key}
+                  key={name}
                   type="button"
-                  className={`rail-chip ${(format || 'all') === f.key ? 'on' : ''}`}
-                  onClick={() => onFormat(f.key)}
+                  className={`tag-palette-item ${tag === name ? 'is-on' : ''}`}
+                  onClick={() => onTag && onTag(name)}
                 >
-                  {f.label}
+                  {name}
                 </button>
               ))}
             </div>

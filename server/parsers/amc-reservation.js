@@ -7,6 +7,7 @@
 //   - "Auditorium: <num>"
 
 const { load, clean, bodyText, parseTimeThenDate } = require('./util');
+const { extractTags, extractFormatsFromHtml } = require('../utils/normalize');
 
 // Anchor on the structured row sequence AMC uses in reservation emails. Both the
 // 2022-era format ("Ticket Purchase Details") and the modern format ("Your Ticket
@@ -60,6 +61,11 @@ function parse({ subject, html, text }) {
   const orderM = /Order\s+Number:\s*(\d+)/i.exec(body);
   const order_number = orderM ? orderM[1] : null;
 
+  // Format tags: titles sometimes carry trailing suffixes (e.g. "in RealD 3D"),
+  // and HTML bodies sometimes carry <img alt="..."> badges for the format.
+  // Merge both sources, dedup.
+  const tags = [...new Set([...extractTags(title), ...extractFormatsFromHtml(html)])];
+
   const ok = !!(title && theater_name && showtime && order_number);
   const fields = {
     title,
@@ -67,6 +73,7 @@ function parse({ subject, html, text }) {
     showtime,
     order_number,
     ticket_confirmation,
+    tags,
   };
 
   return {

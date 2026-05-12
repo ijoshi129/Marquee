@@ -30,8 +30,8 @@ export default function App() {
   const [sortKey, setSortKey] = useState('date:desc');
   const [genre, setGenre] = useState(null);
   const [director, setDirector] = useState(null);
+  const [tag, setTag] = useState(null);
   const [minRating, setMinRating] = useState(null);
-  const [format, setFormat] = useState('all');
   // null = "All time" view (grid spans every year). YIR's prev/next steps
   // control this; typing in the search bar silently overrides to all-time.
   const [year, setYear] = useState(CURRENT_YEAR);
@@ -58,8 +58,8 @@ export default function App() {
       if (q) params.q = q;
       if (genre) params.genre = genre;
       if (director) params.director = director;
+      if (tag) params.tag = tag;
       if (minRating) params.min_rating = minRating;
-      if (format && format !== 'all') params.format = format;
       // Apply year scope only when not searching. Search silently spans all
       // years so a user can find an old film without having to step the year.
       // include_pending=1 lets pending rows escape the year filter — your
@@ -76,7 +76,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [q, statusKey, sortKey, genre, director, minRating, format, year]);
+  }, [q, statusKey, sortKey, genre, director, tag, minRating, year]);
 
   // Click a genre (in YIR Top Genres or in the search-suggest dropdown) →
   // set the precise genre filter rather than a fuzzy text search. Year scope
@@ -87,8 +87,8 @@ export default function App() {
     setStatusKey('active');
     setGenre(name);
     setDirector(null);
+    setTag(null);
     setMinRating(null);
-    setFormat('all');
     scrollToFilteredResults();
   }, []);
 
@@ -100,8 +100,8 @@ export default function App() {
     setStatusKey('active');
     setGenre(null);
     setDirector(name);
+    setTag(null);
     setMinRating(null);
-    setFormat('all');
     scrollToFilteredResults();
   }, []);
 
@@ -174,10 +174,10 @@ export default function App() {
             onGenre={setGenre}
             director={director}
             onDirector={setDirector}
+            tag={tag}
+            onTag={setTag}
             minRating={minRating}
             onMinRating={setMinRating}
-            format={format}
-            onFormat={setFormat}
             onGenreClick={filterByGenre}
           />
         </div>

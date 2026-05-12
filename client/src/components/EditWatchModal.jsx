@@ -4,6 +4,7 @@ import StarRating from './StarRating';
 import { specialTag } from './WatchList';
 import Backdrop from './Backdrop';
 import InfoTip from './InfoTip';
+import TagEditor from './TagEditor';
 
 function fmtDateInput(iso) {
   if (!iso) return '';
@@ -17,6 +18,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   const [notes, setNotes] = useState(watch.notes || '');
   const [watchedDate, setWatchedDate] = useState(fmtDateInput(watch.watched_at));
   const [theater, setTheater] = useState(watch.theater_name || '');
+  const [tags, setTags] = useState(watch.tags || []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [info, setInfo] = useState(null);
@@ -46,6 +48,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
         rating: rating || null,
         notes: notes.trim() || null,
         theater_name: theater.trim() || null,
+        tags,
       };
       if (watchedDate) {
         patch.watched_at = new Date(watchedDate + 'T20:00:00').toISOString();
@@ -253,6 +256,11 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
               rows={3}
               placeholder="What did you think?"
             />
+          </div>
+
+          <div className="sheet-field">
+            <label className="sheet-label">Tags</label>
+            <TagEditor tags={tags} onChange={setTags} />
           </div>
 
           <div className="sheet-row">
