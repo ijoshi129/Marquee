@@ -11,37 +11,52 @@ function fmtRuntime(mins) {
 const CURRENT_YEAR = new Date().getUTCFullYear();
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-export default function StatsBar({ refreshKey, onDirectorClick, onGenreClick }) {
+export default function StatsBar({
+  refreshKey,
+  year,
+  onYearChange,
+  onDirectorClick,
+  onGenreClick,
+}) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
-  const [year, setYear] = useState(CURRENT_YEAR);
   const [err, setErr] = useState(null);
 
-  // Years with at least one watch, plus current calendar year.
-  const populatedYears = (() => {
+  // Year stops: 'All time' (null) + every year with at least one watch, plus
+  // the current calendar year. Stepping left from the earliest populated year
+  // lands on null = the all-time view.
+  const yearStops = (() => {
     const ys = new Set(
       (allStats?.monthly_breakdown || [])
         .filter((m) => m.count > 0)
         .map((m) => parseInt(m.month.slice(0, 4), 10))
     );
     ys.add(CURRENT_YEAR);
-    return [...ys].sort((a, b) => a - b);
+    return [null, ...[...ys].sort((a, b) => a - b)];
   })();
-  const yIdx = populatedYears.indexOf(year);
-  const prevYear = yIdx > 0 ? populatedYears[yIdx - 1] : null;
-  const nextYear =
-    yIdx >= 0 && yIdx < populatedYears.length - 1 ? populatedYears[yIdx + 1] : null;
+  const yIdx = yearStops.indexOf(year);
+  const prevStop = yIdx > 0 ? yearStops[yIdx - 1] : undefined;
+  const nextStop =
+    yIdx >= 0 && yIdx < yearStops.length - 1 ? yearStops[yIdx + 1] : undefined;
 
   useEffect(() => {
     api.stats({ period: 'all' }).then(setAllStats).catch((e) => setErr(e.message));
   }, [refreshKey]);
 
   useEffect(() => {
+    if (year === null) {
+      setYearStats(null);
+      return;
+    }
     api
       .stats({ period: 'year', month: `${year}-01` })
       .then(setYearStats)
       .catch((e) => setErr(e.message));
   }, [year, refreshKey]);
+
+  // When viewing 'All time', the YIR body uses the all-stats payload — same
+  // data the overview row already reads. Saves a redundant fetch.
+  const yirStats = year === null ? allStats : yearStats;
 
   return (
     <section className="stats">
@@ -58,12 +73,12 @@ export default function StatsBar({ refreshKey, onDirectorClick, onGenreClick }) 
         />
       </div>
 
-      {yearStats && (
+      {yirStats && (
         <YearInReview
-          stats={yearStats}
+          stats={yirStats}
           year={year}
-          onPrev={prevYear !== null ? () => setYear(prevYear) : null}
-          onNext={nextYear !== null ? () => setYear(nextYear) : null}
+          onPrev={prevStop !== undefined ? () => onYearChange(prevStop) : null}
+          onNext={nextStop !== undefined ? () => onYearChange(nextStop) : null}
           onDirectorClick={onDirectorClick}
           onGenreClick={onGenreClick}
         />
@@ -120,7 +135,7 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           aria-expanded={!collapsed}
         >
           <span className="yir-eyebrow">In Review</span>
-          <span className="yir-year">{year}</span>
+          <span className="yir-year">{year === null ? 'All time' : year}</span>
           <span className={`yir-chevron ${collapsed ? 'collapsed' : ''}`} aria-hidden="true">
             ▾
           </span>
@@ -138,7 +153,9 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
       </div>
 
       {collapsed ? null : isEmpty ? (
-        <div className="yir-empty">No films logged in {year}.</div>
+        <div className="yir-empty">
+          {year === null ? 'No films logged yet.' : `No films logged in ${year}.`}
+        </div>
       ) : (
         <div className="yir-body">
           <div className="yir-pulse">

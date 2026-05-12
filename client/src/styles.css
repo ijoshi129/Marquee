@@ -291,7 +291,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(20px, 4vw, 64px);
+  gap: clamp(10px, 2vw, 32px);
 }
 
 .yir-arrow {
@@ -336,11 +336,11 @@ main {
 
 .yir-eyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--accent);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .yir-year {
   font-family: var(--font-display);
@@ -350,6 +350,11 @@ main {
   letter-spacing: -0.04em;
   line-height: 0.95;
   color: var(--fg);
+  /* Reserve enough horizontal room for the widest label ("All time") so the
+     prev/next arrows don't shift when the label changes width. */
+  display: inline-block;
+  min-width: 3.6em;
+  text-align: center;
 }
 .yir-chevron {
   font-size: 36px;
@@ -579,7 +584,7 @@ main {
 
 .searchbar-eyebrow {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--accent);
@@ -629,6 +634,27 @@ main {
   letter-spacing: -0.005em;
 }
 .search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+.search-clear {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-mute);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.search-clear:hover {
+  background: var(--rule-strong);
+  color: var(--fg);
+}
 
 .suggest-pop {
   position: absolute;

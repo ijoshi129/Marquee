@@ -9,6 +9,7 @@ import Notifications from './components/Notifications';
 import Backdrop from './components/Backdrop';
 
 const DEFAULT_STATUS_KEY = 'active';
+const CURRENT_YEAR = new Date().getUTCFullYear();
 
 // Map the single-select chip key to the comma-list the server expects.
 function statusKeyToParam(key) {
@@ -30,6 +31,9 @@ export default function App() {
   const [genre, setGenre] = useState(null);
   const [minRating, setMinRating] = useState(null);
   const [format, setFormat] = useState('all');
+  // null = "All time" view (grid spans every year). YIR's prev/next steps
+  // control this; typing in the search bar silently overrides to all-time.
+  const [year, setYear] = useState(CURRENT_YEAR);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +50,15 @@ export default function App() {
       if (genre) params.genre = genre;
       if (minRating) params.min_rating = minRating;
       if (format && format !== 'all') params.format = format;
+      // Apply year scope only when not searching. Search silently spans all
+      // years so a user can find an old film without having to step the year.
+      // include_pending=1 lets pending rows escape the year filter — your
+      // upcoming reservations show on the active view regardless of year.
+      if (year !== null && !q.trim()) {
+        params.from = `${year}-01-01`;
+        params.to = `${year + 1}-01-01`;
+        params.include_pending = 1;
+      }
       const rows = await api.listWatches(params);
       setWatches(rows);
     } catch (e) {
@@ -53,7 +66,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [q, statusKey, sortKey, genre, minRating, format]);
+  }, [q, statusKey, sortKey, genre, minRating, format, year]);
 
   // Used by clickable director names (in YIR or the edit modal) — fills the
   // search box and ensures the result set is broad enough to find them.
@@ -128,6 +141,8 @@ export default function App() {
         />
         <StatsBar
           refreshKey={refreshKey}
+          year={year}
+          onYearChange={setYear}
           onDirectorClick={searchFor}
           onGenreClick={filterByGenre}
         />

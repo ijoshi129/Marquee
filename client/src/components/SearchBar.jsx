@@ -112,6 +112,13 @@ export default function SearchBar({
     setShowSuggest(true);
   }
 
+  function clearSearch() {
+    setText('');
+    onQ('');
+    setSuggest(null);
+    setShowSuggest(false);
+  }
+
   function clearFilters() {
     onGenre(null);
     onMinRating(null);
@@ -157,6 +164,19 @@ export default function SearchBar({
             onFocus={onFocus}
             onBlur={onBlur}
           />
+          {text.length > 0 && (
+            <button
+              type="button"
+              className="search-clear"
+              // preventDefault on mousedown keeps focus on the input so the
+              // suggest popup doesn't blur-collapse before onClick fires.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={clearSearch}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
 
           {showSuggestionList && (
             <div className="suggest-pop">
