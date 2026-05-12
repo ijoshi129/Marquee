@@ -12,7 +12,7 @@ function fmtDateInput(iso) {
   return new Date(d - tz).toISOString().slice(0, 10);
 }
 
-export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, onSearchFor }) {
+export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, onFilterDirector }) {
   const [rating, setRating] = useState(watch.rating || null);
   const [notes, setNotes] = useState(watch.notes || '');
   const [watchedDate, setWatchedDate] = useState(fmtDateInput(watch.watched_at));
@@ -157,12 +157,12 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
             {tmdb.director && (
               <div className="sheet-director">
                 Directed by{' '}
-                {onSearchFor ? (
+                {onFilterDirector ? (
                   <button
                     type="button"
                     className="link-inline"
                     onClick={() => {
-                      onSearchFor(tmdb.director);
+                      onFilterDirector(tmdb.director);
                       onClose();
                     }}
                   >

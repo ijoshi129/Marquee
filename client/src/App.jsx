@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import StatsBar from './components/StatsBar';
 import WatchList from './components/WatchList';
@@ -9,6 +9,7 @@ import Notifications from './components/Notifications';
 import Backdrop from './components/Backdrop';
 
 const DEFAULT_STATUS_KEY = 'active';
+const CURRENT_YEAR = new Date().getUTCFullYear();
 
 // Map the single-select chip key to the comma-list the server expects.
 function statusKeyToParam(key) {
@@ -28,8 +29,20 @@ export default function App() {
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
   const [sortKey, setSortKey] = useState('date:desc');
   const [genre, setGenre] = useState(null);
+  const [director, setDirector] = useState(null);
   const [minRating, setMinRating] = useState(null);
   const [format, setFormat] = useState('all');
+  // null = "All time" view (grid spans every year). YIR's prev/next steps
+  // control this; typing in the search bar silently overrides to all-time.
+  const [year, setYear] = useState(CURRENT_YEAR);
+
+  // Scroll anchor for filter clicks — clicking a director/genre in YIR pulls
+  // the page down to the SearchBar so the user lands on the filtered results,
+  // not the top of the page.
+  const filterAnchorRef = useRef(null);
+  const scrollToFilteredResults = useCallback(() => {
+    filterAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,8 +57,18 @@ export default function App() {
       };
       if (q) params.q = q;
       if (genre) params.genre = genre;
+      if (director) params.director = director;
       if (minRating) params.min_rating = minRating;
       if (format && format !== 'all') params.format = format;
+      // Apply year scope only when not searching. Search silently spans all
+      // years so a user can find an old film without having to step the year.
+      // include_pending=1 lets pending rows escape the year filter — your
+      // upcoming reservations show on the active view regardless of year.
+      if (year !== null && !q.trim()) {
+        params.from = `${year}-01-01`;
+        params.to = `${year + 1}-01-01`;
+        params.include_pending = 1;
+      }
       const rows = await api.listWatches(params);
       setWatches(rows);
     } catch (e) {
@@ -53,28 +76,33 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [q, statusKey, sortKey, genre, minRating, format]);
-
-  // Used by clickable director names (in YIR or the edit modal) — fills the
-  // search box and ensures the result set is broad enough to find them.
-  const searchFor = useCallback((term) => {
-    setQ(term);
-    setStatusKey('active');
-    setGenre(null);
-    setMinRating(null);
-    setFormat('all');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [q, statusKey, sortKey, genre, director, minRating, format, year]);
 
   // Click a genre (in YIR Top Genres or in the search-suggest dropdown) →
-  // set the precise genre filter rather than a fuzzy text search.
+  // set the precise genre filter rather than a fuzzy text search. Year scope
+  // is intentionally preserved so the user stays within the year they were
+  // exploring.
   const filterByGenre = useCallback((name) => {
     setQ('');
     setStatusKey('active');
     setGenre(name);
+    setDirector(null);
     setMinRating(null);
     setFormat('all');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFilteredResults();
+  }, []);
+
+  // Same shape as filterByGenre — preserves the selected year so clicking a
+  // director in YIR shows that director's films within the year currently
+  // in view, not all-time.
+  const filterByDirector = useCallback((name) => {
+    setQ('');
+    setStatusKey('active');
+    setGenre(null);
+    setDirector(name);
+    setMinRating(null);
+    setFormat('all');
+    scrollToFilteredResults();
   }, []);
 
   useEffect(() => {
@@ -128,25 +156,31 @@ export default function App() {
         />
         <StatsBar
           refreshKey={refreshKey}
-          onDirectorClick={searchFor}
+          year={year}
+          onYearChange={setYear}
+          onDirectorClick={filterByDirector}
           onGenreClick={filterByGenre}
         />
 
-        <SearchBar
-          q={q}
-          onQ={setQ}
-          statusKey={statusKey}
-          onStatusKey={setStatusKey}
-          sortKey={sortKey}
-          onSortKey={setSortKey}
-          genre={genre}
-          onGenre={setGenre}
-          minRating={minRating}
-          onMinRating={setMinRating}
-          format={format}
-          onFormat={setFormat}
-          onGenreClick={filterByGenre}
-        />
+        <div ref={filterAnchorRef}>
+          <SearchBar
+            q={q}
+            onQ={setQ}
+            statusKey={statusKey}
+            onStatusKey={setStatusKey}
+            sortKey={sortKey}
+            onSortKey={setSortKey}
+            genre={genre}
+            onGenre={setGenre}
+            director={director}
+            onDirector={setDirector}
+            minRating={minRating}
+            onMinRating={setMinRating}
+            format={format}
+            onFormat={setFormat}
+            onGenreClick={filterByGenre}
+          />
+        </div>
 
         {err && <div className="error-banner">{err}</div>}
 
@@ -172,7 +206,7 @@ export default function App() {
           onClose={() => setEditing(null)}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
-          onSearchFor={searchFor}
+          onFilterDirector={filterByDirector}
         />
       )}
     </div>

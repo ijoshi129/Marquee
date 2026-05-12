@@ -11,37 +11,52 @@ function fmtRuntime(mins) {
 const CURRENT_YEAR = new Date().getUTCFullYear();
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-export default function StatsBar({ refreshKey, onDirectorClick, onGenreClick }) {
+export default function StatsBar({
+  refreshKey,
+  year,
+  onYearChange,
+  onDirectorClick,
+  onGenreClick,
+}) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
-  const [year, setYear] = useState(CURRENT_YEAR);
   const [err, setErr] = useState(null);
 
-  // Years with at least one watch, plus current calendar year.
-  const populatedYears = (() => {
+  // Year stops: 'All time' (null) + every year with at least one watch, plus
+  // the current calendar year. Stepping left from the earliest populated year
+  // lands on null = the all-time view.
+  const yearStops = (() => {
     const ys = new Set(
       (allStats?.monthly_breakdown || [])
         .filter((m) => m.count > 0)
         .map((m) => parseInt(m.month.slice(0, 4), 10))
     );
     ys.add(CURRENT_YEAR);
-    return [...ys].sort((a, b) => a - b);
+    return [null, ...[...ys].sort((a, b) => a - b)];
   })();
-  const yIdx = populatedYears.indexOf(year);
-  const prevYear = yIdx > 0 ? populatedYears[yIdx - 1] : null;
-  const nextYear =
-    yIdx >= 0 && yIdx < populatedYears.length - 1 ? populatedYears[yIdx + 1] : null;
+  const yIdx = yearStops.indexOf(year);
+  const prevStop = yIdx > 0 ? yearStops[yIdx - 1] : undefined;
+  const nextStop =
+    yIdx >= 0 && yIdx < yearStops.length - 1 ? yearStops[yIdx + 1] : undefined;
 
   useEffect(() => {
     api.stats({ period: 'all' }).then(setAllStats).catch((e) => setErr(e.message));
   }, [refreshKey]);
 
   useEffect(() => {
+    if (year === null) {
+      setYearStats(null);
+      return;
+    }
     api
       .stats({ period: 'year', month: `${year}-01` })
       .then(setYearStats)
       .catch((e) => setErr(e.message));
   }, [year, refreshKey]);
+
+  // When viewing 'All time', the YIR body uses the all-stats payload — same
+  // data the overview row already reads. Saves a redundant fetch.
+  const yirStats = year === null ? allStats : yearStats;
 
   return (
     <section className="stats">
@@ -58,12 +73,12 @@ export default function StatsBar({ refreshKey, onDirectorClick, onGenreClick }) 
         />
       </div>
 
-      {yearStats && (
+      {yirStats && (
         <YearInReview
-          stats={yearStats}
+          stats={yirStats}
           year={year}
-          onPrev={prevYear !== null ? () => setYear(prevYear) : null}
-          onNext={nextYear !== null ? () => setYear(nextYear) : null}
+          onPrev={prevStop !== undefined ? () => onYearChange(prevStop) : null}
+          onNext={nextStop !== undefined ? () => onYearChange(nextStop) : null}
           onDirectorClick={onDirectorClick}
           onGenreClick={onGenreClick}
         />
@@ -120,7 +135,7 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           aria-expanded={!collapsed}
         >
           <span className="yir-eyebrow">In Review</span>
-          <span className="yir-year">{year}</span>
+          <span className="yir-year">{year === null ? 'All time' : year}</span>
           <span className={`yir-chevron ${collapsed ? 'collapsed' : ''}`} aria-hidden="true">
             ▾
           </span>
@@ -138,43 +153,32 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
       </div>
 
       {collapsed ? null : isEmpty ? (
-        <div className="yir-empty">No films logged in {year}.</div>
+        <div className="yir-empty">
+          {year === null ? 'No films logged yet.' : `No films logged in ${year}.`}
+        </div>
       ) : (
         <div className="yir-body">
-          <div className="yir-pulse">
-            <div className="yir-pulse-stat">
-              <span className="num">{stats.count}</span>
-              <span className="lbl">films</span>
+          {/* The pulse stats duplicate the top overview row when viewing the
+              all-time view — same count / runtime / avg★. Hide it there. */}
+          {year !== null && (
+            <div className="yir-pulse">
+              <div className="yir-pulse-stat">
+                <span className="num">{stats.count}</span>
+                <span className="lbl">films</span>
+              </div>
+              <div className="yir-pulse-stat">
+                <span className="num">{fmtRuntime(stats.total_runtime_minutes)}</span>
+                <span className="lbl">in the dark</span>
+              </div>
+              <div className="yir-pulse-stat">
+                <span className="num">{stats.average_rating ?? '—'}</span>
+                <span className="lbl">avg ★</span>
+              </div>
             </div>
-            <div className="yir-pulse-stat">
-              <span className="num">{fmtRuntime(stats.total_runtime_minutes)}</span>
-              <span className="lbl">in the dark</span>
-            </div>
-            <div className="yir-pulse-stat">
-              <span className="num">{stats.average_rating ?? '—'}</span>
-              <span className="lbl">avg ★</span>
-            </div>
-          </div>
+          )}
 
           <YIRSection title="Cadence">
-            <div className="yir-bars">
-              {stats.monthly_breakdown.map((m) => {
-                const idx = parseInt(m.month.slice(5, 7), 10) - 1;
-                const tall = m.count === max && max > 0;
-                return (
-                  <div key={m.month} className="yir-bar-cell" title={`${MONTH_NAMES[idx]}: ${m.count}`}>
-                    <div className="yir-bar-axis">
-                      <div
-                        className={`yir-bar-fill ${tall ? 'peak' : ''}`}
-                        style={{ height: `${(m.count / max) * 100}%` }}
-                      />
-                    </div>
-                    <div className="yir-bar-month">{MONTH_NAMES[idx]}</div>
-                    <div className="yir-bar-count">{m.count || ''}</div>
-                  </div>
-                );
-              })}
-            </div>
+            <CadenceChart breakdown={stats.monthly_breakdown} max={max} />
           </YIRSection>
 
           <div className="yir-cols">
@@ -215,6 +219,59 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CadenceChart({ breakdown, max }) {
+  // Group monthly entries by year. Server returns entries Jan-aligned for
+  // period='all', so each year's chunk starts in January (zero-counts for
+  // unlogged months at the start of the earliest year, trailing empties for
+  // unfinished current year).
+  const grouped = [];
+  for (const m of breakdown) {
+    const yr = m.month.slice(0, 4);
+    const last = grouped[grouped.length - 1];
+    if (!last || last[0] !== yr) grouped.push([yr, [m]]);
+    else last[1].push(m);
+  }
+  // Hide year rows with zero watches across all months. With multiple
+  // populated years separated by an empty year, the empty row would just be
+  // dead space — user explicitly wants only years with activity.
+  const byYear = grouped.filter(([, months]) => months.some((m) => m.count > 0));
+  const showYearLabels = byYear.length > 1;
+  return (
+    <div className="yir-bars-stack">
+      {byYear.map(([yr, months]) => (
+        <div
+          key={yr}
+          className={`yir-bars-row ${showYearLabels ? 'with-year' : ''}`}
+        >
+          {showYearLabels && <div className="yir-bars-year">{yr}</div>}
+          <div className="yir-bars">
+            {months.map((m) => {
+              const idx = parseInt(m.month.slice(5, 7), 10) - 1;
+              const tall = m.count === max && max > 0;
+              return (
+                <div
+                  key={m.month}
+                  className="yir-bar-cell"
+                  title={`${MONTH_NAMES[idx]} ${yr}: ${m.count}`}
+                >
+                  <div className="yir-bar-axis">
+                    <div
+                      className={`yir-bar-fill ${tall ? 'peak' : ''}`}
+                      style={{ height: `${(m.count / max) * 100}%` }}
+                    />
+                  </div>
+                  <div className="yir-bar-month">{MONTH_NAMES[idx]}</div>
+                  <div className="yir-bar-count">{m.count || ''}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

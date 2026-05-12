@@ -51,17 +51,29 @@ router.get('/', async (req, res) => {
     }
 
     // Date range (period filter). ISO date strings; half-open [from, to).
+    // When include_pending=1 is passed alongside a date range, pending rows
+    // escape the year scope — used by the main grid so upcoming reservations
+    // dated for a different year still surface on the active view.
+    const dateClauses = [];
     if (req.query.from) {
       params.push(req.query.from);
-      where.push(
+      dateClauses.push(
         `COALESCE(w.watched_at, w.showtime, w.created_at) >= $${params.length}`
       );
     }
     if (req.query.to) {
       params.push(req.query.to);
-      where.push(
+      dateClauses.push(
         `COALESCE(w.watched_at, w.showtime, w.created_at) < $${params.length}`
       );
+    }
+    if (dateClauses.length) {
+      const dateExpr = dateClauses.join(' AND ');
+      if (req.query.include_pending === '1') {
+        where.push(`(${dateExpr} OR w.status = 'pending')`);
+      } else {
+        where.push(dateExpr);
+      }
     }
 
     // Broad search: own title + notes + theater + entire TMDB payload (title,
@@ -81,6 +93,12 @@ router.get('/', async (req, res) => {
     if (req.query.genre) {
       params.push(req.query.genre);
       where.push(`tc.payload->'genres' ? $${params.length}`);
+    }
+
+    // Director: exact match against TMDB-cached director name.
+    if (req.query.director) {
+      params.push(req.query.director);
+      where.push(`tc.payload->>'director' = $${params.length}`);
     }
 
     // Minimum rating.
