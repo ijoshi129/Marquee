@@ -9,7 +9,11 @@ const { upsertTheater } = require('./theaters');
 
 const normTitle = (t) => normalizeText(cleanTitle(t));
 
-const WINDOW_BEFORE_HOURS = 24;
+// AMC sends thank-you emails 1–4 days after the show (sometimes never). The
+// before-window has to cover that range or late thank-yous miss the pending /
+// auto-watched row and the matcher creates a duplicate walk-up. 4 days lines
+// up with NEEDS_CONFIRM_DAYS in pending-expirer.
+const WINDOW_BEFORE_HOURS = 24 * 4;
 const WINDOW_AFTER_HOURS = 1;
 const TIEBREAKER_OFFSET_HOURS = 2; // typical post-show email delay
 
@@ -97,12 +101,20 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
   const before = new Date(recv.getTime() - WINDOW_BEFORE_HOURS * 3600_000);
   const after = new Date(recv.getTime() + WINDOW_AFTER_HOURS * 3600_000);
 
+  // Candidates: still-pending rows (typical case, thank-you arrives within
+  // hours of showtime) AND auto-watched rows that haven't been linked to a
+  // thank-you yet (the pending-expirer flipped them at showtime+24h before
+  // the thank-you arrived — without this clause we'd create a duplicate
+  // walk-up row).
   const candidates = await pool.query(
-    `SELECT w.id, w.showtime, w.title, t.normalized_name AS norm_theater
+    `SELECT w.id, w.showtime, w.title, w.status, t.normalized_name AS norm_theater
      FROM watches w
      LEFT JOIN theaters t ON t.id = w.theater_id
-     WHERE w.status = 'pending'
-       AND w.showtime BETWEEN $1 AND $2`,
+     WHERE w.showtime BETWEEN $1 AND $2
+       AND (
+         w.status = 'pending'
+         OR (w.status = 'watched' AND w.thankyou_email_id IS NULL)
+       )`,
     [before.toISOString(), after.toISOString()]
   );
 
@@ -122,19 +134,40 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
   }
 
   if (chosen) {
-    await pool.query(
-      `UPDATE watches
-       SET status = 'watched',
-           watched_at = $1,
-           thankyou_email_id = $2,
-           updated_at = NOW()
-       WHERE id = $3`,
-      [recv.toISOString(), gmail_message_id, chosen.id]
-    );
+    if (chosen.status === 'pending') {
+      // Standard promote: status flip plus watched_at = thank-you receive time
+      // (best available proxy for actual watch time).
+      await pool.query(
+        `UPDATE watches
+         SET status = 'watched',
+             watched_at = $1,
+             thankyou_email_id = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [recv.toISOString(), gmail_message_id, chosen.id]
+      );
+    } else {
+      // Already auto-watched by pending-expirer step 1. Link the thank-you,
+      // preserve the existing watched_at (set from showtime, more accurate
+      // than the email receive time), and force-ack so any "did you go?"
+      // bulletin item raised by pending-expirer step 2 disappears.
+      await pool.query(
+        `UPDATE watches
+         SET thankyou_email_id = $1,
+             acknowledged = TRUE,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [gmail_message_id, chosen.id]
+      );
+    }
     // Enrich via TMDB if not yet enriched
     await ensureTmdb(chosen.id, title);
     maybeResolveUnseen(chosen.id, chosen.title || title);
-    return { action: 'promoted', watch_id: chosen.id, candidates: filtered.length };
+    return {
+      action: chosen.status === 'pending' ? 'promoted' : 'linked',
+      watch_id: chosen.id,
+      candidates: filtered.length,
+    };
   }
 
   // Walk-up: no matching reservation. Create a new watched row.
