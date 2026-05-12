@@ -1,8 +1,8 @@
 # Marquee — pulls the prebuilt image from GHCR and runs it.
 #
-#   docker compose --env-file .env up -d   # start
-#   docker compose --env-file .env pull    # fetch newer image
-#   docker compose --env-file .env up -d   # apply
+#   docker compose up -d   # start
+#   docker compose pull    # fetch newer image
+#   docker compose up -d   # apply
 
 services:
   postgres:
