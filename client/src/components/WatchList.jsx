@@ -101,10 +101,12 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
         {w.tmdb?.poster_url ? (
           <img src={w.tmdb.poster_url} alt="" loading="lazy" />
         ) : tag ? (
-          <div className={`poster-unseen ${isScream ? 'scream' : ''}`}>
-            <span className="poster-unseen-mark">?</span>
-            <span className="poster-unseen-tag">{tag}</span>
-          </div>
+          <img
+            src={isScream ? '/scream-unseen.avif' : '/screen-unseen.avif'}
+            alt={tag}
+            loading="lazy"
+            className="poster-unseen-art"
+          />
         ) : (
           <div className="poster-blank">
             <span>{(displayTitle || '?').slice(0, 2).toUpperCase()}</span>
