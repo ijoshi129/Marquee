@@ -7,6 +7,7 @@ import EditWatchModal from './components/EditWatchModal';
 import SearchBar from './components/SearchBar';
 import Notifications from './components/Notifications';
 import Backdrop from './components/Backdrop';
+import WhatsNew from './components/WhatsNew';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -197,6 +198,8 @@ export default function App() {
       <button className="fab" onClick={() => setAdding(true)} aria-label="Add watch">
         +
       </button>
+
+      <WhatsNew />
 
       {adding && <AddWatchModal onClose={() => setAdding(false)} onCreated={handleCreated} />}
       {editing && (

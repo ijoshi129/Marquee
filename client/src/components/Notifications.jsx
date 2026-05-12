@@ -19,7 +19,7 @@ function fmtDate(iso) {
 function notifKind(w) {
   if (w.status === 'no_show') return 'no_show';
   if (w.status === 'cancelled') return 'cancelled';
-  if (specialTag(w.title) && !w.tmdb_id) return 'identify';
+  if (specialTag(w) && !w.tmdb_id) return 'identify';
   if (w.status === 'watched' && !w.thankyou_email_id) return 'confirm';
   if (w.status === 'pending') return 'confirm'; // defensive — shouldn't appear under the new lifecycle
   return 'other';

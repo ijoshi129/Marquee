@@ -27,7 +27,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   const [overrideQ, setOverrideQ] = useState(watch.title);
   const [overrideResults, setOverrideResults] = useState([]);
 
-  const isUnseen = !!specialTag(watch.title);
+  const isUnseen = !!specialTag(watch);
 
   useEffect(() => {
     if (!showOverride) return;
@@ -121,7 +121,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
 
   const tmdb = watch.tmdb || {};
   const title = tmdb.title || watch.title;
-  const tag = specialTag(watch.title);
+  const tag = specialTag(watch);
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>

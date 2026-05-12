@@ -1958,6 +1958,191 @@ input[type='date'].input-naked { color-scheme: dark; }
 }
 
 /* ============================================================
+   What's New card + collapsed icon
+   ============================================================ */
+.whats-new-card {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  width: min(380px, calc(100vw - 48px));
+  max-height: 72vh;
+  background:
+    linear-gradient(180deg, rgba(245, 165, 36, 0.06) 0%, transparent 80%),
+    var(--bg-elev);
+  border: 1px solid var(--rule-strong);
+  border-top: 1px solid var(--accent-glow);
+  border-radius: var(--radius-md);
+  padding: 22px 22px 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 28px 60px -20px rgba(0, 0, 0, 0.65),
+    0 4px 14px -2px rgba(0, 0, 0, 0.4);
+  animation: whats-new-rise 0.3s var(--ease-out);
+}
+.whats-new-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-mute);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.whats-new-close:hover {
+  background: var(--rule-strong);
+  color: var(--fg);
+}
+.whats-new-head {
+  margin-bottom: 16px;
+  padding-right: 30px;
+}
+.whats-new-eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.whats-new-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-style: italic;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.whats-new-body {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+.whats-new-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  margin-bottom: 8px;
+}
+.whats-new-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.whats-new-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg);
+  letter-spacing: -0.005em;
+}
+.whats-new-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.7;
+}
+.whats-new-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: flex-start;
+}
+.whats-new-dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--fg-mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+.whats-new-dismiss:hover { color: var(--danger); }
+
+/* Collapsed icon — fixed bottom-left so it doesn't compete with the
+   bottom-right FAB. Soft pulse animation draws the eye without nagging. */
+.whats-new-icon {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: calc(24px + env(safe-area-inset-left, 0px));
+  z-index: 50;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px 8px 28px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 14px 30px -8px var(--accent-glow),
+    0 4px 10px -2px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s;
+  animation: whats-new-rise 0.3s var(--ease-out);
+}
+.whats-new-icon:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 18px 36px -8px var(--accent-glow),
+    0 6px 14px -2px rgba(0, 0, 0, 0.5);
+}
+.whats-new-icon-pulse {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--accent-fg);
+  animation: whats-new-pulse 2.4s ease-out infinite;
+}
+
+@keyframes whats-new-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(24, 18, 10, 0.7); }
+  50%      { box-shadow: 0 0 0 7px rgba(24, 18, 10, 0); }
+}
+@keyframes whats-new-rise {
+  0%   { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
    Mobile
    ============================================================ */
 @media (max-width: 720px) {
