@@ -6,6 +6,12 @@ import Backdrop from './Backdrop';
 import InfoTip from './InfoTip';
 import TagEditor from './TagEditor';
 
+const STATUS_OPTIONS = [
+  { value: 'watched', label: 'Watched' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'no_show', label: 'No-show' },
+];
+
 function fmtDateInput(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -63,11 +69,13 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
     }
   }
 
-  async function markAsWatched() {
+  async function setStatus(status) {
     setBusy(true);
     setErr(null);
     try {
-      const updated = await api.updateWatch(watch.id, { status: 'watched' });
+      const patch = { status };
+      if (status !== 'watched') patch.watched_at = null;
+      const updated = await api.updateWatch(watch.id, patch);
       onUpdated(updated);
       onClose();
     } catch (e) {
@@ -292,16 +300,17 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
             Delete
           </button>
           <div style={{ flex: 1 }} />
-          {(watch.status === 'no_show' || watch.status === 'cancelled') && (
+          {STATUS_OPTIONS.filter((s) => s.value !== watch.status).map((s) => (
             <button
+              key={s.value}
               type="button"
-              className="solid-btn"
-              onClick={markAsWatched}
+              className={s.value === 'watched' ? 'solid-btn' : 'ghost-btn'}
+              onClick={() => setStatus(s.value)}
               disabled={busy}
             >
-              Mark as Watched
+              Mark as {s.label}
             </button>
-          )}
+          ))}
           <button type="button" className="ghost-btn" onClick={onClose}>
             Cancel
           </button>
