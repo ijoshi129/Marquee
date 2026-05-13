@@ -148,9 +148,12 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
          SET status = 'watched',
              watched_at = $1,
              thankyou_email_id = $2,
-             tags = (
-               SELECT array_agg(DISTINCT t)
-               FROM unnest(coalesce(tags, '{}'::text[]) || $4::text[]) AS t
+             tags = COALESCE(
+               (
+                 SELECT array_agg(DISTINCT t)
+                 FROM unnest(coalesce(tags, '{}'::text[]) || $4::text[]) AS t
+               ),
+               '{}'::text[]
              ),
              updated_at = NOW()
          WHERE id = $3`,
@@ -165,9 +168,12 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
         `UPDATE watches
          SET thankyou_email_id = $1,
              acknowledged = TRUE,
-             tags = (
-               SELECT array_agg(DISTINCT t)
-               FROM unnest(coalesce(tags, '{}'::text[]) || $3::text[]) AS t
+             tags = COALESCE(
+               (
+                 SELECT array_agg(DISTINCT t)
+                 FROM unnest(coalesce(tags, '{}'::text[]) || $3::text[]) AS t
+               ),
+               '{}'::text[]
              ),
              updated_at = NOW()
          WHERE id = $2`,
