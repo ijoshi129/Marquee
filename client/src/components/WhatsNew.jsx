@@ -2,46 +2,37 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '0.2';
+const WHATS_NEW_VERSION = '0.3';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 const SECTIONS = [
   {
-    title: 'Lifecycle',
+    title: 'Bulletin',
     items: [
-      'Past-showtime reservations auto-flip to Watched the day after — no more "Upcoming" badges lingering on old shows.',
-      'If a thank-you email never arrives after 4 days, the bulletin asks "did you actually go?" with three buttons: I went · No-show · I cancelled it.',
-      'Did-you-go prompts stay in the bulletin until you click one of the three — no auto-resolve.',
+      'Undo any action — I went, No-show, I cancelled it, dismiss — for 8 seconds.',
+      'Edit card flips status both ways: Watched ↔ Cancelled ↔ No-show.',
+    ],
+  },
+  {
+    title: 'Self-healing',
+    items: [
+      'Unresolved Unseens and missed TMDB matches retry on their own every 6 hours.',
+      'Each row stops after 8 tries — no infinite hammering on permanently stuck titles.',
     ],
   },
   {
     title: 'Browsing',
     items: [
-      'Main grid is now scoped to the selected year. Step ←/→ in the Year-in-Review header; left of the earliest year is "All time".',
-      'Pending reservations always show regardless of which year you are viewing.',
-      "Click a director's name in YIR → filter the grid to their films, year preserved.",
-      'Click a genre in YIR → filter to it, year preserved.',
-      'Clicking a filter smoothly scrolls to the filter row instead of jumping to the top.',
-      'Search bar has a ✕ to clear in one tap; typing silently spans all years.',
+      'All time now sits on the right end of the YIR year selector — step past the current year to reach it.',
+      'Click a director or genre in YIR to filter the grid; year scope is preserved.',
     ],
   },
   {
     title: 'Tags',
     items: [
-      'Every watch can carry presentation tags — IMAX, Dolby Cinema, RealD 3D, Screen Unseen, etc.',
-      'Tags auto-extract from AMC emails (title suffixes + thank-you body badges).',
-      'Click the Tags bar in the edit modal — a curated palette opens with click-to-add bubbles, or type to create a new custom tag.',
+      'IMAX, Dolby, RealD 3D, Screen Unseen — auto-extracted from AMC emails.',
+      'Click the Tags bar in the edit card for a palette, or type a custom tag.',
       'Filter the grid by tag from the Filters panel.',
-      'Late thank-you emails (1-4 days after the show) now correctly attach to your reservation instead of creating duplicates.',
-    ],
-  },
-  {
-    title: 'Visual',
-    items: [
-      'Year-in-Review cadence on "All time" groups months into per-year rows with labels.',
-      'Duplicate stats removed on "All time" (the overview row already covers them).',
-      "Unseen rows without a resolved TMDB match now show AMC's actual Screen / Scream Unseen artwork.",
-      'Setting a Screen/Scream Unseen tag on any watch triggers the right placeholder or banner.',
     ],
   },
 ];
