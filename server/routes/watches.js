@@ -319,6 +319,10 @@ router.patch('/:id', async (req, res) => {
 // Unseens. Clears the in-memory megathread cache first so a fresh fetch happens.
 router.post('/:id/recheck-unseen', async (req, res) => {
   try {
+    await pool.query(
+      `UPDATE watches SET tmdb_retry_count = 0, tmdb_last_retry_at = NULL WHERE id = $1`,
+      [req.params.id]
+    );
     unseenLookup.clearCaches();
     const result = await unseenLookup.resolveAndAssign(req.params.id, { force: true });
     const refreshed = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [req.params.id]);
