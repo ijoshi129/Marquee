@@ -1,8 +1,9 @@
-# Marquee — pulls the prebuilt image from GHCR and runs it.
+# Marquee — builds the image from this checkout and runs it.
 #
-#   docker compose up -d   # start
-#   docker compose pull    # fetch newer image
-#   docker compose up -d   # apply
+#   docker compose up -d --build   # start / apply updates
+#
+# Updating: `git pull && docker compose up -d --build`. No registry round-trip;
+# the image is built on the host from whatever's in the working tree.
 
 # Pin the project + volume names so they don't depend on the install
 # directory. Moving the compose file between hosts/paths keeps the
@@ -30,10 +31,10 @@ services:
       retries: 5
 
   marquee:
-    image: ghcr.io/ijoshi129/marquee:latest
-    # Always check the registry for a newer :latest on `docker compose up`,
-    # so updates are picked up without an explicit `docker compose pull`.
-    pull_policy: always
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: marquee:local
     container_name: marquee
     restart: unless-stopped
     env_file: ./.env
