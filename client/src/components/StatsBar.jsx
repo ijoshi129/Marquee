@@ -22,9 +22,9 @@ export default function StatsBar({
   const [yearStats, setYearStats] = useState(null);
   const [err, setErr] = useState(null);
 
-  // Year stops: 'All time' (null) + every year with at least one watch, plus
-  // the current calendar year. Stepping left from the earliest populated year
-  // lands on null = the all-time view.
+  // Year stops: every year with at least one watch (plus the current calendar
+  // year), then 'All time' (null) on the far right. Stepping right from the
+  // current year lands on null = the all-time view.
   const yearStops = (() => {
     const ys = new Set(
       (allStats?.monthly_breakdown || [])
@@ -32,7 +32,7 @@ export default function StatsBar({
         .map((m) => parseInt(m.month.slice(0, 4), 10))
     );
     ys.add(CURRENT_YEAR);
-    return [null, ...[...ys].sort((a, b) => a - b)];
+    return [...[...ys].sort((a, b) => a - b), null];
   })();
   const yIdx = yearStops.indexOf(year);
   const prevStop = yIdx > 0 ? yearStops[yIdx - 1] : undefined;
