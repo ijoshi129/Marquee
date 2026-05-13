@@ -37,7 +37,7 @@ The email poller logs into Gmail via IMAP and requires an app-specific password 
 git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
 cp .env.example .env
 # Fill in the Required vars listed in the Configuration section below.
-docker compose up -d
+docker compose up -d --build
 ```
 
 Open `http://localhost:3000`. If port 3000 is taken, set `APP_HOST_PORT` in `.env` first.
@@ -46,8 +46,8 @@ Open `http://localhost:3000`. If port 3000 is taken, set `APP_HOST_PORT` in `.en
 
 ```bash
 cd marquee
-docker compose pull
-docker compose up -d
+git pull
+docker compose up -d --build
 ```
 
 The Postgres data volume (`marquee_pgdata`) is preserved across updates. New schema migrations apply automatically on container boot.
