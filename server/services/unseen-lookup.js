@@ -9,6 +9,7 @@
 const { pool } = require('../db');
 const logger = require('../logger');
 const tmdb = require('./tmdb');
+const trakt = require('./trakt');
 
 const REDDIT_UA = 'marquee/0.1 self-hosted movie tracker';
 const SEARCH_URL =
@@ -297,7 +298,9 @@ async function lookupByDate(date, type) {
 async function resolveAndAssign(watchId, opts = {}) {
   const { force = false } = opts;
   const r = await pool.query(
-    `SELECT id, title, showtime, watched_at, tmdb_id FROM watches WHERE id = $1`,
+    `SELECT id, title, showtime, watched_at, tmdb_id, trakt_sync_requested_at
+     FROM watches
+     WHERE id = $1`,
     [watchId]
   );
   if (!r.rows.length) return { resolved: false, reason: 'watch not found' };
@@ -352,6 +355,12 @@ async function resolveAndAssign(watchId, opts = {}) {
      WHERE id = $3`,
     [tmdbId, needsReview, watchId]
   );
+
+  if (tmdbId && w.trakt_sync_requested_at) {
+    trakt.queueWatch(watchId).catch((err) => {
+      logger.error({ err, watch_id: watchId }, 'trakt queue failed (non-fatal)');
+    });
+  }
 
   return { resolved: true, tmdbId, title: entry.title, entryNumber: entry.number };
 }

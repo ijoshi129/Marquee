@@ -93,6 +93,10 @@ async function initSchema() {
   await pool.query(
     `ALTER TABLE watches ADD COLUMN IF NOT EXISTS acknowledged BOOLEAN NOT NULL DEFAULT TRUE`
   );
+  await pool.query(`ALTER TABLE watches ADD COLUMN IF NOT EXISTS trakt_sync_requested_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE watches ADD COLUMN IF NOT EXISTS trakt_synced_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE watches ADD COLUMN IF NOT EXISTS trakt_sync_error TEXT`);
+  await pool.query(`ALTER TABLE watches ADD COLUMN IF NOT EXISTS trakt_sync_attempts INTEGER NOT NULL DEFAULT 0`);
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_watches_status ON watches(status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_watches_watched_at ON watches(watched_at DESC)`);
@@ -101,6 +105,12 @@ async function initSchema() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_watches_thankyou_email_id ON watches(thankyou_email_id) WHERE thankyou_email_id IS NOT NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_watches_reservation_email_id ON watches(reservation_email_id) WHERE reservation_email_id IS NOT NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_watches_unacknowledged ON watches(updated_at DESC) WHERE acknowledged = FALSE`);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS watches_trakt_sync_pending_idx
+    ON watches (trakt_sync_requested_at, trakt_sync_attempts)
+    WHERE trakt_sync_requested_at IS NOT NULL
+      AND trakt_synced_at IS NULL
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS email_log (

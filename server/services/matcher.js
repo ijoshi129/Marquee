@@ -6,6 +6,7 @@ const { normalizeText, cleanTitle } = require('../utils/normalize');
 const tmdb = require('./tmdb');
 const unseenLookup = require('./unseen-lookup');
 const { upsertTheater } = require('./theaters');
+const trakt = require('./trakt');
 
 const normTitle = (t) => normalizeText(cleanTitle(t));
 
@@ -182,6 +183,9 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
     }
     // Enrich via TMDB if not yet enriched
     await ensureTmdb(chosen.id, title);
+    trakt.queueWatch(chosen.id).catch((err) => {
+      logger.error({ err, watch_id: chosen.id }, 'trakt queue failed (non-fatal)');
+    });
     maybeResolveUnseen(chosen.id, chosen.title || title);
     return {
       action: chosen.status === 'pending' ? 'promoted' : 'linked',
@@ -216,6 +220,9 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
   );
 
   maybeResolveUnseen(insert.rows[0].id, title);
+  trakt.queueWatch(insert.rows[0].id).catch((err) => {
+    logger.error({ err, watch_id: insert.rows[0].id }, 'trakt queue failed (non-fatal)');
+  });
   return { action: 'walkup', watch_id: insert.rows[0].id, candidates: 0 };
 }
 

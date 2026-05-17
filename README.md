@@ -31,6 +31,22 @@ The email poller logs into Gmail via IMAP and requires an app-specific password 
 2. Visit https://myaccount.google.com/apppasswords and generate a password (any name; "Marquee" works). Copy the 16-character string.
 3. The poller scans `[Gmail]/All Mail` for `from:@amctheatres.com` by default. No Gmail label or filter setup needed.
 
+### Trakt API app (optional)
+
+Trakt sync is optional. To enable it, create an app at https://trakt.tv/oauth/applications and add every URL where you access Marquee to the app's Redirect URI and JavaScript origin fields. For example, a local-only install might use `http://localhost:3000`; an install behind a reverse proxy should also include its public URL, such as `https://marquee.example.com`. Put the client ID, client secret, and the redirect URI you want Marquee to use in `.env`, then run:
+
+```bash
+node server/scripts/trakt-device-auth.js
+```
+
+The script will ask you to approve Marquee in a browser and then store `TRAKT_ACCESS_TOKEN` / `TRAKT_REFRESH_TOKEN` in `.env`.
+
+To queue movies that were already logged before Trakt sync was configured:
+
+```bash
+node server/scripts/trakt-backfill.js
+```
+
 ## Quick start
 
 ```bash
@@ -74,6 +90,8 @@ Everything is set in `.env` at the repo root. The fields are also marked inline 
 | `BACKUP_RETENTION_DAYS` | `30` | How many days of backups to keep. Older files are pruned. |
 | `ADMIN_API_TOKEN` | unset | Optional bearer token required by the database export/import API. Strongly recommended if the app is reachable beyond localhost. |
 | `DATABASE_IMPORT_LIMIT` | `200mb` | Maximum request body size accepted by the database import API. |
+| `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` / `TRAKT_REDIRECT_URI` | unset | Optional Trakt app credentials. Leave blank to disable Trakt sync. |
+| `TRAKT_ACCESS_TOKEN` / `TRAKT_REFRESH_TOKEN` | unset | Trakt user tokens. Generated for you by `node server/scripts/trakt-device-auth.js`. |
 
 To restore from a backup file:
 
