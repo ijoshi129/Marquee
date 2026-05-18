@@ -1949,6 +1949,13 @@ input[type='date'].input-naked { color-scheme: dark; }
   font-size: 13px;
 }
 
+.trakt-status {
+  font-size: 13px;
+}
+.trakt-status--ok { color: var(--accent); }
+.trakt-status--pending { color: var(--fg-mute); }
+.trakt-status--error { color: var(--danger); }
+
 .sheet-actions {
   position: relative;
   z-index: 1;

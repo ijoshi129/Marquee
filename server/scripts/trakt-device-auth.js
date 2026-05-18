@@ -3,59 +3,27 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.e
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { sleep, traktFetch: httpFetch, writeEnvFile } = require('../services/trakt-http');
 
 const ROOT = path.join(__dirname, '..', '..');
 const ENV_PATH = path.join(ROOT, '.env');
 const CREDS_PATH = path.join(ROOT, 'trakt_creds.txt');
-const API_URL = 'https://api.trakt.tv';
-const USER_AGENT = 'Marquee/0.1 (+https://localhost)';
-const MIN_REQUEST_INTERVAL_MS = Math.max(
-  parseInt(process.env.TRAKT_MIN_REQUEST_INTERVAL_MS || '5000', 10),
-  1000
-);
 
-let nextRequestAt = 0;
+// Trakt device-token poll responses: 400 means the user hasn't approved yet;
+// every other status is terminal. https://trakt.docs.apiary.io
+const POLL_FAILURES = {
+  404: 'device code not found — restart the script',
+  409: 'this code was already approved — restart the script',
+  410: 'the code expired before approval — restart the script',
+  418: 'authorization was denied — restart the script to try again',
+};
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function retryAfterMs(headers) {
-  const retryAfter = headers.get('retry-after');
-  if (!retryAfter) return MIN_REQUEST_INTERVAL_MS;
-
-  const seconds = Number(retryAfter);
-  if (Number.isFinite(seconds)) return Math.max(seconds * 1000, MIN_REQUEST_INTERVAL_MS);
-
-  const dateMs = Date.parse(retryAfter);
-  if (Number.isFinite(dateMs)) return Math.max(dateMs - Date.now(), MIN_REQUEST_INTERVAL_MS);
-
-  return MIN_REQUEST_INTERVAL_MS;
-}
-
-async function throttle() {
-  const waitMs = Math.max(0, nextRequestAt - Date.now());
-  if (waitMs > 0) await sleep(waitMs);
-  nextRequestAt = Date.now() + MIN_REQUEST_INTERVAL_MS;
-}
-
-async function traktFetch(pathname, options) {
-  while (true) {
-    await throttle();
-    const res = await fetch(`${API_URL}${pathname}`, {
-      ...options,
-      headers: {
-        'User-Agent': USER_AGENT,
-        ...(options.headers || {}),
-      },
-    });
-    if (res.status !== 429) return res;
-
-    const waitMs = retryAfterMs(res.headers);
-    nextRequestAt = Math.max(nextRequestAt, Date.now() + waitMs);
-    console.log(`Trakt rate limited this request. Waiting ${Math.ceil(waitMs / 1000)}s before retrying...`);
-    await sleep(waitMs);
-  }
+function traktFetch(pathname, options) {
+  return httpFetch(pathname, options, {
+    maxRateLimitRetries: Infinity,
+    onRateLimit: (waitMs) =>
+      console.log(`Trakt rate limited this request. Waiting ${Math.ceil(waitMs / 1000)}s before retrying...`),
+  });
 }
 
 function parseCredFile() {
@@ -73,22 +41,12 @@ function parseCredFile() {
   return out;
 }
 
-function escapeEnvValue(value) {
-  const s = String(value ?? '');
-  if (!s || /^[A-Za-z0-9_./:@+-]+$/.test(s)) return s;
-  return JSON.stringify(s);
-}
-
 function writeEnv(updates) {
-  let env = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : '';
   for (const [key, value] of Object.entries(updates)) {
     if (value === undefined || value === null || value === '') continue;
     process.env[key] = String(value);
-    const line = `${key}=${escapeEnvValue(value)}`;
-    const rx = new RegExp(`^${key}=.*$`, 'm');
-    env = rx.test(env) ? env.replace(rx, line) : `${env.replace(/\s*$/, '')}\n${line}\n`;
   }
-  fs.writeFileSync(ENV_PATH, env);
+  writeEnvFile(ENV_PATH, updates);
 }
 
 async function post(pathname, body) {
@@ -98,11 +56,10 @@ async function post(pathname, body) {
     body: JSON.stringify(body),
   });
   const text = await res.text();
-  const parsed = text ? JSON.parse(text) : null;
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}${text ? ` ${text}` : ''}`);
   }
-  return parsed;
+  return text ? JSON.parse(text) : null;
 }
 
 async function main() {
@@ -127,6 +84,7 @@ async function main() {
   const interval = Math.max(code.interval || 5, 5) * 1000;
   while (Date.now() < deadline) {
     await sleep(interval);
+
     let res;
     try {
       res = await traktFetch('/oauth/device/token', {
@@ -142,12 +100,18 @@ async function main() {
       continue;
     }
 
-    if (res.status === 400 || res.status === 404 || res.status === 409) {
-      continue;
-    }
+    if (res.status === 400) continue;
 
     const text = await res.text();
-    if (!res.ok) throw new Error(`Token exchange failed: HTTP ${res.status}${text ? ` ${text}` : ''}`);
+    if (!res.ok) {
+      const reason = POLL_FAILURES[res.status];
+      throw new Error(
+        reason
+          ? `Trakt authorization failed: ${reason}`
+          : `Token exchange failed: HTTP ${res.status}${text ? ` ${text}` : ''}`
+      );
+    }
+
     const token = text ? JSON.parse(text) : {};
     writeEnv({
       TRAKT_ACCESS_TOKEN: token.access_token,

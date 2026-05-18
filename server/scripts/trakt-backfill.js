@@ -9,7 +9,6 @@ async function main() {
   await runMigrations();
 
   const resync = process.argv.includes('--resync');
-  const whereSynced = resync ? '' : 'AND trakt_synced_at IS NULL';
   const result = await pool.query(
     `UPDATE watches
      SET trakt_sync_requested_at = COALESCE(trakt_sync_requested_at, NOW()),
@@ -18,19 +17,31 @@ async function main() {
          ${resync ? ', trakt_synced_at = NULL' : ''}
      WHERE status = 'watched'
        AND tmdb_id IS NOT NULL
-       ${whereSynced}
+       ${resync ? '' : 'AND trakt_synced_at IS NULL'}
      RETURNING id`
   );
 
   console.log(`Queued ${result.rowCount} watched movie(s) for Trakt sync.`);
+  if (result.rowCount === 0) return;
 
   if (!process.env.TRAKT_CLIENT_ID || !process.env.TRAKT_ACCESS_TOKEN) {
-    console.log('TRAKT_CLIENT_ID/TRAKT_ACCESS_TOKEN are not set, so queued rows will sync after Trakt is configured.');
+    console.log('TRAKT_CLIENT_ID/TRAKT_ACCESS_TOKEN are not set, so queued rows will sync once Trakt is configured.');
     return;
   }
 
-  const synced = await traktSync.runOnce();
-  console.log(`Synced ${synced.synced}/${synced.total} queued movie(s) in this run.`);
+  // runOnce handles a capped batch; loop until nothing is left queued so the
+  // script genuinely finishes rather than reporting one partial batch.
+  let synced = 0;
+  let batch = 0;
+  for (;;) {
+    const r = await traktSync.runOnce();
+    if (r.total === 0) break;
+    synced += r.synced;
+    batch += 1;
+    console.log(`  batch ${batch}: ${r.synced}/${r.total} synced`);
+  }
+
+  console.log(`Done — synced ${synced} movie(s).`);
 }
 
 main()
