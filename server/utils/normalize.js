@@ -14,7 +14,7 @@ function normalizeText(s) {
 //   "Avatar: Fire and Ash in RealD 3D"                       → "Avatar: Fire and Ash"
 //   "The Super Mario Galaxy Movie in RealD 3D"               → "The Super Mario Galaxy Movie"
 //   "Crime 101 Japanese Spoken with English Subtitles"       → "Crime 101"
-const FORMAT_SUFFIX = /\s+(?:in\s+)?(?:RealD\s+3D|IMAX(?:\s+\d{1,2}\.\d+)?|Dolby\s+Cinema|Dolby\s+Atmos|Prime|D-Box|XD|MX4D|3D|2D)\s*$/i;
+const FORMAT_SUFFIX = /\s+(?:in\s+)?(?:RealD\s+3D|IMAX(?:\s+(?:\d{1,2}\.\d+|\d+\s*mm))?|Dolby\s+Cinema|Dolby\s+Atmos|Prime|D-Box|XD|MX4D|3D|2D)\s*$/i;
 const LANGUAGE_SUFFIX = /\s+(?:[A-Z][a-z]+\s+Spoken\s+with\s+English\s+Subtitles|with\s+English\s+Subtitles|Open[\s-]Caption(?:ed)?|Closed[\s-]Caption(?:ed)?)\s*$/i;
 
 function cleanTitle(s) {
