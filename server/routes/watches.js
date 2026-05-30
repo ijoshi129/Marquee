@@ -4,6 +4,7 @@ const { pool } = require('../db');
 const tmdb = require('../services/tmdb');
 const { upsertTheater } = require('../services/theaters');
 const unseenLookup = require('../services/unseen-lookup');
+const trakt = require('../services/trakt');
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ const SELECT_WATCH = `
     w.id, w.tmdb_id, w.title, w.showtime,
     w.status, w.source, w.rating, w.notes, w.tmdb_needs_review,
     w.reservation_email_id, w.thankyou_email_id,
+    w.trakt_sync_requested_at, w.trakt_synced_at, w.trakt_sync_error,
     w.tags,
     w.watched_at, w.created_at, w.updated_at,
     t.id  AS theater_id,
@@ -236,6 +238,11 @@ router.post('/', async (req, res) => {
     );
 
     const created = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [insert.rows[0].id]);
+    if (finalStatus === 'watched') {
+      trakt.queueWatch(insert.rows[0].id).catch((err) => {
+        logger.error({ err, watch_id: insert.rows[0].id }, 'trakt queue failed (non-fatal)');
+      });
+    }
     res.status(201).json(created.rows[0]);
   } catch (err) {
     logger.error({ err: err }, 'create watch');
@@ -308,7 +315,26 @@ router.patch('/:id', async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
 
     const refreshed = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [req.params.id]);
-    res.json(refreshed.rows[0]);
+    const watch = refreshed.rows[0];
+    const shouldQueueTrakt =
+      watch?.status === 'watched' &&
+      (
+        req.body.status === 'watched' ||
+        'tmdb_id' in req.body ||
+        'showtime' in req.body ||
+        'watched_at' in req.body
+      );
+    if (shouldQueueTrakt) {
+      const resync = Boolean(
+        watch.trakt_synced_at &&
+        ('tmdb_id' in req.body || 'showtime' in req.body || 'watched_at' in req.body)
+      );
+      trakt.queueWatch(req.params.id, { resync }).catch((err) => {
+        logger.error({ err, watch_id: req.params.id }, 'trakt queue failed (non-fatal)');
+      });
+    }
+
+    res.json(watch);
   } catch (err) {
     logger.error({ err: err }, 'update watch');
     res.status(500).json({ error: 'Server error' });

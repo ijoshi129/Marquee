@@ -131,6 +131,14 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   const title = tmdb.title || watch.title;
   const tag = specialTag(watch);
 
+  const traktStatus = watch.trakt_sync_error
+    ? { kind: 'error', text: `Trakt sync failed — ${watch.trakt_sync_error}` }
+    : watch.trakt_synced_at
+    ? { kind: 'ok', text: 'Synced to Trakt' }
+    : watch.trakt_sync_requested_at
+    ? { kind: 'pending', text: 'Trakt sync pending' }
+    : null;
+
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -290,6 +298,15 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
               />
             </div>
           </div>
+
+          {traktStatus && (
+            <div className="sheet-field">
+              <label className="sheet-label">Trakt</label>
+              <span className={`trakt-status trakt-status--${traktStatus.kind}`}>
+                {traktStatus.text}
+              </span>
+            </div>
+          )}
 
           {err && <div className="form-error">{err}</div>}
           {info && <div className="form-info">{info}</div>}

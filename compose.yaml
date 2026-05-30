@@ -46,6 +46,7 @@ services:
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
     volumes:
       - ${BACKUP_HOST_PATH:-./backups}:/backups
+      - ./.env:/app/.env
     ports:
       - "${APP_HOST_PORT:-3000}:3000"
     depends_on:

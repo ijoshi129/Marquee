@@ -21,6 +21,7 @@ const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
 const backup = require('./workers/backup');
 const tmdbRechecker = require('./workers/tmdb-rechecker');
+const traktSync = require('./workers/trakt-sync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -137,6 +138,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     pendingExpirer.start();
     backup.start();
     tmdbRechecker.start();
+    traktSync.start();
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -144,6 +146,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       pendingExpirer.stop();
       backup.stop();
       tmdbRechecker.stop();
+      traktSync.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };
