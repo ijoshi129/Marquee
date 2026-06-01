@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
-import { watchDisplayTitle } from '../format';
+import { watchDisplayTitle, rewatchLabel } from '../format';
 
 // AMC promotional/special-event detector. Authoritatively reads the row's
 // `tags` array (user-set or auto-extracted), with a regex fallback against
@@ -92,6 +92,7 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
   const isInactive =
     w.status === 'cancelled' || w.status === 'no_show';
   const needsIdentify = !!tag && !w.tmdb_id;
+  const rewatch = rewatchLabel(w);
 
   return (
     <article
@@ -142,6 +143,8 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
         {w.status === 'no_show' && (
           <span className="poster-status cancelled">No-show</span>
         )}
+
+        {rewatch && <span className="poster-rewatch">{rewatch}</span>}
 
         <div className="poster-overlay">
           <div className="poster-meta">

@@ -18,7 +18,13 @@ const SELECT_WATCH = `
     w.watched_at, w.created_at, w.updated_at,
     t.id  AS theater_id,
     t.name AS theater_name,
-    tc.payload AS tmdb
+    tc.payload AS tmdb,
+    (SELECT COUNT(*)::int FROM watches w2
+       WHERE w2.tmdb_id = w.tmdb_id AND w2.status = 'watched') AS rewatch_total,
+    (SELECT COUNT(*)::int FROM watches w2
+       WHERE w2.tmdb_id = w.tmdb_id AND w2.status = 'watched'
+         AND COALESCE(w2.watched_at, w2.showtime, w2.created_at)
+             <= COALESCE(w.watched_at, w.showtime, w.created_at)) AS rewatch_ordinal
   FROM watches w
   LEFT JOIN theaters t  ON t.id = w.theater_id
   LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id

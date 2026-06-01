@@ -29,6 +29,7 @@ function buildCards(data) {
   cards.push({ key: 'totals', kind: 'totals' });
   if (data.value) cards.push({ key: 'value', kind: 'value' });
   if (data.films?.length) cards.push({ key: 'films', kind: 'films' });
+  if (data.rewatches?.length) cards.push({ key: 'repeat', kind: 'repeat' });
   if (data.genres?.length) cards.push({ key: 'genres', kind: 'genres' });
   if (data.top_directors?.length) cards.push({ key: 'directors', kind: 'directors' });
   if (data.theaters?.length) cards.push({ key: 'theaters', kind: 'theaters' });
@@ -235,6 +236,22 @@ function CardBody({ card, data, label, month, onStep }) {
         <div className="wrapped-card wrapped-card-wide">
           <div className="wrapped-eyebrow">The lineup</div>
           <PosterWall films={data.films} />
+        </div>
+      );
+
+    case 'repeat':
+      return (
+        <div className="wrapped-card">
+          <div className="wrapped-eyebrow">On repeat</div>
+          <div className="wrapped-sub">Films you keep coming back to</div>
+          <ul className="wrapped-rank">
+            {data.rewatches.slice(0, 5).map((r) => (
+              <li key={r.id}>
+                <span>{r.title}</span>
+                <span className="wrapped-rank-count">{r.total}×</span>
+              </li>
+            ))}
+          </ul>
         </div>
       );
 
