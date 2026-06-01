@@ -38,4 +38,11 @@ export const api = {
   notifications: () => request('/api/watches/notifications'),
   searchSuggest: (q) => request(`/api/search-suggest?q=${encodeURIComponent(q || '')}`),
   tags: () => request('/api/tags'),
+  listWatchlist: () => request('/api/watchlist'),
+  addWatchlist: (tmdb_id) =>
+    request('/api/watchlist', { method: 'POST', body: JSON.stringify({ tmdb_id }) }),
+  removeWatchlist: (id) => request(`/api/watchlist/${id}`, { method: 'DELETE' }),
+  markWatchlistWatched: (id, body = {}) =>
+    request(`/api/watchlist/${id}/watched`, { method: 'POST', body: JSON.stringify(body) }),
+  nowPlaying: () => request('/api/watchlist/now-playing'),
 };

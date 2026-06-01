@@ -40,6 +40,41 @@ function shapeSearchResult(r) {
   };
 }
 
+// Films currently in US theaters (plus the nearest upcoming) for the
+// watchlist's discovery feed. now_playing runs many pages — one page misses
+// most of what's out — so pull several and rank by popularity so the
+// recognizable releases surface first. Deduped; poster required.
+async function nowPlaying() {
+  const reqs = [
+    tmdbFetch('/movie/now_playing', { region: 'US', page: 1 }),
+    tmdbFetch('/movie/now_playing', { region: 'US', page: 2 }),
+    tmdbFetch('/movie/now_playing', { region: 'US', page: 3 }),
+    tmdbFetch('/movie/upcoming', { region: 'US', page: 1 }),
+  ];
+  const pages = await Promise.all(reqs);
+  // now_playing is broad and noisy: it leaks old catalog/re-release records
+  // (a 1999 Fight Club) and a long tail of tiny limited releases that never
+  // hit a multiplex. Keep only recent films above a notability floor so the
+  // feed reads like an actual marquee. TMDB is the only source here — there's
+  // no public AMC showtimes API to cross-check against.
+  const minYear = new Date().getUTCFullYear() - 1;
+  const MIN_POPULARITY = 10;
+  const seen = new Set();
+  const out = [];
+  for (const data of pages) {
+    for (const r of data.results || []) {
+      if (!r.poster_path || seen.has(r.id)) continue;
+      if ((r.popularity || 0) < MIN_POPULARITY) continue;
+      const year = r.release_date ? Number(r.release_date.slice(0, 4)) : null;
+      if (!year || year < minYear) continue;
+      seen.add(r.id);
+      out.push(shapeSearchResult(r));
+    }
+  }
+  out.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  return out;
+}
+
 async function fetchDetails(tmdbId) {
   const data = await tmdbFetch(`/movie/${tmdbId}`, { append_to_response: 'credits' });
   const director = (data.credits?.crew || []).find((c) => c.job === 'Director');
@@ -151,4 +186,4 @@ function similarity(a, b) {
   return inter / (ax.size + bx.size - inter || 1);
 }
 
-module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf };
+module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf, nowPlaying };
