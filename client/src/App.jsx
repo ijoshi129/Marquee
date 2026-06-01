@@ -8,6 +8,8 @@ import SearchBar from './components/SearchBar';
 import Notifications from './components/Notifications';
 import Backdrop from './components/Backdrop';
 import WhatsNew from './components/WhatsNew';
+import WrappedStory from './components/WrappedStory';
+import WrappedPrompt from './components/WrappedPrompt';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -24,6 +26,9 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [wrapped, setWrapped] = useState(null);
+  const [wrappedPrompt, setWrappedPrompt] = useState(null);
+  const [wrappedAutoMonth, setWrappedAutoMonth] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [q, setQ] = useState('');
@@ -106,6 +111,50 @@ export default function App() {
     scrollToFilteredResults();
   }, []);
 
+  const openMonthWrapped = useCallback((month) => {
+    setWrapped({ kind: 'month', month });
+  }, []);
+
+  // In the last 4 days of a month, surface that month's Wrapped — without
+  // nagging. Stage per month in localStorage: absent → auto-open the story
+  // once; 'shown' → show the side prompt; 'min' → show the minimized chip.
+  // Only the current month is ever surfaced, so it clears when the month rolls.
+  useEffect(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    if (now.getDate() < daysInMonth - 3) return;
+    const ym = `${y}-${String(m + 1).padStart(2, '0')}`;
+    let stage = null;
+    try {
+      stage = localStorage.getItem(`marquee.wrapped.${ym}`);
+    } catch {}
+    if (!stage) {
+      try {
+        localStorage.setItem(`marquee.wrapped.${ym}`, 'shown');
+      } catch {}
+      setWrappedAutoMonth(ym);
+      setWrapped({ kind: 'month', month: ym });
+    } else {
+      setWrappedPrompt(ym);
+    }
+  }, []);
+
+  // Closing the auto-opened story drops to the side prompt for the same month;
+  // a manually opened month (autoMonth null) just closes.
+  const closeWrapped = useCallback(() => {
+    setWrapped(null);
+    setWrappedAutoMonth((am) => {
+      if (am) setWrappedPrompt(am);
+      return null;
+    });
+  }, []);
+
+  const openWrappedFromPrompt = useCallback((month) => {
+    setWrapped({ kind: 'month', month });
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -161,6 +210,7 @@ export default function App() {
           onYearChange={setYear}
           onDirectorClick={filterByDirector}
           onGenreClick={filterByGenre}
+          onMonthClick={openMonthWrapped}
         />
 
         <div ref={filterAnchorRef}>
@@ -212,6 +262,12 @@ export default function App() {
           onFilterDirector={filterByDirector}
         />
       )}
+
+      {wrappedPrompt && !wrapped && (
+        <WrappedPrompt month={wrappedPrompt} onOpen={openWrappedFromPrompt} />
+      )}
+
+      {wrapped && <WrappedStory period={wrapped} onClose={closeWrapped} />}
     </div>
   );
 }

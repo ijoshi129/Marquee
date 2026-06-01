@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-
-function fmtRuntime(mins) {
-  if (!mins) return '—';
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h ? `${h}h ${m}m` : `${m}m`;
-}
+import { fmtRuntime, MONTH_NAMES } from '../format';
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function StatsBar({
   refreshKey,
@@ -17,6 +10,7 @@ export default function StatsBar({
   onYearChange,
   onDirectorClick,
   onGenreClick,
+  onMonthClick,
 }) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
@@ -81,6 +75,7 @@ export default function StatsBar({
           onNext={nextStop !== undefined ? () => onYearChange(nextStop) : null}
           onDirectorClick={onDirectorClick}
           onGenreClick={onGenreClick}
+          onMonthClick={onMonthClick}
         />
       )}
     </section>
@@ -98,7 +93,7 @@ function Overview({ label, value, isText }) {
   );
 }
 
-function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreClick }) {
+function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
   const max = Math.max(1, ...(stats.monthly_breakdown || []).map((m) => m.count));
   const isEmpty = stats.count === 0;
   const [collapsed, setCollapsed] = useState(() => {
@@ -178,7 +173,7 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           )}
 
           <YIRSection title="Cadence">
-            <CadenceChart breakdown={stats.monthly_breakdown} max={max} />
+            <CadenceChart breakdown={stats.monthly_breakdown} max={max} onMonthClick={onMonthClick} />
           </YIRSection>
 
           <div className="yir-cols">
@@ -223,7 +218,7 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
   );
 }
 
-function CadenceChart({ breakdown, max }) {
+function CadenceChart({ breakdown, max, onMonthClick }) {
   // Group monthly entries by year. Server returns entries Jan-aligned for
   // period='all', so each year's chunk starts in January (zero-counts for
   // unlogged months at the start of the earliest year, trailing empties for
@@ -253,10 +248,13 @@ function CadenceChart({ breakdown, max }) {
               const idx = parseInt(m.month.slice(5, 7), 10) - 1;
               const tall = m.count === max && max > 0;
               return (
-                <div
+                <button
+                  type="button"
                   key={m.month}
-                  className="yir-bar-cell"
+                  className={`yir-bar-cell ${onMonthClick ? 'clickable' : ''}`}
                   title={`${MONTH_NAMES[idx]} ${yr}: ${m.count}`}
+                  onClick={onMonthClick ? () => onMonthClick(m.month) : undefined}
+                  disabled={!onMonthClick}
                 >
                   <div className="yir-bar-axis">
                     <div
@@ -266,7 +264,7 @@ function CadenceChart({ breakdown, max }) {
                   </div>
                   <div className="yir-bar-month">{MONTH_NAMES[idx]}</div>
                   <div className="yir-bar-count">{m.count || ''}</div>
-                </div>
+                </button>
               );
             })}
           </div>

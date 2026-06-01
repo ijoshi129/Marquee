@@ -46,7 +46,7 @@ router.get('/', async (req, res) => {
     const { start, end, label } = periodBounds(period, req.query.month);
 
     const watchesQ = await pool.query(
-      `SELECT w.id, w.title, w.rating, w.watched_at, t.name AS theater_name, tc.payload AS tmdb
+      `SELECT w.id, w.title, w.rating, w.watched_at, w.tags, t.name AS theater_name, tc.payload AS tmdb
        FROM watches w
        LEFT JOIN theaters t ON t.id = w.theater_id
        LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
@@ -63,13 +63,26 @@ router.get('/', async (req, res) => {
     const genreCounts = new Map();
     const theaterCounts = new Map();
     const directorCounts = new Map();
+    const formatCounts = new Map();
     const monthBuckets = new Map(); // 'YYYY-MM' -> count
+    const dayBuckets = new Map(); // 'YYYY-MM-DD' -> count
     let ratingSum = 0;
     let ratingCount = 0;
+    let fiveStarCount = 0;
+    let longest = null;
 
     for (const w of watches) {
       const t = w.tmdb || {};
-      if (typeof t.runtime_minutes === 'number') totalRuntime += t.runtime_minutes;
+      if (typeof t.runtime_minutes === 'number') {
+        totalRuntime += t.runtime_minutes;
+        if (!longest || t.runtime_minutes > longest.runtime_minutes) {
+          longest = {
+            title: t.title || w.title,
+            runtime_minutes: t.runtime_minutes,
+            poster_url: t.poster_url || null,
+          };
+        }
+      }
       for (const g of t.genres || []) {
         genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
       }
@@ -79,15 +92,26 @@ router.get('/', async (req, res) => {
       if (t.director) {
         directorCounts.set(t.director, (directorCounts.get(t.director) || 0) + 1);
       }
+      for (const tag of w.tags || []) {
+        formatCounts.set(tag, (formatCounts.get(tag) || 0) + 1);
+      }
       if (typeof w.rating === 'number') {
         ratingSum += w.rating;
         ratingCount++;
+        if (w.rating === 5) fiveStarCount++;
       }
       if (w.watched_at) {
         const d = new Date(w.watched_at);
         const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
         monthBuckets.set(key, (monthBuckets.get(key) || 0) + 1);
+        const dayKey = `${key}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + 1);
       }
+    }
+
+    let busiestDay = null;
+    for (const [date, n] of dayBuckets) {
+      if (!busiestDay || n > busiestDay.count) busiestDay = { date, count: n };
     }
 
     const recent = watches.slice(0, 6).map((w) => ({
@@ -97,6 +121,13 @@ router.get('/', async (req, res) => {
       rating: w.rating,
       watched_at: w.watched_at,
       theater_name: w.theater_name,
+    }));
+
+    const films = watches.slice(0, 60).map((w) => ({
+      id: w.id,
+      title: w.tmdb?.title || w.title,
+      poster_url: w.tmdb?.poster_url || null,
+      rating: w.rating,
     }));
 
     const response = {
@@ -113,10 +144,33 @@ router.get('/', async (req, res) => {
       theaters: [...theaterCounts.entries()]
         .map(([name, n]) => ({ name, count: n }))
         .sort((a, b) => b.count - a.count),
+      formats: [...formatCounts.entries()]
+        .map(([name, n]) => ({ name, count: n }))
+        .sort((a, b) => b.count - a.count),
+      top_directors: [...directorCounts.entries()]
+        .map(([name, n]) => ({ name, count: n }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      top_rated: watches
+        .filter((w) => w.rating === 5)
+        .slice(0, 12)
+        .map((w) => ({
+          id: w.id,
+          title: w.tmdb?.title || w.title,
+          poster_url: w.tmdb?.poster_url || null,
+          watched_at: w.watched_at,
+        })),
       recent,
+      films,
+      superlatives: {
+        busiest_day: busiestDay,
+        longest_film: longest,
+        five_star_count: fiveStarCount,
+      },
     };
 
-    // Year-in-Review extras when not viewing a single month.
+    // The month-over-month cadence chart is only meaningful across a year or
+    // all-time; a single month has nothing to chart.
     if (period !== 'month') {
       // Pick a sensible window for the monthly chart:
       //   - period='year': always show 12 months of that year (zero-buckets included).
@@ -150,24 +204,7 @@ router.get('/', async (req, res) => {
         monthly.push({ month: key, count: monthBuckets.get(key) || 0 });
         cursor.setUTCMonth(cursor.getUTCMonth() + 1);
       }
-      const trimmed = monthly;
-
-      const topRated = watches
-        .filter((w) => typeof w.rating === 'number' && w.rating === 5)
-        .slice(0, 12)
-        .map((w) => ({
-          id: w.id,
-          title: w.tmdb?.title || w.title,
-          poster_url: w.tmdb?.poster_url || null,
-          watched_at: w.watched_at,
-        }));
-
-      response.top_directors = [...directorCounts.entries()]
-        .map(([name, n]) => ({ name, count: n }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-      response.monthly_breakdown = trimmed;
-      response.top_rated = topRated;
+      response.monthly_breakdown = monthly;
     }
 
     res.json(response);
