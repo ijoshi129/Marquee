@@ -14,3 +14,15 @@ export function fmtRuntime(mins) {
   const m = mins % 60;
   return h ? `${h}h ${m}m` : `${m}m`;
 }
+
+// Mirror of RERELEASE_SUFFIX in server/utils/normalize.js — keep in sync.
+const RERELEASE_RE =
+  /[\s:–—-]+(?:\d{1,3}(?:st|nd|rd|th)\s+anniversary|anniversary\s+edition|re-?release|re-?issue)(?:\s+(?:edition|re-?release|presentation|event|in\s+cinemas))?\s*$/i;
+
+// TMDB's cleaner name in general, but the watch's own title when it's a
+// re-release so "Top Gun 40th Anniversary" isn't flattened to "Top Gun".
+export function watchDisplayTitle(w) {
+  if (!w) return '';
+  if (w.title && RERELEASE_RE.test(w.title)) return w.title;
+  return w.tmdb?.title || w.title;
+}

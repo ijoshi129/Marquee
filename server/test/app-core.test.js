@@ -4,6 +4,7 @@ const { test } = require('./harness');
 const { classify } = require('../services/email-classify');
 const {
   cleanTitle,
+  displayTitle,
   extractFormatsFromHtml,
   extractTags,
   normalizeText,
@@ -32,6 +33,15 @@ test('cleanTitle strips anniversary and re-release decorations', () => {
   assert.equal(cleanTitle('Top Gun 40th Anniversary in RealD 3D'), 'Top Gun');
   // No "Nth" prefix — a real title that merely contains "Anniversary" is kept.
   assert.equal(cleanTitle('Happy Anniversary'), 'Happy Anniversary');
+});
+
+test('displayTitle keeps the watch title for re-releases, TMDB name otherwise', () => {
+  // Re-release: keep what the user saw, not the flattened TMDB name.
+  assert.equal(displayTitle('Top Gun 40th Anniversary', 'Top Gun'), 'Top Gun 40th Anniversary');
+  // Ordinary film: prefer TMDB's cleaner name.
+  assert.equal(displayTitle('backrooms', 'Backrooms'), 'Backrooms');
+  // No TMDB match yet: fall back to the watch title.
+  assert.equal(displayTitle('Some Untracked Film', null), 'Some Untracked Film');
 });
 
 test('extractTags captures title formats, unseen labels, and HTML format badges', () => {

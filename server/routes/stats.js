@@ -1,6 +1,7 @@
 const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
+const { displayTitle } = require('../utils/normalize');
 
 const router = express.Router();
 
@@ -116,7 +117,7 @@ router.get('/', async (req, res) => {
 
     const recent = watches.slice(0, 6).map((w) => ({
       id: w.id,
-      title: w.tmdb?.title || w.title,
+      title: displayTitle(w.title, w.tmdb?.title),
       poster_url: w.tmdb?.poster_url || null,
       rating: w.rating,
       watched_at: w.watched_at,
@@ -125,7 +126,7 @@ router.get('/', async (req, res) => {
 
     const films = watches.slice(0, 60).map((w) => ({
       id: w.id,
-      title: w.tmdb?.title || w.title,
+      title: displayTitle(w.title, w.tmdb?.title),
       poster_url: w.tmdb?.poster_url || null,
       rating: w.rating,
     }));
@@ -156,7 +157,7 @@ router.get('/', async (req, res) => {
         .slice(0, 12)
         .map((w) => ({
           id: w.id,
-          title: w.tmdb?.title || w.title,
+          title: displayTitle(w.title, w.tmdb?.title),
           poster_url: w.tmdb?.poster_url || null,
           watched_at: w.watched_at,
         })),
