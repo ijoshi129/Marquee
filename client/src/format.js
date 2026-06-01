@@ -20,6 +20,20 @@ export function fmtMoney(n) {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 }
 
+export function ordinal(n) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+}
+
+// The "Nth watch" badge for a rewatch, or null for a first/only watch or a
+// row that isn't a confirmed watch.
+export function rewatchLabel(w) {
+  if (!w || w.status !== 'watched') return null;
+  if (!(w.rewatch_total >= 2) || !(w.rewatch_ordinal >= 2)) return null;
+  return `${ordinal(w.rewatch_ordinal)} watch`;
+}
+
 // Mirror of RERELEASE_SUFFIX in server/utils/normalize.js — keep in sync.
 const RERELEASE_RE =
   /[\s:–—-]+(?:\d{1,3}(?:st|nd|rd|th)\s+anniversary|anniversary\s+edition|re-?release|re-?issue)(?:\s+(?:edition|re-?release|presentation|event|in\s+cinemas))?\s*$/i;

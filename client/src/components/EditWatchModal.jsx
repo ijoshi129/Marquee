@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
 import { specialTag } from './WatchList';
-import { watchDisplayTitle } from '../format';
+import { watchDisplayTitle, rewatchLabel } from '../format';
 import Backdrop from './Backdrop';
 import InfoTip from './InfoTip';
 import TagEditor from './TagEditor';
@@ -170,6 +170,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
                   ? `${Math.floor(tmdb.runtime_minutes / 60)}h ${tmdb.runtime_minutes % 60}m`
                   : null,
                 tmdb.genres?.slice(0, 2).join(' · '),
+                rewatchLabel(watch),
               ]
                 .filter(Boolean)
                 .join(' · ')}

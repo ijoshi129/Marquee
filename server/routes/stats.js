@@ -60,7 +60,7 @@ router.get('/', async (req, res) => {
     const { start, end, label } = periodBounds(period, req.query.month);
 
     const watchesQ = await pool.query(
-      `SELECT w.id, w.title, w.rating, w.watched_at, w.tags, t.name AS theater_name, tc.payload AS tmdb
+      `SELECT w.id, w.tmdb_id, w.title, w.rating, w.watched_at, w.tags, t.name AS theater_name, tc.payload AS tmdb
        FROM watches w
        LEFT JOIN theaters t ON t.id = w.theater_id
        LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
@@ -72,6 +72,17 @@ router.get('/', async (req, res) => {
 
     const watches = watchesQ.rows;
     const count = watches.length;
+
+    // Lifetime watch counts so the recap can flag films seen before. Cheap
+    // group-by over the whole table, intersected with this period's films.
+    const rewatchQ = await pool.query(
+      `SELECT tmdb_id, COUNT(*)::int AS total
+       FROM watches
+       WHERE status = 'watched' AND tmdb_id IS NOT NULL
+       GROUP BY tmdb_id
+       HAVING COUNT(*) >= 2`
+    );
+    const rewatchTotals = new Map(rewatchQ.rows.map((r) => [r.tmdb_id, r.total]));
 
     let totalRuntime = 0;
     const genreCounts = new Map();
@@ -149,6 +160,23 @@ router.get('/', async (req, res) => {
       rating: w.rating,
     }));
 
+    // Films watched in this period that the user has seen 2+ times overall.
+    const rewatchSeen = new Set();
+    const rewatches = [];
+    for (const w of watches) {
+      if (!w.tmdb_id || rewatchSeen.has(w.tmdb_id)) continue;
+      const total = rewatchTotals.get(w.tmdb_id);
+      if (!total) continue;
+      rewatchSeen.add(w.tmdb_id);
+      rewatches.push({
+        id: w.id,
+        title: displayTitle(w.title, w.tmdb?.title),
+        poster_url: w.tmdb?.poster_url || null,
+        total,
+      });
+    }
+    rewatches.sort((a, b) => b.total - a.total);
+
     const response = {
       period,
       label,
@@ -181,6 +209,7 @@ router.get('/', async (req, res) => {
         })),
       recent,
       films,
+      rewatches,
       superlatives: {
         busiest_day: busiestDay,
         longest_film: longest,
