@@ -4,6 +4,8 @@ const { pool } = require('../db');
 const { traktFetch: httpFetch, writeEnvFile } = require('./trakt-http');
 
 const ENV_PATH = path.join(__dirname, '..', '..', '.env');
+const CAPTURE_HISTORY_WINDOW_MS = 1000;
+const DUPLICATE_HISTORY_WINDOW_MS = 5 * 60 * 60 * 1000;
 
 // Watches currently being pushed to Trakt in this process. The inline sync (on
 // create / patch / thank-you ingest) and the background worker can both reach
@@ -126,22 +128,50 @@ function removeHistory(historyId, accessToken) {
   });
 }
 
-// POST /sync/history doesn't return the created play's id, so read it back:
-// the movie's history within a one-second window around the watched_at we
-// sent. Best-effort — a failure here just means a later resync can't dedupe.
-async function findHistoryId(tmdbId, watchedAtIso, accessToken) {
+// Find a movie play around the watched_at timestamp Marquee is about to send.
+// Preflight lookups use a wider window to avoid duplicate backfills; post-write
+// capture uses a tight window because Trakt's /sync/history response doesn't
+// include the created play id.
+async function findHistoryId(tmdbId, watchedAtIso, accessToken, opts = {}) {
   try {
-    const start = encodeURIComponent(watchedAtIso);
-    const end = encodeURIComponent(new Date(Date.parse(watchedAtIso) + 1000).toISOString());
+    const watchedAtMs = Date.parse(watchedAtIso);
+    const windowMs = opts.windowMs ?? CAPTURE_HISTORY_WINDOW_MS;
+    const halfWindowMs = Math.floor(windowMs / 2);
+    const startAt = new Date(watchedAtMs - halfWindowMs).toISOString();
+    const endAt = new Date(watchedAtMs + halfWindowMs).toISOString();
+    const start = encodeURIComponent(startAt);
+    const end = encodeURIComponent(endAt);
     const res = await traktFetch(`/sync/history/movies?start_at=${start}&end_at=${end}`, {
       headers: authHeaders(accessToken),
     });
-    if (!res.ok) return null;
-    const items = await res.json().catch(() => null);
-    if (!Array.isArray(items)) return null;
+    if (res.status === 401 && opts.throwUnauthorized) {
+      const err = new Error('Trakt history lookup unauthorized');
+      err.status = 401;
+      throw err;
+    }
+    if (!res.ok) {
+      if (opts.strict) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Trakt history lookup failed: HTTP ${res.status}${body ? ` ${body}` : ''}`);
+      }
+      return null;
+    }
+
+    let items = null;
+    try {
+      items = await res.json();
+    } catch (err) {
+      if (opts.strict) throw new Error(`Trakt history lookup returned invalid JSON: ${err.message}`);
+    }
+    if (!Array.isArray(items)) {
+      if (opts.strict) throw new Error('Trakt history lookup returned an unexpected response');
+      return null;
+    }
     const match = items.find((it) => Number(it?.movie?.ids?.tmdb) === Number(tmdbId));
     return match?.id ?? null;
-  } catch {
+  } catch (err) {
+    if (err.status === 401 && opts.throwUnauthorized) throw err;
+    if (opts.strict) throw err;
     return null;
   }
 }
@@ -222,6 +252,38 @@ async function syncWatch(watchId) {
             `Trakt could not remove the previous history entry: HTTP ${rm.status}${t ? ` ${t}` : ''}`
           );
         }
+      }
+
+      let existingHistoryId;
+      try {
+        existingHistoryId = await findHistoryId(row.tmdb_id, watchedAtIso, token, {
+          strict: true,
+          throwUnauthorized: true,
+          windowMs: DUPLICATE_HISTORY_WINDOW_MS,
+        });
+      } catch (err) {
+        if (err.status !== 401 || !canRefresh()) throw err;
+        token = await refreshAccessToken();
+        existingHistoryId = await findHistoryId(row.tmdb_id, watchedAtIso, token, {
+          strict: true,
+          throwUnauthorized: true,
+          windowMs: DUPLICATE_HISTORY_WINDOW_MS,
+        });
+      }
+      if (existingHistoryId != null) {
+        await pool.query(
+          `UPDATE watches
+           SET trakt_synced_at = NOW(),
+               trakt_sync_error = NULL,
+               trakt_history_id = $2
+           WHERE id = $1`,
+          [watchId, existingHistoryId]
+        );
+        logger.info(
+          { watch_id: watchId, tmdb_id: row.tmdb_id, trakt_history_id: existingHistoryId },
+          'trakt: matching history entry already exists, marking synced'
+        );
+        return { synced: true, skipped: 'already_on_trakt' };
       }
 
       let res = await postHistory(row.tmdb_id, watchedAtIso, token);
