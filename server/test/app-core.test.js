@@ -25,6 +25,15 @@ test('cleanTitle strips stacked AMC format and caption suffixes', () => {
   assert.equal(cleanTitle('Dune: Part Two IMAX 70mm'), 'Dune: Part Two');
 });
 
+test('cleanTitle strips anniversary and re-release decorations', () => {
+  assert.equal(cleanTitle('Top Gun 40th Anniversary'), 'Top Gun');
+  assert.equal(cleanTitle('The Goonies 40th Anniversary Re-Release'), 'The Goonies');
+  assert.equal(cleanTitle('Spirited Away: 20th Anniversary'), 'Spirited Away');
+  assert.equal(cleanTitle('Top Gun 40th Anniversary in RealD 3D'), 'Top Gun');
+  // No "Nth" prefix — a real title that merely contains "Anniversary" is kept.
+  assert.equal(cleanTitle('Happy Anniversary'), 'Happy Anniversary');
+});
+
 test('extractTags captures title formats, unseen labels, and HTML format badges', () => {
   assert.deepEqual(extractTags('AMC Scream Unseen January 5 IMAX 70mm'), [
     'IMAX',
