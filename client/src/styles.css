@@ -225,7 +225,7 @@ main {
 
 .overview {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: clamp(16px, 3vw, 40px);
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);

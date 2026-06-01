@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { fmtRuntime, MONTH_NAMES } from '../format';
+import { fmtMoney, fmtRuntime, MONTH_NAMES } from '../format';
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 
@@ -57,12 +57,16 @@ export default function StatsBar({
       {err && <div className="error-banner">Stats failed: {err}</div>}
 
       <div className="overview">
-        <Overview label="Films Logged" value={allStats?.count} />
-        <Overview label="Total Runtime" value={allStats ? fmtRuntime(allStats.total_runtime_minutes) : '—'} />
-        <Overview label="Mean Rating" value={allStats?.average_rating ?? '—'} />
+        <Overview label="Films Logged" value={yirStats?.count} />
+        <Overview label="Total Runtime" value={yirStats ? fmtRuntime(yirStats.total_runtime_minutes) : '—'} />
+        <Overview label="Mean Rating" value={yirStats?.average_rating ?? '—'} />
+        <Overview
+          label="A-List Saved"
+          value={yirStats?.value ? fmtMoney(yirStats.value.savings) : '—'}
+        />
         <Overview
           label="Signature Genre"
-          value={allStats?.genres?.[0]?.name || '—'}
+          value={yirStats?.genres?.[0]?.name || '—'}
           isText
         />
       </div>
@@ -153,25 +157,8 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
         </div>
       ) : (
         <div className="yir-body">
-          {/* The pulse stats duplicate the top overview row when viewing the
-              all-time view — same count / runtime / avg★. Hide it there. */}
-          {year !== null && (
-            <div className="yir-pulse">
-              <div className="yir-pulse-stat">
-                <span className="num">{stats.count}</span>
-                <span className="lbl">films</span>
-              </div>
-              <div className="yir-pulse-stat">
-                <span className="num">{fmtRuntime(stats.total_runtime_minutes)}</span>
-                <span className="lbl">in the dark</span>
-              </div>
-              <div className="yir-pulse-stat">
-                <span className="num">{stats.average_rating ?? '—'}</span>
-                <span className="lbl">avg ★</span>
-              </div>
-            </div>
-          )}
-
+          {/* Count / runtime / avg★ live in the overview row above, which now
+              tracks the selected year — no separate pulse needed here. */}
           <YIRSection title="Cadence">
             <CadenceChart breakdown={stats.monthly_breakdown} max={max} onMonthClick={onMonthClick} />
           </YIRSection>

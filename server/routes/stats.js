@@ -5,6 +5,19 @@ const { displayTitle } = require('../utils/normalize');
 
 const router = express.Router();
 
+// A-List value: a flat monthly fee buys the films; this estimates what those
+// tickets would have cost out of pocket. Prices are config so they can track a
+// region without code changes; defaults match the owner's plan.
+const ALIST = {
+  fee: Number(process.env.ALIST_MONTHLY_FEE) || 27.71,
+  ticket: Number(process.env.ALIST_TICKET_PRICE) || 16,
+  premium: Number(process.env.ALIST_PREMIUM_SURCHARGE) || 5,
+};
+const PREMIUM_FORMATS = new Set([
+  'IMAX', 'Dolby Cinema', 'Dolby Atmos', 'Prime', 'XD', 'MX4D', 'D-Box', 'RealD 3D', '3D',
+]);
+const round2 = (n) => Math.round(n * 100) / 100;
+
 function monthBounds(monthParam) {
   const now = new Date();
   let year = now.getUTCFullYear();
@@ -71,9 +84,14 @@ router.get('/', async (req, res) => {
     let ratingCount = 0;
     let fiveStarCount = 0;
     let longest = null;
+    let ticketValue = 0;
+    let premiumTickets = 0;
 
     for (const w of watches) {
       const t = w.tmdb || {};
+      const isPremium = (w.tags || []).some((tag) => PREMIUM_FORMATS.has(tag));
+      ticketValue += ALIST.ticket + (isPremium ? ALIST.premium : 0);
+      if (isPremium) premiumTickets += 1;
       if (typeof t.runtime_minutes === 'number') {
         totalRuntime += t.runtime_minutes;
         if (!longest || t.runtime_minutes > longest.runtime_minutes) {
@@ -168,6 +186,21 @@ router.get('/', async (req, res) => {
         longest_film: longest,
         five_star_count: fiveStarCount,
       },
+    };
+
+    // Bill only the months with at least one watch. Counting every calendar
+    // month since the first watch would assume continuous membership and
+    // punish gaps; this answers "while I was using A-List, did it pay off?"
+    const months = period === 'month' ? 1 : Math.max(1, monthBuckets.size);
+    const fee = round2(ALIST.fee * months);
+    response.value = {
+      tickets: count,
+      premium_tickets: premiumTickets,
+      ticket_value: round2(ticketValue),
+      monthly_fee: ALIST.fee,
+      months,
+      fee,
+      savings: round2(ticketValue - fee),
     };
 
     // The month-over-month cadence chart is only meaningful across a year or
