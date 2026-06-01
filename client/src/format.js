@@ -15,6 +15,11 @@ export function fmtRuntime(mins) {
   return h ? `${h}h ${m}m` : `${m}m`;
 }
 
+export function fmtMoney(n) {
+  if (n == null) return '—';
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
 // Mirror of RERELEASE_SUFFIX in server/utils/normalize.js — keep in sync.
 const RERELEASE_RE =
   /[\s:–—-]+(?:\d{1,3}(?:st|nd|rd|th)\s+anniversary|anniversary\s+edition|re-?release|re-?issue)(?:\s+(?:edition|re-?release|presentation|event|in\s+cinemas))?\s*$/i;

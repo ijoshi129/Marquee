@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
-import { fmtRuntime, MONTH_NAMES_LONG } from '../format';
+import { fmtMoney, fmtRuntime, MONTH_NAMES_LONG } from '../format';
 
 function monthLabel(month) {
   const year = month.slice(0, 4);
@@ -27,6 +27,7 @@ function buildCards(data) {
   }
 
   cards.push({ key: 'totals', kind: 'totals' });
+  if (data.value) cards.push({ key: 'value', kind: 'value' });
   if (data.films?.length) cards.push({ key: 'films', kind: 'films' });
   if (data.genres?.length) cards.push({ key: 'genres', kind: 'genres' });
   if (data.top_directors?.length) cards.push({ key: 'directors', kind: 'directors' });
@@ -200,6 +201,34 @@ function CardBody({ card, data, label, month, onStep }) {
           </div>
         </div>
       );
+
+    case 'value': {
+      const v = data.value;
+      return (
+        <div className="wrapped-card">
+          <div className="wrapped-eyebrow">A-List math</div>
+          <div className="wrapped-big-num">{fmtMoney(v.ticket_value)}</div>
+          <div className="wrapped-sub">in tickets</div>
+          <div className="wrapped-line">
+            {v.savings >= 0 ? (
+              <>
+                <strong>{fmtMoney(v.savings)}</strong> ahead of your{' '}
+                {fmtMoney(v.fee)} A-List fee
+              </>
+            ) : (
+              <>
+                <strong>{fmtMoney(-v.savings)}</strong> shy of the {fmtMoney(v.fee)} fee
+              </>
+            )}
+          </div>
+          {v.premium_tickets > 0 && (
+            <div className="wrapped-line">
+              {v.premium_tickets} in premium formats
+            </div>
+          )}
+        </div>
+      );
+    }
 
     case 'films':
       return (

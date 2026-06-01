@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { fmtRuntime, MONTH_NAMES } from '../format';
+import { fmtMoney, fmtRuntime, MONTH_NAMES } from '../format';
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 
@@ -60,6 +60,10 @@ export default function StatsBar({
         <Overview label="Films Logged" value={allStats?.count} />
         <Overview label="Total Runtime" value={allStats ? fmtRuntime(allStats.total_runtime_minutes) : '—'} />
         <Overview label="Mean Rating" value={allStats?.average_rating ?? '—'} />
+        <Overview
+          label="A-List Saved"
+          value={allStats?.value ? fmtMoney(allStats.value.savings) : '—'}
+        />
         <Overview
           label="Signature Genre"
           value={allStats?.genres?.[0]?.name || '—'}
