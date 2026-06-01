@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
+import { watchDisplayTitle } from '../format';
 
 // AMC promotional/special-event detector. Authoritatively reads the row's
 // `tags` array (user-set or auto-extracted), with a regex fallback against
@@ -85,7 +86,7 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
 
   const tag = specialTag(w);
   const isScream = !!tag && /scream/i.test(tag);
-  const displayTitle = w.tmdb?.title || w.title;
+  const displayTitle = watchDisplayTitle(w);
   const year = w.tmdb?.release_year;
   const runtime = w.tmdb?.runtime_minutes;
   const isInactive =

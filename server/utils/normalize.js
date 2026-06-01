@@ -17,13 +17,39 @@ function normalizeText(s) {
 const FORMAT_SUFFIX = /\s+(?:in\s+)?(?:RealD\s+3D|IMAX(?:\s+(?:\d{1,2}\.\d+|\d+\s*mm))?|Dolby\s+Cinema|Dolby\s+Atmos|Prime|D-Box|XD|MX4D|3D|2D)\s*$/i;
 const LANGUAGE_SUFFIX = /\s+(?:[A-Z][a-z]+\s+Spoken\s+with\s+English\s+Subtitles|with\s+English\s+Subtitles|Open[\s-]Caption(?:ed)?|Closed[\s-]Caption(?:ed)?)\s*$/i;
 
+// AMC re-issues classic films with a decoration baked into the title; strip it
+// so the original matches on TMDB. The number guards against eating a real
+// title — "Happy Anniversary" has no "Nth" prefix and is left alone.
+//   "Top Gun 40th Anniversary"                → "Top Gun"
+//   "The Goonies 40th Anniversary Re-Release" → "The Goonies"
+//   "Spirited Away: 20th Anniversary"         → "Spirited Away"
+const RERELEASE_SUFFIX = /[\s:–—-]+(?:\d{1,3}(?:st|nd|rd|th)\s+anniversary|anniversary\s+edition|re-?release|re-?issue)(?:\s+(?:edition|re-?release|presentation|event|in\s+cinemas))?\s*$/i;
+
+// True when a title carries a re-release marker. The matcher strips it for
+// the TMDB lookup, but we keep showing it — "Top Gun 40th Anniversary"
+// shouldn't be flattened to "Top Gun" on screen.
+function isRerelease(title) {
+  return Boolean(title) && RERELEASE_SUFFIX.test(title);
+}
+
+// The title to show for a watch: TMDB's cleaner name in general, but the
+// watch's own title when it's a re-release.
+function displayTitle(watchTitle, tmdbTitle) {
+  if (isRerelease(watchTitle)) return watchTitle;
+  return tmdbTitle || watchTitle;
+}
+
 function cleanTitle(s) {
   if (!s) return s;
   let t = s.trim();
   // Strip stacked suffixes — apply each pattern repeatedly until stable.
   for (let i = 0; i < 4; i++) {
     const before = t;
-    t = t.replace(FORMAT_SUFFIX, '').replace(LANGUAGE_SUFFIX, '').trim();
+    t = t
+      .replace(FORMAT_SUFFIX, '')
+      .replace(LANGUAGE_SUFFIX, '')
+      .replace(RERELEASE_SUFFIX, '')
+      .trim();
     if (t === before) break;
   }
   return t;
@@ -89,4 +115,11 @@ function extractTags(title) {
   return [...found];
 }
 
-module.exports = { normalizeText, cleanTitle, extractTags, extractFormatsFromHtml };
+module.exports = {
+  normalizeText,
+  cleanTitle,
+  isRerelease,
+  displayTitle,
+  extractTags,
+  extractFormatsFromHtml,
+};

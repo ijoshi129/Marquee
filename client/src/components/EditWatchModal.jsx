@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
 import { specialTag } from './WatchList';
+import { watchDisplayTitle } from '../format';
 import Backdrop from './Backdrop';
 import InfoTip from './InfoTip';
 import TagEditor from './TagEditor';
@@ -128,7 +129,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   }
 
   const tmdb = watch.tmdb || {};
-  const title = tmdb.title || watch.title;
+  const title = watchDisplayTitle(watch);
   const tag = specialTag(watch);
 
   const traktStatus = watch.trakt_sync_error

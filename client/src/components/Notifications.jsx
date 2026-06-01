@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { specialTag } from './WatchList';
+import { watchDisplayTitle } from '../format';
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -148,7 +149,7 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
   const undoSnack = undo && (
     <div className="notif-undo" role="status">
       <span className="notif-undo-text">
-        “{undo.watch.tmdb?.title || undo.watch.title}” updated.
+        “{watchDisplayTitle(undo.watch)}” updated.
       </span>
       <button
         type="button"
@@ -192,7 +193,7 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
                 {PILL_LABEL[kind] || kind}
               </span>
               <div className="notif-text">
-                <span className="notif-name">{w.tmdb?.title || w.title}</span>
+                <span className="notif-name">{watchDisplayTitle(w)}</span>
                 <span className="notif-meta">
                   {fmtDate(w.showtime || w.watched_at)}
                   {w.theater_name ? ` · ${w.theater_name}` : ''}
