@@ -29,7 +29,9 @@ async function recheckOne(row) {
     const result = await unseenLookup.resolveAndAssign(row.id);
     return !!(result && result.resolved);
   }
-  const match = await tmdb.autoMatch(row.title);
+  const match = await tmdb.autoMatch(row.title, {
+    year: tmdb.yearOf(row.showtime || row.watched_at),
+  });
   if (!match) return false;
   await pool.query(
     `UPDATE watches
@@ -50,7 +52,7 @@ async function recheckOnce() {
   const t0 = Date.now();
   try {
     const candidates = await pool.query(
-      `SELECT id, title, tags, tmdb_retry_count
+      `SELECT id, title, tags, showtime, watched_at, tmdb_retry_count
        FROM watches
        WHERE tmdb_id IS NULL
          AND tmdb_retry_count < $1

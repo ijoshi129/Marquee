@@ -1,5 +1,5 @@
 const { pool } = require('../db');
-const { cleanTitle } = require('../utils/normalize');
+const { cleanTitle, isRerelease } = require('../utils/normalize');
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -80,21 +80,55 @@ async function getOrFetchDetails(tmdbId) {
   return details;
 }
 
-// Auto-pick highest popularity. Returns { tmdb_id, needs_review, details } or null.
-async function autoMatch(title) {
+// Anything released more than this many years after the watch can't be the
+// film that was screened — a year of slack absorbs late-December releases seen
+// in early January and festival/preview runs.
+const FUTURE_TOLERANCE = 1;
+
+// Order search results for a watch seen in `year`: rank candidates released
+// on/near that year ahead of distant ones, and sink anything released well
+// after the watch. Falls back to popularity when no year is known or the title
+// is a re-release (where "nearest the showtime" would wrongly prefer a remake).
+function rankResults(results, { year, rerelease } = {}) {
+  const byPopularity = (a, b) => (b.popularity || 0) - (a.popularity || 0);
+  if (!year || rerelease) return [...results].sort(byPopularity);
+  const distance = (r) => (r.release_year == null ? Infinity : Math.abs(year - r.release_year));
+  const isFuture = (r) => r.release_year != null && r.release_year > year + FUTURE_TOLERANCE;
+  return [...results].sort((a, b) => {
+    const fa = isFuture(a);
+    const fb = isFuture(b);
+    if (fa !== fb) return fa ? 1 : -1;
+    const da = distance(a);
+    const db = distance(b);
+    if (da !== db) return da - db;
+    return byPopularity(a, b);
+  });
+}
+
+// Pick the best match for a title. `opts.year` is the year the film was seen
+// (from showtime / watched_at); when present it biases the pick toward a
+// release of that vintage. Returns { tmdb_id, needs_review, details } or null.
+async function autoMatch(title, opts = {}) {
   // Strip AMC's format/language suffixes ("in RealD 3D", "Japanese Spoken with English
   // Subtitles", etc.) so TMDB search doesn't waste cycles on the format string.
   const cleaned = cleanTitle(title);
   const results = await search(cleaned);
   if (results.length === 0) return null;
-  results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-  const top = results[0];
+  const ranked = rankResults(results, { year: opts.year, rerelease: isRerelease(title) });
+  const top = ranked[0];
   const details = await getOrFetchDetails(top.tmdb_id);
   const needs_review =
-    results.length > 1 &&
-    (results[1].popularity || 0) > 0.5 * (top.popularity || 0) &&
+    ranked.length > 1 &&
+    (ranked[1].popularity || 0) > 0.5 * (top.popularity || 0) &&
     similarity(top.title, cleaned) < 0.85;
   return { tmdb_id: top.tmdb_id, needs_review, details };
+}
+
+// Year from a showtime / watched_at value, or undefined when absent/invalid.
+function yearOf(dateish) {
+  if (!dateish) return undefined;
+  const d = new Date(dateish);
+  return Number.isNaN(d.getTime()) ? undefined : d.getUTCFullYear();
 }
 
 function similarity(a, b) {
@@ -117,4 +151,4 @@ function similarity(a, b) {
   return inter / (ax.size + bx.size - inter || 1);
 }
 
-module.exports = { search, getOrFetchDetails, autoMatch };
+module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf };

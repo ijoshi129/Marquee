@@ -9,6 +9,10 @@ const {
   extractTags,
   normalizeText,
 } = require('../utils/normalize');
+// rankResults is pure, but tmdb.js pulls in db.js, which validates a connection
+// string at load — give it a throwaway one (no query is ever run).
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://test/test';
+const { rankResults } = require('../services/tmdb');
 const reservation = require('../parsers/amc-reservation');
 const thankyou = require('../parsers/amc-thankyou');
 const cancellation = require('../parsers/amc-cancellation');
@@ -33,6 +37,31 @@ test('cleanTitle strips anniversary and re-release decorations', () => {
   assert.equal(cleanTitle('Top Gun 40th Anniversary in RealD 3D'), 'Top Gun');
   // No "Nth" prefix — a real title that merely contains "Anniversary" is kept.
   assert.equal(cleanTitle('Happy Anniversary'), 'Happy Anniversary');
+});
+
+test('rankResults biases toward the watch year, excludes the far future, skips re-releases', () => {
+  const deepWater = [
+    { tmdb_id: 1, title: 'Deep Water', release_year: 2022, popularity: 50 },
+    { tmdb_id: 2, title: 'Deep Water', release_year: 2026, popularity: 5 },
+  ];
+  // Seen in 2026: the 2026 release wins despite the 2022 film being more popular.
+  assert.equal(rankResults(deepWater, { year: 2026 })[0].tmdb_id, 2);
+  // No year context: falls back to popularity.
+  assert.equal(rankResults(deepWater, {})[0].tmdb_id, 1);
+
+  // A far-future release can't be the one screened.
+  const future = [
+    { tmdb_id: 1, title: 'X', release_year: 2030, popularity: 100 },
+    { tmdb_id: 2, title: 'X', release_year: 2024, popularity: 1 },
+  ];
+  assert.equal(rankResults(future, { year: 2026 })[0].tmdb_id, 2);
+
+  // Re-release: year bias is skipped, so popularity decides.
+  const rerelease = [
+    { tmdb_id: 1, title: 'Top Gun', release_year: 1986, popularity: 10 },
+    { tmdb_id: 2, title: 'Top Gun: Maverick', release_year: 2022, popularity: 100 },
+  ];
+  assert.equal(rankResults(rerelease, { year: 2026, rerelease: true })[0].tmdb_id, 2);
 });
 
 test('displayTitle keeps the watch title for re-releases, TMDB name otherwise', () => {
