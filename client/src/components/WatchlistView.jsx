@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import StarRating from './StarRating';
 
 export default function WatchlistView({ onWatched }) {
   const [items, setItems] = useState(null);
   const [nowPlaying, setNowPlaying] = useState([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
-  const [marking, setMarking] = useState(null); // { id, rating }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const blurTimer = useRef(null);
@@ -69,16 +67,15 @@ export default function WatchlistView({ onWatched }) {
     }
   }
 
-  async function confirmWatched() {
-    if (!marking) return;
-    const { id, rating } = marking;
-    setMarking(null);
+  async function markWatched(id) {
+    setItems((xs) => xs.filter((i) => i.id !== id));
     try {
-      await api.markWatchlistWatched(id, { rating: rating || undefined });
+      await api.markWatchlistWatched(id, {});
       await load();
       onWatched?.();
     } catch (e) {
       setErr(e.message);
+      load();
     }
   }
 
@@ -137,7 +134,6 @@ export default function WatchlistView({ onWatched }) {
           {items.map((it) => {
             const tmdb = it.tmdb || {};
             const title = tmdb.title || it.title;
-            const isMarking = marking?.id === it.id;
             return (
               <div key={it.id} className="wl-card">
                 <div className="poster-frame">
@@ -150,35 +146,25 @@ export default function WatchlistView({ onWatched }) {
                   )}
                   <button
                     type="button"
+                    className="wl-watched"
+                    onClick={() => markWatched(it.id)}
+                    aria-label="Mark watched"
+                    title="Mark watched"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
                     className="wl-remove"
                     onClick={() => remove(it.id)}
                     aria-label="Remove from watchlist"
+                    title="Remove"
                   >
                     ✕
                   </button>
                 </div>
                 <div className="wl-title">{title}</div>
                 <div className="wl-year">{tmdb.release_year || ''}</div>
-                {isMarking ? (
-                  <div className="wl-mark">
-                    <StarRating
-                      value={marking.rating}
-                      onChange={(r) => setMarking({ id: it.id, rating: r })}
-                      size={18}
-                    />
-                    <button type="button" className="solid-btn sm" onClick={confirmWatched}>
-                      Log it
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="ghost-btn sm"
-                    onClick={() => setMarking({ id: it.id, rating: null })}
-                  >
-                    Mark watched
-                  </button>
-                )}
               </div>
             );
           })}
