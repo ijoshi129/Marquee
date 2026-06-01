@@ -338,7 +338,9 @@ async function resolveAndAssign(watchId, opts = {}) {
   let tmdbId = null;
   let needsReview = true;
   try {
-    const match = await tmdb.autoMatch(entry.title);
+    const match = await tmdb.autoMatch(entry.title, {
+      year: tmdb.yearOf(w.showtime || w.watched_at),
+    });
     if (match) {
       tmdbId = match.tmdb_id;
       needsReview = match.needs_review;

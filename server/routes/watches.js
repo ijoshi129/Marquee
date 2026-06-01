@@ -201,7 +201,7 @@ router.post('/', async (req, res) => {
       }
     } else {
       try {
-        const match = await tmdb.autoMatch(title);
+        const match = await tmdb.autoMatch(title, { year: tmdb.yearOf(showtime || watched_at) });
         if (match) {
           tmdbId = match.tmdb_id;
           needsReview = match.needs_review;

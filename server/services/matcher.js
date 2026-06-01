@@ -39,7 +39,7 @@ async function ingestReservation({ fields, gmail_message_id }) {
   let tmdbId = null;
   let needsReview = false;
   try {
-    const m = await tmdb.autoMatch(title);
+    const m = await tmdb.autoMatch(title, { year: tmdb.yearOf(showtime) });
     if (m) {
       tmdbId = m.tmdb_id;
       needsReview = m.needs_review;
@@ -199,7 +199,7 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
   let tmdbId = null;
   let needsReview = true;
   try {
-    const m = await tmdb.autoMatch(title);
+    const m = await tmdb.autoMatch(title, { year: tmdb.yearOf(recv) });
     if (m) {
       tmdbId = m.tmdb_id;
       needsReview = m.needs_review;
@@ -260,10 +260,14 @@ async function flagForManualIdentification(watch_id) {
 }
 
 async function ensureTmdb(watch_id, title) {
-  const cur = await pool.query('SELECT tmdb_id FROM watches WHERE id = $1', [watch_id]);
+  const cur = await pool.query(
+    'SELECT tmdb_id, showtime, watched_at FROM watches WHERE id = $1',
+    [watch_id]
+  );
   if (!cur.rows.length || cur.rows[0].tmdb_id) return;
   try {
-    const m = await tmdb.autoMatch(title);
+    const { showtime, watched_at } = cur.rows[0];
+    const m = await tmdb.autoMatch(title, { year: tmdb.yearOf(showtime || watched_at) });
     if (m) {
       await pool.query(
         'UPDATE watches SET tmdb_id = $1, tmdb_needs_review = $2, updated_at = NOW() WHERE id = $3',
