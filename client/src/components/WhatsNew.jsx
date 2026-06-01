@@ -2,37 +2,38 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '0.3';
+const WHATS_NEW_VERSION = '1.2';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 const SECTIONS = [
   {
-    title: 'Bulletin',
+    title: 'Watchlist',
     items: [
-      'Undo any action — I went, No-show, I cancelled it, dismiss — for 8 seconds.',
-      'Edit card flips status both ways: Watched ↔ Cancelled ↔ No-show.',
+      'A new Watchlist tab for films to catch later — search to add, or pull from a Now Playing feed.',
+      'Tap the ✓ on a poster to log it as watched; the ✕ drops it.',
+      'A reservation or walk-up for a listed film clears it automatically.',
     ],
   },
   {
-    title: 'Self-healing',
+    title: 'Wrapped',
     items: [
-      'Unresolved Unseens and missed TMDB matches retry on their own every 6 hours.',
-      'Each row stops after 8 tries — no infinite hammering on permanently stuck titles.',
+      'A full-screen monthly recap — tap any month in the In Review chart.',
+      'It surfaces on its own in the last days of the month, then tucks into a chip.',
     ],
   },
   {
-    title: 'Browsing',
+    title: 'A-List value',
     items: [
-      'All time now sits on the right end of the YIR year selector — step past the current year to reach it.',
-      'Click a director or genre in YIR to filter the grid; year scope is preserved.',
+      'See what your tickets would have cost against the flat A-List fee — in the overview and in Wrapped.',
+      'Premium formats (IMAX, Dolby, RealD 3D) count for a little more.',
     ],
   },
   {
-    title: 'Tags',
+    title: 'Details',
     items: [
-      'IMAX, Dolby, RealD 3D, Screen Unseen — auto-extracted from AMC emails.',
-      'Click the Tags bar in the edit card for a palette, or type a custom tag.',
-      'Filter the grid by tag from the Filters panel.',
+      'Rewatch badges — “2nd watch” on the poster, plus an On Repeat card in Wrapped.',
+      'The overview stats now follow the year you pick in In Review.',
+      'Anniversary and re-release titles match the original film, and matches favour the year you saw it.',
     ],
   },
 ];
