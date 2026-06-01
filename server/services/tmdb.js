@@ -40,6 +40,23 @@ function shapeSearchResult(r) {
   };
 }
 
+// Films currently in theaters (and just-announced) for the watchlist's
+// discovery feed. US region — this is a US AMC tracker. Deduped, newest first.
+async function nowPlaying() {
+  const [now, soon] = await Promise.all([
+    tmdbFetch('/movie/now_playing', { region: 'US' }),
+    tmdbFetch('/movie/upcoming', { region: 'US' }),
+  ]);
+  const seen = new Set();
+  const out = [];
+  for (const r of [...(now.results || []), ...(soon.results || [])]) {
+    if (!r.poster_path || seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(shapeSearchResult(r));
+  }
+  return out;
+}
+
 async function fetchDetails(tmdbId) {
   const data = await tmdbFetch(`/movie/${tmdbId}`, { append_to_response: 'credits' });
   const director = (data.credits?.crew || []).find((c) => c.job === 'Director');
@@ -151,4 +168,4 @@ function similarity(a, b) {
   return inter / (ax.size + bx.size - inter || 1);
 }
 
-module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf };
+module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf, nowPlaying };

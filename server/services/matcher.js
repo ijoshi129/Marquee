@@ -10,6 +10,16 @@ const trakt = require('./trakt');
 
 const normTitle = (t) => normalizeText(cleanTitle(t));
 
+// Once a film shows up in the diary (a reservation, a walk-up, or a late TMDB
+// match), it's no longer a want-to-see — drop it from the watchlist. Fire and
+// forget; a failure here must never break ingest.
+function removeFromWatchlist(tmdbId) {
+  if (!tmdbId) return;
+  pool
+    .query('DELETE FROM watchlist WHERE tmdb_id = $1', [tmdbId])
+    .catch((err) => logger.error({ err, tmdb_id: tmdbId }, 'watchlist auto-remove failed (non-fatal)'));
+}
+
 // AMC sends thank-you emails 1–4 days after the show (sometimes never). The
 // before-window has to cover that range or late thank-yous miss the pending /
 // auto-watched row and the matcher creates a duplicate walk-up. 4 days lines
@@ -61,6 +71,7 @@ async function ingestReservation({ fields, gmail_message_id }) {
      RETURNING id`,
     [tmdbId, title, theater?.id || null, showtime, gmail_message_id, order_number || null, needsReview, tags]
   );
+  removeFromWatchlist(tmdbId);
   return { watch_id: insert.rows[0].id, deduped: false };
 }
 
@@ -219,6 +230,7 @@ async function ingestThankyou({ fields, gmail_message_id, received_at }) {
     [tmdbId, title, theater?.id || null, gmail_message_id, recv.toISOString(), needsReview, tags]
   );
 
+  removeFromWatchlist(tmdbId);
   maybeResolveUnseen(insert.rows[0].id, title);
   trakt.queueWatch(insert.rows[0].id).catch((err) => {
     logger.error({ err, watch_id: insert.rows[0].id }, 'trakt queue failed (non-fatal)');
@@ -273,6 +285,7 @@ async function ensureTmdb(watch_id, title) {
         'UPDATE watches SET tmdb_id = $1, tmdb_needs_review = $2, updated_at = NOW() WHERE id = $3',
         [m.tmdb_id, m.needs_review, watch_id]
       );
+      removeFromWatchlist(m.tmdb_id);
     } else {
       await pool.query(
         'UPDATE watches SET tmdb_needs_review = TRUE, updated_at = NOW() WHERE id = $1',

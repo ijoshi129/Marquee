@@ -10,6 +10,7 @@ import Backdrop from './components/Backdrop';
 import WhatsNew from './components/WhatsNew';
 import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
+import WatchlistView from './components/WatchlistView';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -29,6 +30,7 @@ export default function App() {
   const [wrapped, setWrapped] = useState(null);
   const [wrappedPrompt, setWrappedPrompt] = useState(null);
   const [wrappedAutoMonth, setWrappedAutoMonth] = useState(null);
+  const [view, setView] = useState('diary');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [q, setQ] = useState('');
@@ -196,58 +198,87 @@ export default function App() {
           <h1 className="wordmark-name">Marquee</h1>
           <span className="wordmark-tag">Cinema Diary</span>
         </div>
+        <nav className="topnav">
+          <button
+            type="button"
+            className={`topnav-tab ${view === 'diary' ? 'is-on' : ''}`}
+            onClick={() => setView('diary')}
+          >
+            Diary
+          </button>
+          <button
+            type="button"
+            className={`topnav-tab ${view === 'watchlist' ? 'is-on' : ''}`}
+            onClick={() => setView('watchlist')}
+          >
+            Watchlist
+          </button>
+        </nav>
       </header>
 
       <main>
-        <Notifications
-          refreshKey={refreshKey}
-          onWatchUpdated={handleUpdated}
-          onSelectWatch={setEditing}
-        />
-        <StatsBar
-          refreshKey={refreshKey}
-          year={year}
-          onYearChange={setYear}
-          onDirectorClick={filterByDirector}
-          onGenreClick={filterByGenre}
-          onMonthClick={openMonthWrapped}
-        />
-
-        <div ref={filterAnchorRef}>
-          <SearchBar
-            q={q}
-            onQ={setQ}
-            statusKey={statusKey}
-            onStatusKey={setStatusKey}
-            sortKey={sortKey}
-            onSortKey={setSortKey}
-            genre={genre}
-            onGenre={setGenre}
-            director={director}
-            onDirector={setDirector}
-            tag={tag}
-            onTag={setTag}
-            minRating={minRating}
-            onMinRating={setMinRating}
-            onGenreClick={filterByGenre}
+        {view === 'watchlist' ? (
+          <WatchlistView
+            onWatched={() => {
+              setRefreshKey((k) => k + 1);
+              load();
+            }}
           />
-        </div>
-
-        {err && <div className="error-banner">{err}</div>}
-
-        {loading && watches.length === 0 ? (
-          <div className="empty">
-            <div className="empty-glyph">◌</div>
-            <div className="empty-headline">Lights up…</div>
-          </div>
         ) : (
-          <WatchList watches={watches} onSelect={setEditing} onWatchUpdated={handleUpdated} />
+          <>
+            <Notifications
+              refreshKey={refreshKey}
+              onWatchUpdated={handleUpdated}
+              onSelectWatch={setEditing}
+            />
+            <StatsBar
+              refreshKey={refreshKey}
+              year={year}
+              onYearChange={setYear}
+              onDirectorClick={filterByDirector}
+              onGenreClick={filterByGenre}
+              onMonthClick={openMonthWrapped}
+            />
+
+            <div ref={filterAnchorRef}>
+              <SearchBar
+                q={q}
+                onQ={setQ}
+                statusKey={statusKey}
+                onStatusKey={setStatusKey}
+                sortKey={sortKey}
+                onSortKey={setSortKey}
+                genre={genre}
+                onGenre={setGenre}
+                director={director}
+                onDirector={setDirector}
+                tag={tag}
+                onTag={setTag}
+                minRating={minRating}
+                onMinRating={setMinRating}
+                onGenreClick={filterByGenre}
+              />
+            </div>
+
+            {err && <div className="error-banner">{err}</div>}
+
+            {loading && watches.length === 0 ? (
+              <div className="empty">
+                <div className="empty-glyph">◌</div>
+                <div className="empty-headline">Lights up…</div>
+              </div>
+            ) : (
+              <WatchList watches={watches} onSelect={setEditing} onWatchUpdated={handleUpdated} />
+            )}
+          </>
         )}
       </main>
 
-      <button className="fab" onClick={() => setAdding(true)} aria-label="Add watch">
-        +
-      </button>
+      {view === 'diary' && (
+        <button className="fab" onClick={() => setAdding(true)} aria-label="Add watch">
+          +
+        </button>
+      )}
 
       <WhatsNew />
 
