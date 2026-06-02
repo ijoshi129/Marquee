@@ -1,19 +1,21 @@
 // Resolve actual movie titles for AMC Screen/Scream Unseen watches by parsing
-// r/AMCsAList megathreads. The current sticky megathread lists recent reveals as
-// structured Markdown; older megathreads cover ranges (1-22, 23-31, ...) and are
-// linked from the body.
+// r/AMCsAList megathreads. The current sticky megathread lists recent reveals;
+// older megathreads cover ranges (1-22, 21-32, ...) and are linked from the body.
 //
-// One Reddit fetch per ~12h per megathread, anonymous JSON API — well under any
-// rate limit for our access pattern.
+// Reddit now 403s its unauthenticated JSON API, so we read the rendered HTML
+// from old.reddit.com (still public) and parse it with cheerio. One fetch per
+// ~12h per megathread — negligible traffic.
 
+const cheerio = require('cheerio');
 const { pool } = require('../db');
 const logger = require('../logger');
 const tmdb = require('./tmdb');
 const trakt = require('./trakt');
 
-const REDDIT_UA = 'marquee/0.1 self-hosted movie tracker';
+const REDDIT_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const SEARCH_URL =
-  'https://www.reddit.com/r/AMCsAList/search.json?q=screen+unseen+megathread&restrict_sr=1&sort=new&t=year';
+  'https://old.reddit.com/r/AMCsAList/search?q=screen%20unseen%20megathread&restrict_sr=1&sort=new&t=year';
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const LOOKUP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/New_York';
@@ -26,39 +28,29 @@ const MONTHS = {
   july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
 };
 
-// Match an entry header. Two formats observed in the wild:
-//   OLD: [66.***Primate -R***  - Paramount - January 05 2026](https://www.amctheatres.com/movies/amc-scream-unseen-january-5-82402)
-//        -- title is inline; bullets below have ARR/AR runtimes.
-//   NEW: [81.***Rated R***  - 2h22m - May 4 2026](https://www.amctheatres.com/movies/amc-screen-unseen-may-4-83506)
-//        -- title is NOT inline; a "- Revealed As: >!Movie Title!<" line appears 1-3 lines below.
-//
-// Group 1: number. Group 2: inner content (either "Title -Rating" or "Rated R").
-// Group 3: optional middle field (studio, or runtime in new format).
-// Group 4: date. Group 5: full URL. Group 6: 'screen' | 'scream' (from URL slug).
-const HEADER_RE = new RegExp(
-  '\\[(\\d+)\\.\\*{3}([^*]+?)\\*{3}\\s*' +
-    '(?:-\\s*([^\\-\\n]+?)\\s*)?-\\s*' +
-    '([A-Z][a-z]+\\s+\\d{1,2}(?:\\s*&\\s*\\d{1,2})?\\s+\\d{4})' +
-    '\\]\\((https:\\/\\/www\\.amctheatres\\.com\\/movies\\/amc-(screen|scream)-unseen-[^)]+)\\)',
-  'gi'
-);
+// Each entry is an AMC link in the post body. Two formats observed:
+//   OLD: "66.Primate -R  - Paramount - January 05 2026"  → title inline
+//   NEW: "83.Rated R  - 1h57m - June 1 2026"             → title NOT inline;
+//        a "- Revealed As: >!Movie Title!<" bullet follows below.
+// The link's href slug carries the screen|scream type and the date.
 
-// "- Revealed As: >!Title!<" — possibly with HTML-encoded entities even when raw_json=1
-const REVEAL_RE = /Revealed\s+As\s*:\s*(?:&gt;|>)!\s*(.+?)\s*!(?:&lt;|<)/i;
+// "Revealed As: >!Title!<" (spoilers re-inlined from <span class="md-spoiler-text">).
+const REVEAL_RE = /Revealed\s+As\s*:\s*>!\s*(.+?)\s*!</i;
 
-// Predecessor links — Reddit share-link form, one per range.
-const PREDECESSOR_RE =
-  /\[ASU's[^\]]+\]\((https?:\/\/(?:www\.)?reddit\.com\/[^)]+)\)/gi;
+// Pull the entry number, optional inline title, rating, optional middle field
+// (studio or runtime), and the date off a link's rendered text.
+const ENTRY_TEXT_RE =
+  /^(\d+)\.(.+?)\s*-\s*([A-Z][a-z]+\s+\d{1,2}(?:\s*&\s*\d{1,2})?\s+\d{4})\s*$/;
 
-async function fetchJson(url) {
+async function fetchHtml(url) {
   const res = await fetch(url, {
-    headers: { 'User-Agent': REDDIT_UA, Accept: 'application/json' },
+    headers: { 'User-Agent': REDDIT_UA, Accept: 'text/html' },
     redirect: 'follow',
   });
   if (!res.ok) {
     throw new Error(`Reddit ${res.status} ${res.statusText} for ${url}`);
   }
-  return { json: await res.json(), finalUrl: res.url };
+  return { $: cheerio.load(await res.text()), finalUrl: res.url };
 }
 
 function parseDateString(s) {
@@ -123,71 +115,78 @@ function lookupDatesForWatch(w) {
   return dates;
 }
 
-function parseMegathread(selftext) {
+// Parse the megathread body (a cheerio-wrapped `.md` element). Each Screen/
+// Scream Unseen is an <a> to amctheatres.com; the reveal for new-format entries
+// is a "Revealed As: >!Title!<" bullet between this link and the next.
+function parseMegathread($, md) {
   const entries = [];
-  if (!selftext) return entries;
-  // Decode common HTML entities in case Reddit didn't honour raw_json=1.
-  const text = selftext
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&');
+  if (!md || !md.length) return entries;
 
-  const matches = [...text.matchAll(HEADER_RE)];
-  for (let i = 0; i < matches.length; i++) {
-    const m = matches[i];
-    const number = parseInt(m[1], 10);
-    const inner = m[2].trim();
-    const middle = m[3] ? m[3].trim() : '';
-    const dateStr = m[4];
-    const url = m[5];
-    const type = m[6].toLowerCase();
+  // Re-inline spoiler spans as >!…!< so REVEAL_RE works on the flat text.
+  md.find('span.md-spoiler-text').each((i, el) => {
+    $(el).replaceWith(`>!${$(el).text()}!<`);
+  });
+  // Collapse whitespace so the normalized link text below locates cleanly.
+  const fullText = md.text().replace(/\s+/g, ' ');
 
-    // Inner content can be either "<Title> -<Rating>" (old) or "Rated <Rating>" (new).
+  const anchors = md.find('a[href*="amctheatres.com/movies/amc-"]').toArray();
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    const linkText = $(a).text().trim().replace(/\s+/g, ' ');
+    const href = $(a).attr('href') || '';
+    const slug = /amc-(screen|scream)-unseen-[^/?#]+/i.exec(href);
+    const type = slug ? slug[1].toLowerCase() : 'screen';
+
+    const em = ENTRY_TEXT_RE.exec(linkText);
+    if (!em) continue;
+    const number = parseInt(em[1], 10);
+    const dateStr = em[3];
+    let body = em[2].trim(); // "Primate -R - Paramount" | "Rated R - 1h57m"
+
     let title = null;
     let rating = null;
-    const inlineTitle = /^(.+?)\s+-(R|PG-13|PG|G|NC-17|NR|Unrated)$/i.exec(inner);
-    if (inlineTitle) {
-      title = inlineTitle[1].trim();
-      rating = inlineTitle[2];
+    let studio = null;
+    const inline = /^(.+?)\s*-\s*(R|PG-13|PG|G|NC-17|NR|Unrated)\b\s*(?:-\s*(.+))?$/i.exec(body);
+    if (inline) {
+      title = inline[1].trim();
+      rating = inline[2];
+      const middle = (inline[3] || '').trim();
+      studio = middle && !/^\d+\s*h(?:\s*\d+\s*m)?$/i.test(middle) ? middle : null;
     } else {
-      const ratedOnly = /^Rated\s+(R|PG-13|PG|G|NC-17|NR|Unrated)$/i.exec(inner);
-      if (ratedOnly) rating = ratedOnly[1];
+      const rated = /^Rated\s+(R|PG-13|PG|G|NC-17|NR|Unrated)\b/i.exec(body);
+      if (rated) rating = rated[1];
     }
 
-    // For new-format placeholders, look for "Revealed As: >!Title!<" in the body
-    // between this entry header and the next one (or end-of-text, capped to 500 chars).
+    // New-format: title comes from a "Revealed As: >!…!<" bullet below, up to
+    // the next entry link (or +500 chars).
     if (!title) {
-      const start = m.index + m[0].length;
-      const end =
-        i + 1 < matches.length
-          ? matches[i + 1].index
-          : Math.min(text.length, start + 500);
-      const slice = text.slice(start, end);
-      const reveal = REVEAL_RE.exec(slice);
-      if (reveal && !/^TBD$/i.test(reveal[1])) {
-        title = reveal[1].trim();
-      }
+      const start = fullText.indexOf(linkText);
+      const from = start >= 0 ? start + linkText.length : 0;
+      const nextText = i + 1 < anchors.length ? $(anchors[i + 1]).text().trim().replace(/\s+/g, ' ') : null;
+      const nextIdx = nextText ? fullText.indexOf(nextText, from) : -1;
+      const end = nextIdx >= 0 ? nextIdx : Math.min(fullText.length, from + 500);
+      const reveal = REVEAL_RE.exec(fullText.slice(from, end));
+      if (reveal && !/^TBD$/i.test(reveal[1])) title = reveal[1].trim();
     }
 
-    if (!title) continue; // Unrevealed (e.g. ">!TBD!<" or no spoiler line) — skip.
+    if (!title) continue; // Unrevealed (TBD / no reveal yet) — skip.
 
-    // Old format: middle = studio. New format: middle = runtime like "1h55m".
-    const studio = middle && !/^\d+\s*h(?:\s*\d+\s*m)?$/i.test(middle) ? middle : null;
-
-    const dates = parseDateString(dateStr);
-    for (const date of dates) {
-      entries.push({ number, title, rating, studio, date, url, type });
+    for (const date of parseDateString(dateStr)) {
+      entries.push({ number, title, rating, studio, date, url: href, type });
     }
   }
   return entries;
 }
 
-function extractPredecessorUrls(selftext) {
-  if (!selftext) return [];
+// Predecessor megathreads are "ASU's N-M" links to reddit (cover earlier ranges).
+function extractPredecessorUrls($, md) {
+  if (!md || !md.length) return [];
   const out = [];
-  for (const m of selftext.matchAll(PREDECESSOR_RE)) {
-    out.push(m[1]);
-  }
+  md.find('a').each((i, el) => {
+    const t = $(el).text().trim();
+    const h = $(el).attr('href') || '';
+    if (/^ASU's\s+\d+\s*-\s*\d+/i.test(t) && /reddit\.com/.test(h)) out.push(h);
+  });
   return out;
 }
 
@@ -213,21 +212,19 @@ async function resolveToPostId(url) {
 async function loadThread(postId) {
   const cached = threadCache.get(postId);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
-  const { json } = await fetchJson(
-    `https://www.reddit.com/comments/${postId}.json?raw_json=1`
-  );
-  const post = json[0]?.data?.children?.[0]?.data;
-  if (!post) throw new Error(`malformed Reddit response for ${postId}`);
-  const selftext = post.selftext || '';
+  const { $ } = await fetchHtml(`https://old.reddit.com/comments/${postId}/`);
+  const md = $('#siteTable .usertext-body .md').first();
+  if (!md.length) throw new Error(`no post body for ${postId}`);
+  const title = $('#siteTable a.title').first().text().trim();
   const result = {
-    entries: parseMegathread(selftext),
-    predecessorUrls: extractPredecessorUrls(selftext),
+    entries: parseMegathread($, md),
+    predecessorUrls: extractPredecessorUrls($, md),
     fetchedAt: Date.now(),
-    title: post.title,
+    title,
   };
   threadCache.set(postId, result);
   logger.info(
-    `unseen-lookup: cached megathread ${postId} ("${post.title}") — ${result.entries.length} entries, ${result.predecessorUrls.length} predecessor links`
+    `unseen-lookup: cached megathread ${postId} ("${title}") — ${result.entries.length} entries, ${result.predecessorUrls.length} predecessor links`
   );
   return result;
 }
@@ -239,16 +236,19 @@ async function findCurrentMegathreadId() {
   ) {
     return currentMegathreadCache.id;
   }
-  const { json } = await fetchJson(SEARCH_URL);
-  const children = json?.data?.children || [];
-  for (const c of children) {
-    const t = c?.data?.title || '';
-    if (/megathread/i.test(t) && /screen\s+unseen/i.test(t)) {
-      currentMegathreadCache = { id: c.data.id, fetchedAt: Date.now() };
-      return c.data.id;
+  const { $ } = await fetchHtml(SEARCH_URL);
+  let id = null;
+  $('a.search-title').each((i, el) => {
+    if (id) return;
+    const t = $(el).text();
+    const href = $(el).attr('href') || '';
+    if (/megathread/i.test(t) && /screen\s*unseen/i.test(t)) {
+      const m = /\/comments\/([a-z0-9]+)/i.exec(href);
+      if (m) id = m[1];
     }
-  }
-  return null;
+  });
+  if (id) currentMegathreadCache = { id, fetchedAt: Date.now() };
+  return id;
 }
 
 // Walk current megathread, then its predecessors, until we find an entry matching date+type
