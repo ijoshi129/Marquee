@@ -18,6 +18,7 @@ const searchSuggest = require('./routes/search-suggest');
 const exportRoute = require('./routes/export');
 const tagsRoute = require('./routes/tags');
 const watchlist = require('./routes/watchlist');
+const alist = require('./routes/alist');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
 const backup = require('./workers/backup');
@@ -101,6 +102,7 @@ app.use('/api/search-suggest', searchSuggest);
 app.use('/api/export', exportRoute);
 app.use('/api/tags', tagsRoute);
 app.use('/api/watchlist', watchlist);
+app.use('/api/alist-membership', alist);
 
 // Serve client build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
