@@ -177,6 +177,25 @@ router.get('/', async (req, res) => {
     }
     rewatches.sort((a, b) => b.total - a.total);
 
+    // Five-star picks, one tile per film. A film rated 5 on more than one visit
+    // would otherwise appear once per watch; dedupe by film (keeping the most
+    // recent, since watches are ordered newest-first).
+    const topRated = [];
+    const topRatedSeen = new Set();
+    for (const w of watches) {
+      if (w.rating !== 5) continue;
+      const key = w.tmdb_id ? `t:${w.tmdb_id}` : `n:${(w.title || '').toLowerCase()}`;
+      if (topRatedSeen.has(key)) continue;
+      topRatedSeen.add(key);
+      topRated.push({
+        id: w.id,
+        title: displayTitle(w.title, w.tmdb?.title),
+        poster_url: w.tmdb?.poster_url || null,
+        watched_at: w.watched_at,
+      });
+      if (topRated.length >= 12) break;
+    }
+
     const response = {
       period,
       label,
@@ -198,15 +217,7 @@ router.get('/', async (req, res) => {
         .map(([name, n]) => ({ name, count: n }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10),
-      top_rated: watches
-        .filter((w) => w.rating === 5)
-        .slice(0, 12)
-        .map((w) => ({
-          id: w.id,
-          title: displayTitle(w.title, w.tmdb?.title),
-          poster_url: w.tmdb?.poster_url || null,
-          watched_at: w.watched_at,
-        })),
+      top_rated: topRated,
       recent,
       films,
       rewatches,
