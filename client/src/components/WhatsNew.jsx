@@ -2,38 +2,64 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '1.2';
+const WHATS_NEW_VERSION = '1.3';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
-const SECTIONS = [
+// Newest release first. Each release keeps its own sections so older notes stay
+// visible under their version tag rather than being overwritten.
+const RELEASES = [
   {
-    title: 'Watchlist',
-    items: [
-      'A new Watchlist tab for films to catch later — search to add, or pull from a Now Playing feed.',
-      'Tap the ✓ on a poster to log it as watched; the ✕ drops it.',
-      'A reservation or walk-up for a listed film clears it automatically.',
+    version: '1.3',
+    sections: [
+      {
+        title: 'A-List by year',
+        items: [
+          'Mark which years you actually had A-List — a small toggle tucked into the In Review header.',
+          'Years you weren’t a member drop out of your savings, so an early year with a film or two no longer drags down the all-time total.',
+        ],
+      },
+      {
+        title: 'Polish',
+        items: [
+          'Five-Star Picks shows one tile per film, even when you rated it five stars on more than one visit.',
+          'Long titles no longer stretch a poster out of line.',
+        ],
+      },
     ],
   },
   {
-    title: 'Wrapped',
-    items: [
-      'A full-screen monthly recap — tap any month in the In Review chart.',
-      'It surfaces on its own in the last days of the month, then tucks into a chip.',
-    ],
-  },
-  {
-    title: 'A-List value',
-    items: [
-      'See what your tickets would have cost against the flat A-List fee — in the overview and in Wrapped.',
-      'Premium formats (IMAX, Dolby, RealD 3D) count for a little more.',
-    ],
-  },
-  {
-    title: 'Details',
-    items: [
-      'Rewatch badges — “2nd watch” on the poster, plus an On Repeat card in Wrapped.',
-      'The overview stats now follow the year you pick in In Review.',
-      'Anniversary and re-release titles match the original film, and matches favour the year you saw it.',
+    version: '1.2',
+    sections: [
+      {
+        title: 'Watchlist',
+        items: [
+          'A new Watchlist tab for films to catch later — search to add, or pull from a Now Playing feed.',
+          'Tap the ✓ on a poster to log it as watched; the ✕ drops it.',
+          'A reservation or walk-up for a listed film clears it automatically.',
+        ],
+      },
+      {
+        title: 'Wrapped',
+        items: [
+          'A full-screen monthly recap — tap any month in the In Review chart.',
+          'It surfaces on its own in the last days of the month, then tucks into a chip.',
+        ],
+      },
+      {
+        title: 'A-List value',
+        items: [
+          'See what your tickets would have cost against the flat A-List fee — in the overview and in Wrapped.',
+          'Premium formats (IMAX, Dolby, RealD 3D) count for a little more.',
+        ],
+      },
+      {
+        title: 'Details',
+        items: [
+          'Rewatch badges — “2nd watch” on the poster, plus an On Repeat card in Wrapped.',
+          'The overview stats now follow the year you pick in In Review.',
+          'Anniversary and re-release titles match the original film, and matches favour the year you saw it.',
+        ],
+      },
     ],
   },
 ];
@@ -110,15 +136,20 @@ export default function WhatsNew() {
         <h2 className="whats-new-title">Marquee v{WHATS_NEW_VERSION}</h2>
       </header>
       <div className="whats-new-body">
-        {SECTIONS.map((s) => (
-          <section key={s.title} className="whats-new-section">
-            <div className="whats-new-section-title">{s.title}</div>
-            <ul className="whats-new-list">
-              {s.items.map((it, i) => (
-                <li key={i}>{it}</li>
-              ))}
-            </ul>
-          </section>
+        {RELEASES.map((rel) => (
+          <div key={rel.version} className="whats-new-release">
+            <div className="whats-new-version">v{rel.version}</div>
+            {rel.sections.map((s) => (
+              <section key={s.title} className="whats-new-section">
+                <div className="whats-new-section-title">{s.title}</div>
+                <ul className="whats-new-list">
+                  {s.items.map((it, i) => (
+                    <li key={i}>{it}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         ))}
       </div>
       {showDontShowAgain && (

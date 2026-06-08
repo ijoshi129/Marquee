@@ -2136,6 +2136,26 @@ input[type='date'].input-naked { color-scheme: dark; }
   padding-right: 4px;
   margin-right: -4px;
 }
+.whats-new-release {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.whats-new-release + .whats-new-release {
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+.whats-new-version {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.whats-new-release + .whats-new-release .whats-new-version {
+  color: var(--fg-mute);
+}
 .whats-new-section-title {
   font-family: var(--font-mono);
   font-size: 10px;
