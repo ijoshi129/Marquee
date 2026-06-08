@@ -609,6 +609,9 @@ main {
 }
 .yir-poster {
   flex: 0 0 clamp(120px, 14vw, 168px);
+  /* Without this a flex item defaults to min-width:auto, so a long no-wrap
+     caption forces the cell wider than its basis and blows up the poster. */
+  min-width: 0;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
