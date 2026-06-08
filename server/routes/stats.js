@@ -217,19 +217,62 @@ router.get('/', async (req, res) => {
       },
     };
 
-    // Bill only the months with at least one watch. Counting every calendar
-    // month since the first watch would assume continuous membership and
-    // punish gaps; this answers "while I was using A-List, did it pay off?"
-    const months = period === 'month' ? 1 : Math.max(1, monthBuckets.size);
-    const fee = round2(ALIST.fee * months);
+    // A-List value, bucketed by year and gated on membership. Years the user
+    // flagged as non-member (alist_membership.has_alist = FALSE) are left out
+    // entirely — counting their films against the monthly fee would post a
+    // meaningless loss. Each remaining year nets its ticket value against the
+    // fee for the months it actually went; across all-time these nets sum, so a
+    // single excluded year can't drag the total down. A single-year (or month)
+    // view of an excluded year reports null, which the UI renders as "—".
+    const excludedQ = await pool.query(
+      'SELECT year FROM alist_membership WHERE has_alist = FALSE'
+    );
+    const excludedYears = new Set(excludedQ.rows.map((r) => r.year));
+
+    const byYear = new Map(); // year -> { ticketValue, months: Set<'YYYY-MM'> }
+    for (const w of watches) {
+      if (!w.watched_at) continue;
+      const d = new Date(w.watched_at);
+      const yr = d.getUTCFullYear();
+      if (excludedYears.has(yr)) continue;
+      const monthKey = `${yr}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const isPremium = (w.tags || []).some((tag) => PREMIUM_FORMATS.has(tag));
+      let b = byYear.get(yr);
+      if (!b) {
+        b = { ticketValue: 0, months: new Set() };
+        byYear.set(yr, b);
+      }
+      b.ticketValue += ALIST.ticket + (isPremium ? ALIST.premium : 0);
+      b.months.add(monthKey);
+    }
+
+    let savingsSum = 0;
+    let billedMonths = 0;
+    let creditedTicketValue = 0;
+    let creditedTickets = 0;
+    for (const [, b] of byYear) {
+      savingsSum += b.ticketValue - ALIST.fee * b.months.size;
+      billedMonths += b.months.size;
+      creditedTicketValue += b.ticketValue;
+    }
+    for (const w of watches) {
+      if (!w.watched_at) continue;
+      if (!excludedYears.has(new Date(w.watched_at).getUTCFullYear())) creditedTickets += 1;
+    }
+
+    const periodYear =
+      period === 'year' || period === 'month' ? start.getUTCFullYear() : null;
+    const isExcludedPeriod = periodYear !== null && excludedYears.has(periodYear);
+
     response.value = {
-      tickets: count,
+      tickets: creditedTickets,
       premium_tickets: premiumTickets,
-      ticket_value: round2(ticketValue),
+      ticket_value: round2(creditedTicketValue),
       monthly_fee: ALIST.fee,
-      months,
-      fee,
-      savings: round2(ticketValue - fee),
+      months: billedMonths,
+      fee: round2(ALIST.fee * billedMonths),
+      savings: isExcludedPeriod ? null : round2(savingsSum),
+      has_alist: periodYear === null ? null : !isExcludedPeriod,
     };
 
     // The month-over-month cadence chart is only meaningful across a year or

@@ -294,6 +294,44 @@ main {
   gap: clamp(10px, 2vw, 32px);
 }
 
+.yir-alist {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+}
+.yir-alist-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  opacity: 0.45;
+  transition: opacity 0.18s, color 0.18s;
+}
+.yir-alist-toggle:hover,
+.yir-alist-toggle:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+.yir-alist-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--fg-dim);
+  transition: background 0.18s;
+}
+.yir-alist-toggle.on .yir-alist-dot { background: var(--accent); }
+.yir-alist-toggle.on:hover { color: var(--accent); }
+.yir-alist-state { font-variant-numeric: tabular-nums; }
+
 .yir-arrow {
   display: inline-flex;
   align-items: center;

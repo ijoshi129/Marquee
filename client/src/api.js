@@ -45,4 +45,10 @@ export const api = {
   markWatchlistWatched: (id, body = {}) =>
     request(`/api/watchlist/${id}/watched`, { method: 'POST', body: JSON.stringify(body) }),
   nowPlaying: () => request('/api/watchlist/now-playing'),
+  alistMembership: () => request('/api/alist-membership'),
+  setAlistMembership: (year, has_alist) =>
+    request(`/api/alist-membership/${year}`, {
+      method: 'PUT',
+      body: JSON.stringify({ has_alist }),
+    }),
 };

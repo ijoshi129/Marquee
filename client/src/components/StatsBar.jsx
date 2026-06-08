@@ -14,6 +14,8 @@ export default function StatsBar({
 }) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
+  const [membership, setMembership] = useState({});
+  const [bump, setBump] = useState(0);
   const [err, setErr] = useState(null);
 
   // Year stops: every year with at least one watch (plus the current calendar
@@ -35,7 +37,7 @@ export default function StatsBar({
 
   useEffect(() => {
     api.stats({ period: 'all' }).then(setAllStats).catch((e) => setErr(e.message));
-  }, [refreshKey]);
+  }, [refreshKey, bump]);
 
   useEffect(() => {
     if (year === null) {
@@ -46,7 +48,26 @@ export default function StatsBar({
       .stats({ period: 'year', month: `${year}-01` })
       .then(setYearStats)
       .catch((e) => setErr(e.message));
-  }, [year, refreshKey]);
+  }, [year, refreshKey, bump]);
+
+  useEffect(() => {
+    api.alistMembership().then(setMembership).catch(() => {});
+  }, [refreshKey]);
+
+  // A year is assumed A-List unless an explicit flag says otherwise.
+  const hasAlist = year === null ? null : membership[year] !== false;
+  const toggleAlist = async () => {
+    if (year === null) return;
+    const next = !hasAlist;
+    setMembership((m) => ({ ...m, [year]: next }));
+    try {
+      await api.setAlistMembership(year, next);
+      setBump((b) => b + 1); // re-pull stats so savings + all-time reflect it
+    } catch (e) {
+      setMembership((m) => ({ ...m, [year]: !next })); // revert on failure
+      setErr(e.message);
+    }
+  };
 
   // When viewing 'All time', the YIR body uses the all-stats payload — same
   // data the overview row already reads. Saves a redundant fetch.
@@ -75,6 +96,8 @@ export default function StatsBar({
         <YearInReview
           stats={yirStats}
           year={year}
+          hasAlist={hasAlist}
+          onToggleAlist={toggleAlist}
           onPrev={prevStop !== undefined ? () => onYearChange(prevStop) : null}
           onNext={nextStop !== undefined ? () => onYearChange(nextStop) : null}
           onDirectorClick={onDirectorClick}
@@ -97,7 +120,7 @@ function Overview({ label, value, isText }) {
   );
 }
 
-function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
+function YearInReview({ stats, year, hasAlist, onToggleAlist, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
   const max = Math.max(1, ...(stats.monthly_breakdown || []).map((m) => m.count));
   const isEmpty = stats.count === 0;
   const [collapsed, setCollapsed] = useState(() => {
@@ -150,6 +173,27 @@ function YearInReview({ stats, year, onPrev, onNext, onDirectorClick, onGenreCli
           →
         </button>
       </div>
+
+      {!collapsed && year !== null && (
+        <div className="yir-alist">
+          <button
+            type="button"
+            className={`yir-alist-toggle ${hasAlist ? 'on' : 'off'}`}
+            onClick={onToggleAlist}
+            role="switch"
+            aria-checked={hasAlist}
+            title={
+              hasAlist
+                ? `Counting ${year} toward A-List savings`
+                : `${year} excluded from A-List savings`
+            }
+          >
+            <span className="yir-alist-label">A-List</span>
+            <span className="yir-alist-dot" aria-hidden="true" />
+            <span className="yir-alist-state">{hasAlist ? 'yes' : 'no'}</span>
+          </button>
+        </div>
+      )}
 
       {collapsed ? null : isEmpty ? (
         <div className="yir-empty">
