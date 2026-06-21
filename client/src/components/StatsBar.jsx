@@ -14,6 +14,7 @@ export default function StatsBar({
   onDirectorClick,
   onGenreClick,
   onMonthClick,
+  onPickClick,
 }) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
@@ -102,6 +103,7 @@ export default function StatsBar({
           onDirectorClick={onDirectorClick}
           onGenreClick={onGenreClick}
           onMonthClick={onMonthClick}
+          onPickClick={onPickClick}
         />
       )}
 
@@ -153,7 +155,7 @@ function Overview({ label, value, isText, onClick }) {
   return <div className="overview-cell">{inner}</div>;
 }
 
-function YearInReview({ stats, year, onEditMembership, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
+function YearInReview({ stats, year, onEditMembership, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick, onPickClick }) {
   const max = Math.max(1, ...(stats.monthly_breakdown || []).map((m) => m.count));
   const isEmpty = stats.count === 0;
   const [collapsed, setCollapsed] = useState(() => {
@@ -249,7 +251,24 @@ function YearInReview({ stats, year, onEditMembership, onPrev, onNext, onDirecto
             <YIRSection title="Five-Star Picks">
               <div className="yir-poster-row">
                 {stats.top_rated.map((r) => (
-                  <div key={r.id} className="yir-poster" title={r.title}>
+                  <div
+                    key={r.id}
+                    className={`yir-poster ${onPickClick ? 'clickable' : ''}`}
+                    title={r.title}
+                    role={onPickClick ? 'button' : undefined}
+                    tabIndex={onPickClick ? 0 : undefined}
+                    onClick={onPickClick ? () => onPickClick(r.id) : undefined}
+                    onKeyDown={
+                      onPickClick
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onPickClick(r.id);
+                            }
+                          }
+                        : undefined
+                    }
+                  >
                     {r.poster_url ? (
                       <img src={r.poster_url} alt={r.title} loading="lazy" />
                     ) : (

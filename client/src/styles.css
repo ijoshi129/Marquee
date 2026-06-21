@@ -893,6 +893,12 @@ button.overview-cell {
   object-fit: cover;
   transition: transform 0.3s var(--ease-out);
 }
+.yir-poster.clickable { cursor: pointer; }
+.yir-poster.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
 .yir-poster:hover img { transform: scale(1.025) translateY(-2px); }
 .yir-poster-blank {
   background: var(--bg-elev-2);
