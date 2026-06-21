@@ -54,6 +54,10 @@ export default function SearchBar({
   useEffect(() => setText(q), [q]);
 
   useEffect(() => {
+    if (director) setFiltersOpen(true);
+  }, [director]);
+
+  useEffect(() => {
     if (text === q) return;
     const t = setTimeout(() => onQ(text), 250);
     return () => clearTimeout(t);
@@ -296,6 +300,22 @@ export default function SearchBar({
 
       {filtersOpen && (
         <div className="filters-panel">
+          {director && (
+            <div className="filter-row">
+              <label className="filter-label">Director</label>
+              <div className="status-rail compact">
+                <button
+                  type="button"
+                  className="rail-chip on"
+                  onClick={() => onDirector && onDirector(null)}
+                  title="Clear director filter"
+                >
+                  {director} ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="filter-row">
             <label className="filter-label">Genre</label>
             <select
