@@ -25,6 +25,13 @@ const RELEASES = [
           'Tap any figure inside for a plain-English note on what it means.',
         ],
       },
+      {
+        title: 'Showtimes',
+        items: [
+          'Upcoming films in Now Playing show their release date right on the poster.',
+          'A booked reservation now wears its showtime on the card — date and time, not just “Upcoming”.',
+        ],
+      },
     ],
   },
   {
