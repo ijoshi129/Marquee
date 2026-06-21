@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '1.4';
+const WHATS_NEW_VERSION = '1.5';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '1.5',
+    sections: [
+      {
+        title: 'Showtimes',
+        items: [
+          'Upcoming films in Now Playing show their release date right on the poster.',
+          'A booked reservation now wears its showtime on the card — date and time, not just “Upcoming”.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.4',
     sections: [
