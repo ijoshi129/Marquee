@@ -14,7 +14,7 @@ const SELECT_WATCH = `
     w.status, w.source, w.rating, w.notes, w.tmdb_needs_review,
     w.reservation_email_id, w.thankyou_email_id,
     w.trakt_sync_requested_at, w.trakt_synced_at, w.trakt_sync_error,
-    w.tags,
+    w.tags, w.is_private,
     w.watched_at, w.created_at, w.updated_at,
     t.id  AS theater_id,
     t.name AS theater_name,
@@ -259,7 +259,7 @@ router.post('/', async (req, res) => {
 // PATCH /api/watches/:id — update mutable fields
 const PATCH_FIELDS = [
   'title', 'rating', 'notes', 'status', 'watched_at',
-  'showtime', 'acknowledged', 'tags',
+  'showtime', 'acknowledged', 'tags', 'is_private',
 ];
 
 router.patch('/:id', async (req, res) => {

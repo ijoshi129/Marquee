@@ -19,11 +19,15 @@ const exportRoute = require('./routes/export');
 const tagsRoute = require('./routes/tags');
 const watchlist = require('./routes/watchlist');
 const alist = require('./routes/alist');
+const federationRoute = require('./routes/federation');
+const friends = require('./routes/friends');
+const federation = require('./services/federation');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
 const backup = require('./workers/backup');
 const tmdbRechecker = require('./workers/tmdb-rechecker');
 const traktSync = require('./workers/trakt-sync');
+const federationSync = require('./workers/federation-sync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -103,6 +107,8 @@ app.use('/api/export', exportRoute);
 app.use('/api/tags', tagsRoute);
 app.use('/api/watchlist', watchlist);
 app.use('/api/alist-membership', alist);
+app.use('/api/federation', federationRoute);
+app.use('/api/friends', friends);
 
 // Serve client build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -134,6 +140,8 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     await initSchema();
     await runMigrations();
     logger.info('Schema ready');
+    await federation.ensureIdentity();
+    await federation.ensureSettings();
     const server = app.listen(PORT, () =>
       logger.info({ port: PORT }, `Marquee server on http://localhost:${PORT}`)
     );
@@ -143,6 +151,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     backup.start();
     tmdbRechecker.start();
     traktSync.start();
+    federationSync.start();
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -151,6 +160,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       backup.stop();
       tmdbRechecker.stop();
       traktSync.stop();
+      federationSync.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };
