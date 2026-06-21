@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { specialTag } from './WatchList';
-import { watchDisplayTitle } from '../format';
+import { watchDisplayTitle, unseenRevealed } from '../format';
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -20,7 +20,7 @@ function fmtDate(iso) {
 function notifKind(w) {
   if (w.status === 'no_show') return 'no_show';
   if (w.status === 'cancelled') return 'cancelled';
-  if (specialTag(w) && !w.tmdb_id) return 'identify';
+  if (specialTag(w) && !w.tmdb_id && unseenRevealed(w.showtime)) return 'identify';
   if (w.status === 'watched' && !w.thankyou_email_id) return 'confirm';
   if (w.status === 'pending') return 'confirm'; // defensive — shouldn't appear under the new lifecycle
   return 'other';

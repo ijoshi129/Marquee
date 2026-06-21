@@ -37,6 +37,27 @@ export function fmtShortDate(iso) {
   return y === new Date().getFullYear() ? base : `${base}, ${y}`;
 }
 
+// An Unseen's actual title stays hidden until the owner has seen the film —
+// revealing it earlier (in the diary or as an "Identify?" prompt) spoils the
+// mystery screening. Reveal 2h after the showtime, roughly when the film lets
+// out. Showtimes are stored as wall-clock parts labelled UTC; rebuild them in
+// the browser's local zone (the owner's timezone) for the true instant, so the
+// gate tracks the real showtime instead of a padded guess. Mirrors the server
+// gate in tmdb-rechecker.
+const UNSEEN_REVEAL_AFTER_MS = 2 * 60 * 60 * 1000;
+export function unseenRevealed(showtime) {
+  if (!showtime) return true;
+  const d = new Date(showtime);
+  const real = new Date(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes()
+  ).getTime();
+  return Date.now() >= real + UNSEEN_REVEAL_AFTER_MS;
+}
+
 // True when an 'YYYY-MM-DD' release date is still in the future.
 export function isUpcoming(iso) {
   if (!iso) return false;

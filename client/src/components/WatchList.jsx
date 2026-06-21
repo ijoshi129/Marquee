@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
-import { watchDisplayTitle, rewatchLabel, fmtShowtime } from '../format';
+import { watchDisplayTitle, rewatchLabel, fmtShowtime, unseenRevealed } from '../format';
 
 // AMC promotional/special-event detector. Authoritatively reads the row's
 // `tags` array (user-set or auto-extracted), with a regex fallback against
@@ -91,7 +91,11 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
   const runtime = w.tmdb?.runtime_minutes;
   const isInactive =
     w.status === 'cancelled' || w.status === 'no_show';
-  const needsIdentify = !!tag && !w.tmdb_id;
+  // An Unseen you haven't been to yet is a mystery with nothing to resolve — it
+  // hasn't been matched and shouldn't be. Suppress both the "Identify?" prompt
+  // and the TMDB-review "?" until after the showtime so the card stays clean.
+  const unrevealedUnseen = !!tag && !w.tmdb_id && !unseenRevealed(w.showtime);
+  const needsIdentify = !!tag && !w.tmdb_id && unseenRevealed(w.showtime);
   const rewatch = rewatchLabel(w);
 
   return (
@@ -128,7 +132,7 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
           <span className="poster-identify">Identify?</span>
         )}
 
-        {w.tmdb_needs_review && !needsIdentify && (
+        {w.tmdb_needs_review && !needsIdentify && !unrevealedUnseen && (
           <span className="poster-flag" title="TMDB match needs review">
             ?
           </span>
