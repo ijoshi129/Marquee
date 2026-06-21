@@ -32,6 +32,12 @@ const RELEASES = [
           'A booked reservation now wears its showtime on the card — date and time, not just “Upcoming”.',
         ],
       },
+      {
+        title: 'Screen Unseen',
+        items: [
+          'Mystery screenings stay a mystery — the title and any “Identify?” prompt stay hidden until a couple hours after showtime, so nothing spoils what you’re about to see.',
+        ],
+      },
     ],
   },
   {

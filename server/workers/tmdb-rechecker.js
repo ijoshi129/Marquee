@@ -18,6 +18,34 @@ const MAX_RETRIES = 8;
 const BATCH_LIMIT = 50;
 const UNSEEN_RX = /AMC\s+(?:Screen|Scream)\s+Unseen/i;
 
+// An Unseen is a mystery screening — resolving its title before the owner has
+// actually seen the film would spoil it right in the diary. Reveal it 2h after
+// the showtime, roughly when the film lets out, so the title never surfaces
+// during the screening.
+const APP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/New_York';
+const UNSEEN_REVEAL_AFTER_MS = 2 * 60 * 60 * 1000;
+
+// Showtimes are stored as the printed wall-clock time labelled UTC, so the
+// stored instant isn't real. Reinterpret those wall-clock parts in the owner's
+// timezone to recover the true instant (DST handled by Intl).
+function realShowtimeMs(showtime) {
+  const wallAsUtc = new Date(showtime).getTime();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIME_ZONE,
+    hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+    .formatToParts(new Date(wallAsUtc))
+    .reduce((a, p) => ((a[p.type] = p.value), a), {});
+  const shown = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return wallAsUtc - (shown - wallAsUtc);
+}
+function unseenRevealed(showtime) {
+  if (!showtime) return true; // nothing to gate on
+  return Date.now() >= realShowtimeMs(showtime) + UNSEEN_REVEAL_AFTER_MS;
+}
+
 function isUnseen(row) {
   const tags = row.tags || [];
   if (tags.includes('Screen Unseen') || tags.includes('Scream Unseen')) return true;
@@ -66,6 +94,9 @@ async function recheckOnce() {
     let abandoned = 0;
 
     for (const row of candidates.rows) {
+      // Leave pre-showtime Unseens untouched — don't resolve (anti-spoiler) and
+      // don't burn a retry, so they're still eligible once the showtime passes.
+      if (isUnseen(row) && !unseenRevealed(row.showtime)) continue;
       checked++;
       let hit = false;
       try {
