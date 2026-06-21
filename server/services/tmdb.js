@@ -34,6 +34,7 @@ function shapeSearchResult(r) {
     title: r.title,
     original_title: r.original_title,
     release_year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
+    release_date: r.release_date || null,
     poster_url: r.poster_path ? POSTER_BASE + r.poster_path : null,
     overview: r.overview,
     popularity: r.popularity,

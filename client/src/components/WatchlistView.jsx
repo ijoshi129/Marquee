@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { fmtShortDate, isUpcoming } from '../format';
 
 export default function WatchlistView({ onWatched }) {
   const [items, setItems] = useState(null);
@@ -176,6 +177,7 @@ export default function WatchlistView({ onWatched }) {
         <div className="now-playing-row">
           {nowPlaying.map((m) => {
             const added = onList.has(m.tmdb_id);
+            const upcoming = isUpcoming(m.release_date);
             return (
               <button
                 key={m.tmdb_id}
@@ -188,6 +190,8 @@ export default function WatchlistView({ onWatched }) {
                     ? 'Already in your diary'
                     : added
                     ? 'On your watchlist'
+                    : upcoming
+                    ? `In theaters ${fmtShortDate(m.release_date)}`
                     : 'Add to watchlist'
                 }
               >
@@ -196,6 +200,7 @@ export default function WatchlistView({ onWatched }) {
                 ) : (
                   <div className="poster-blank">{m.title.slice(0, 2).toUpperCase()}</div>
                 )}
+                {upcoming && <span className="np-date">{fmtShortDate(m.release_date)}</span>}
                 <span className="np-badge">{m.seen ? 'Seen' : added ? 'On list' : '+ Add'}</span>
               </button>
             );
