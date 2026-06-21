@@ -260,3 +260,33 @@ test('A-List value reports null savings for a non-member single-month view', () 
   assert.equal(member.has_alist, true);
   assert.equal(member.savings, 16 - 25);
 });
+
+test('A-List value breaks down by year, newest first, with excluded years carrying null', () => {
+  const opts = {
+    fee: 25,
+    ticket: 16,
+    premium: 5,
+    premiumFormats: new Set(),
+    period: 'all',
+    start: new Date(Date.UTC(2024, 0, 1)),
+    monthOverride: new Map(),
+  };
+  const watches = [
+    { watched_at: '2024-02-10T00:00:00Z', tags: [] }, // member year
+    { watched_at: '2024-02-20T00:00:00Z', tags: [] },
+    { watched_at: '2025-05-05T00:00:00Z', tags: [] }, // excluded year
+  ];
+
+  const r = computeAlistValue(watches, { ...opts, excludedYears: new Set([2025]) });
+  assert.equal(r.byYear.length, 2);
+  assert.equal(r.byYear[0].year, 2025); // newest first
+  assert.equal(r.byYear[0].is_member, false);
+  assert.equal(r.byYear[0].savings, null);
+  assert.equal(r.byYear[0].films, 1); // still counts the film for display
+
+  assert.equal(r.byYear[1].year, 2024);
+  assert.equal(r.byYear[1].is_member, true);
+  assert.equal(r.byYear[1].films, 2);
+  assert.equal(r.byYear[1].months, 1);
+  assert.equal(r.byYear[1].savings, 32 - 25);
+});
