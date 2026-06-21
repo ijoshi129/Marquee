@@ -299,10 +299,7 @@ main {
   justify-content: center;
   margin-top: 6px;
 }
-.yir-alist-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+.yir-alist-edit {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -316,21 +313,161 @@ main {
   opacity: 0.45;
   transition: opacity 0.18s, color 0.18s;
 }
-.yir-alist-toggle:hover,
-.yir-alist-toggle:focus-visible {
+.yir-alist-edit:hover,
+.yir-alist-edit:focus-visible {
   opacity: 1;
+  color: var(--accent);
   outline: none;
 }
-.yir-alist-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--fg-dim);
+
+/* A-List membership modal */
+.alist-sheet {
+  max-width: 480px;
+  max-height: calc(92vh - env(safe-area-inset-top, 0px));
+  padding: calc(26px + env(safe-area-inset-top, 0px)) 22px 22px;
+  overflow-y: auto;
+}
+.alist-sheet .sheet-close {
+  top: calc(14px + env(safe-area-inset-top, 0px));
+}
+.alist-modal-head { margin-bottom: 18px; padding-right: 32px; }
+.alist-modal-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg);
+  margin: 0 0 6px;
+}
+.alist-modal-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg-dim);
+  margin: 0;
+}
+.alist-modal-empty {
+  color: var(--fg-dim);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+.alist-year-list { list-style: none; margin: 0; padding: 0; }
+.alist-year { border-top: 1px solid var(--rule); }
+.alist-year:last-child { border-bottom: 1px solid var(--rule); }
+.alist-year-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px;
+}
+.alist-year-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 4px;
+  margin: -8px -4px;
+  border-radius: var(--radius-sm, 8px);
+  text-align: left;
+  color: var(--fg);
   transition: background 0.18s;
 }
-.yir-alist-toggle.on .yir-alist-dot { background: var(--accent); }
-.yir-alist-toggle.on:hover { color: var(--accent); }
-.yir-alist-state { font-variant-numeric: tabular-nums; }
+.alist-year-toggle:hover { background: var(--bg-tint); }
+.alist-expand {
+  color: var(--fg-dim);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.18s, color 0.18s;
+}
+.alist-year-toggle:hover .alist-expand { color: var(--fg); }
+.alist-expand.open { transform: rotate(180deg); }
+.alist-year-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--fg);
+}
+
+.alist-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.alist-switch-track {
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--rule);
+  position: relative;
+  transition: background 0.18s;
+}
+.alist-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg-dim);
+  transition: transform 0.18s, background 0.18s;
+}
+.alist-switch.on .alist-switch-track { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.alist-switch.on .alist-switch-thumb { transform: translateX(16px); background: var(--accent); }
+.alist-switch-state { width: 1.9em; text-align: left; }
+
+.alist-month-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 2px 14px 26px;
+}
+.alist-month {
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - 18px) / 4);
+  height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  transition: border-color 0.18s, color 0.18s, background 0.18s, opacity 0.18s;
+}
+.alist-month-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.alist-month.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.alist-month.off { opacity: 0.55; }
+.alist-month.off .alist-month-count { color: var(--fg-dim); text-decoration: line-through; }
+.alist-month.is-empty { opacity: 0.3; }
+.alist-month.is-empty.on { opacity: 0.6; }
+.alist-month:hover { border-color: var(--accent); }
 
 .yir-arrow {
   display: inline-flex;

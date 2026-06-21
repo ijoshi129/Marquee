@@ -2,6 +2,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const { displayTitle } = require('../utils/normalize');
+const { computeAlistValue } = require('../services/alist-value');
 
 const router = express.Router();
 
@@ -228,62 +229,39 @@ router.get('/', async (req, res) => {
       },
     };
 
-    // A-List value, bucketed by year and gated on membership. Years the user
-    // flagged as non-member (alist_membership.has_alist = FALSE) are left out
-    // entirely — counting their films against the monthly fee would post a
-    // meaningless loss. Each remaining year nets its ticket value against the
-    // fee for the months it actually went; across all-time these nets sum, so a
-    // single excluded year can't drag the total down. A single-year (or month)
-    // view of an excluded year reports null, which the UI renders as "—".
-    const excludedQ = await pool.query(
-      'SELECT year FROM alist_membership WHERE has_alist = FALSE'
-    );
-    const excludedYears = new Set(excludedQ.rows.map((r) => r.year));
-
-    const byYear = new Map(); // year -> { ticketValue, months: Set<'YYYY-MM'> }
-    for (const w of watches) {
-      if (!w.watched_at) continue;
-      const d = new Date(w.watched_at);
-      const yr = d.getUTCFullYear();
-      if (excludedYears.has(yr)) continue;
-      const monthKey = `${yr}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      const isPremium = (w.tags || []).some((tag) => PREMIUM_FORMATS.has(tag));
-      let b = byYear.get(yr);
-      if (!b) {
-        b = { ticketValue: 0, months: new Set() };
-        byYear.set(yr, b);
-      }
-      b.ticketValue += ALIST.ticket + (isPremium ? ALIST.premium : 0);
-      b.months.add(monthKey);
+    // A-List value, gated on membership resolved per month (month override beats
+    // year flag beats the assumed-member default). A single-year (or month) view
+    // with no member months reports null savings, which the UI renders as "—".
+    const [excludedYearsQ, monthOverrideQ] = await Promise.all([
+      pool.query('SELECT year FROM alist_membership WHERE has_alist = FALSE'),
+      pool.query('SELECT year, month, has_alist FROM alist_membership_month'),
+    ]);
+    const excludedYears = new Set(excludedYearsQ.rows.map((r) => r.year));
+    const monthOverride = new Map(); // 'YYYY-MM' -> bool
+    for (const r of monthOverrideQ.rows) {
+      monthOverride.set(`${r.year}-${String(r.month).padStart(2, '0')}`, r.has_alist);
     }
 
-    let savingsSum = 0;
-    let billedMonths = 0;
-    let creditedTicketValue = 0;
-    let creditedTickets = 0;
-    for (const [, b] of byYear) {
-      savingsSum += b.ticketValue - ALIST.fee * b.months.size;
-      billedMonths += b.months.size;
-      creditedTicketValue += b.ticketValue;
-    }
-    for (const w of watches) {
-      if (!w.watched_at) continue;
-      if (!excludedYears.has(new Date(w.watched_at).getUTCFullYear())) creditedTickets += 1;
-    }
-
-    const periodYear =
-      period === 'year' || period === 'month' ? start.getUTCFullYear() : null;
-    const isExcludedPeriod = periodYear !== null && excludedYears.has(periodYear);
+    const v = computeAlistValue(watches, {
+      excludedYears,
+      monthOverride,
+      period,
+      start,
+      fee: ALIST.fee,
+      ticket: ALIST.ticket,
+      premium: ALIST.premium,
+      premiumFormats: PREMIUM_FORMATS,
+    });
 
     response.value = {
-      tickets: creditedTickets,
+      tickets: v.creditedTickets,
       premium_tickets: premiumTickets,
-      ticket_value: round2(creditedTicketValue),
+      ticket_value: round2(v.creditedTicketValue),
       monthly_fee: ALIST.fee,
-      months: billedMonths,
-      fee: round2(ALIST.fee * billedMonths),
-      savings: isExcludedPeriod ? null : round2(savingsSum),
-      has_alist: periodYear === null ? null : !isExcludedPeriod,
+      months: v.billedMonths,
+      fee: round2(ALIST.fee * v.billedMonths),
+      savings: v.savings == null ? null : round2(v.savings),
+      has_alist: v.has_alist,
     };
 
     // The month-over-month cadence chart is only meaningful across a year or

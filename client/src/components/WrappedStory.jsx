@@ -27,7 +27,7 @@ function buildCards(data) {
   }
 
   cards.push({ key: 'totals', kind: 'totals' });
-  if (data.value) cards.push({ key: 'value', kind: 'value' });
+  if (data.value && data.value.savings != null) cards.push({ key: 'value', kind: 'value' });
   if (data.films?.length) cards.push({ key: 'films', kind: 'films' });
   if (data.rewatches?.length) cards.push({ key: 'repeat', kind: 'repeat' });
   if (data.genres?.length) cards.push({ key: 'genres', kind: 'genres' });

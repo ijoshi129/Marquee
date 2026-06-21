@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '1.4';
+const WHATS_NEW_VERSION = '1.5';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '1.5',
+    sections: [
+      {
+        title: 'A-List by month',
+        items: [
+          'The A-List membership editor now goes month by month, not just year by year — open it from “Edit A-List membership” under the In Review header.',
+          'Turn off the months you weren’t a member and films from those months drop out of your savings, so a partial year counts only the months it should.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.4',
     sections: [
