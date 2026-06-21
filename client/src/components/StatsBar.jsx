@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtMoney, fmtRuntime, MONTH_NAMES } from '../format';
+import AListMembershipModal from './AListMembershipModal';
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 
@@ -14,7 +15,7 @@ export default function StatsBar({
 }) {
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
-  const [membership, setMembership] = useState({});
+  const [editingMembership, setEditingMembership] = useState(false);
   const [bump, setBump] = useState(0);
   const [err, setErr] = useState(null);
 
@@ -50,25 +51,6 @@ export default function StatsBar({
       .catch((e) => setErr(e.message));
   }, [year, refreshKey, bump]);
 
-  useEffect(() => {
-    api.alistMembership().then(setMembership).catch(() => {});
-  }, [refreshKey]);
-
-  // A year is assumed A-List unless an explicit flag says otherwise.
-  const hasAlist = year === null ? null : membership[year] !== false;
-  const toggleAlist = async () => {
-    if (year === null) return;
-    const next = !hasAlist;
-    setMembership((m) => ({ ...m, [year]: next }));
-    try {
-      await api.setAlistMembership(year, next);
-      setBump((b) => b + 1); // re-pull stats so savings + all-time reflect it
-    } catch (e) {
-      setMembership((m) => ({ ...m, [year]: !next })); // revert on failure
-      setErr(e.message);
-    }
-  };
-
   // When viewing 'All time', the YIR body uses the all-stats payload — same
   // data the overview row already reads. Saves a redundant fetch.
   const yirStats = year === null ? allStats : yearStats;
@@ -96,13 +78,20 @@ export default function StatsBar({
         <YearInReview
           stats={yirStats}
           year={year}
-          hasAlist={hasAlist}
-          onToggleAlist={toggleAlist}
+          onEditMembership={() => setEditingMembership(true)}
           onPrev={prevStop !== undefined ? () => onYearChange(prevStop) : null}
           onNext={nextStop !== undefined ? () => onYearChange(nextStop) : null}
           onDirectorClick={onDirectorClick}
           onGenreClick={onGenreClick}
           onMonthClick={onMonthClick}
+        />
+      )}
+
+      {editingMembership && (
+        <AListMembershipModal
+          breakdown={allStats?.monthly_breakdown}
+          onClose={() => setEditingMembership(false)}
+          onChanged={() => setBump((b) => b + 1)}
         />
       )}
     </section>
@@ -120,7 +109,7 @@ function Overview({ label, value, isText }) {
   );
 }
 
-function YearInReview({ stats, year, hasAlist, onToggleAlist, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
+function YearInReview({ stats, year, onEditMembership, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {
   const max = Math.max(1, ...(stats.monthly_breakdown || []).map((m) => m.count));
   const isEmpty = stats.count === 0;
   const [collapsed, setCollapsed] = useState(() => {
@@ -174,23 +163,10 @@ function YearInReview({ stats, year, hasAlist, onToggleAlist, onPrev, onNext, on
         </button>
       </div>
 
-      {!collapsed && year !== null && (
+      {!collapsed && (
         <div className="yir-alist">
-          <button
-            type="button"
-            className={`yir-alist-toggle ${hasAlist ? 'on' : 'off'}`}
-            onClick={onToggleAlist}
-            role="switch"
-            aria-checked={hasAlist}
-            title={
-              hasAlist
-                ? `Counting ${year} toward A-List savings`
-                : `${year} excluded from A-List savings`
-            }
-          >
-            <span className="yir-alist-label">A-List</span>
-            <span className="yir-alist-dot" aria-hidden="true" />
-            <span className="yir-alist-state">{hasAlist ? 'yes' : 'no'}</span>
+          <button type="button" className="yir-alist-edit" onClick={onEditMembership}>
+            Edit A-List membership
           </button>
         </div>
       )}

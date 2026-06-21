@@ -51,4 +51,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ has_alist }),
     }),
+  setAlistMembershipMonth: (year, month, has_alist) =>
+    request(`/api/alist-membership/${year}/${month}`, {
+      method: 'PUT',
+      body: JSON.stringify({ has_alist }),
+    }),
 };

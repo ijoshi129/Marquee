@@ -17,6 +17,7 @@ const reservation = require('../parsers/amc-reservation');
 const thankyou = require('../parsers/amc-thankyou');
 const cancellation = require('../parsers/amc-cancellation');
 const { clean, parseDateThen24Hr, parseTimeThenDate } = require('../parsers/util');
+const { computeAlistValue } = require('../services/alist-value');
 
 test('normalizeText removes accents, punctuation, and duplicate spacing', () => {
   assert.equal(normalizeText('  Amelie:  L`ete!!  '), 'amelie l ete');
@@ -183,4 +184,79 @@ test('AMC cancellation parser extracts order number and optional movie fields', 
   assert.equal(result.fields.title, 'Heat');
   assert.equal(result.fields.theater_name, 'AMC Boston Common 19');
   assert.equal(result.fields.showtime, '2026-05-04T19:30:00.000Z');
+});
+
+test('A-List value gates each watch on its month, month override beating the year flag', () => {
+  const opts = {
+    fee: 25,
+    ticket: 16,
+    premium: 5,
+    premiumFormats: new Set(['IMAX']),
+    period: 'all',
+    start: new Date(Date.UTC(2025, 0, 1)),
+  };
+  // Two films in Jan, one in Mar; all standard tickets.
+  const watches = [
+    { watched_at: '2025-01-10T00:00:00Z', tags: [] },
+    { watched_at: '2025-01-20T00:00:00Z', tags: [] },
+    { watched_at: '2025-03-05T00:00:00Z', tags: [] },
+  ];
+
+  // Whole year a member: 3 tickets ($48) over 2 billed months ($50) → -$2.
+  const full = computeAlistValue(watches, {
+    ...opts,
+    excludedYears: new Set(),
+    monthOverride: new Map(),
+  });
+  assert.equal(full.creditedTickets, 3);
+  assert.equal(full.billedMonths, 2);
+  assert.equal(full.savings, 48 - 50);
+
+  // Year excluded, but March flipped back on: only the March ticket counts.
+  const partial = computeAlistValue(watches, {
+    ...opts,
+    excludedYears: new Set([2025]),
+    monthOverride: new Map([['2025-03', true]]),
+  });
+  assert.equal(partial.creditedTickets, 1);
+  assert.equal(partial.billedMonths, 1);
+  assert.equal(partial.savings, 16 - 25);
+
+  // Year a member, but January flipped off: those two tickets drop out.
+  const monthOff = computeAlistValue(watches, {
+    ...opts,
+    excludedYears: new Set(),
+    monthOverride: new Map([['2025-01', false]]),
+  });
+  assert.equal(monthOff.creditedTickets, 1);
+  assert.equal(monthOff.billedMonths, 1);
+});
+
+test('A-List value reports null savings for a non-member single-month view', () => {
+  const opts = {
+    fee: 25,
+    ticket: 16,
+    premium: 5,
+    premiumFormats: new Set(),
+    excludedYears: new Set(),
+  };
+  const watches = [{ watched_at: '2025-01-10T00:00:00Z', tags: [] }];
+
+  const excluded = computeAlistValue(watches, {
+    ...opts,
+    monthOverride: new Map([['2025-01', false]]),
+    period: 'month',
+    start: new Date(Date.UTC(2025, 0, 1)),
+  });
+  assert.equal(excluded.savings, null);
+  assert.equal(excluded.has_alist, false);
+
+  const member = computeAlistValue(watches, {
+    ...opts,
+    monthOverride: new Map(),
+    period: 'month',
+    start: new Date(Date.UTC(2025, 0, 1)),
+  });
+  assert.equal(member.has_alist, true);
+  assert.equal(member.savings, 16 - 25);
 });
