@@ -38,6 +38,18 @@ const RELEASES = [
           'Mystery screenings stay a mystery — the title and any “Identify?” prompt stay hidden until a couple hours after showtime, so nothing spoils what you’re about to see.',
         ],
       },
+      {
+        title: 'Filters that show their work',
+        items: [
+          'Tap a director’s name and the filter panel opens to show exactly who you’re filtering by — a chip you can tap to clear, so it’s never a mystery why the grid shrank.',
+        ],
+      },
+      {
+        title: 'Jump from Five-Star Picks',
+        items: [
+          'Tap any poster in Five-Star Picks to open that film’s details, straight from your year in review.',
+        ],
+      },
     ],
   },
   {
