@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import StarRating from './StarRating';
-import { watchDisplayTitle, rewatchLabel } from '../format';
+import { watchDisplayTitle, rewatchLabel, fmtShowtime } from '../format';
 
 // AMC promotional/special-event detector. Authoritatively reads the row's
 // `tags` array (user-set or auto-extracted), with a regex fallback against
@@ -135,7 +135,16 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
         )}
 
         {w.status === 'pending' && (
-          <span className="poster-status pending">Upcoming</span>
+          <span className="poster-status pending">
+            {w.showtime ? (
+              <>
+                <span className="poster-status-glyph" aria-hidden="true">🎟</span>
+                {fmtShowtime(w.showtime)}
+              </>
+            ) : (
+              'Upcoming'
+            )}
+          </span>
         )}
         {w.status === 'cancelled' && (
           <span className="poster-status cancelled">Cancelled</span>
