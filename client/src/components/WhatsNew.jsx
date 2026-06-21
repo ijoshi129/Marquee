@@ -18,6 +18,13 @@ const RELEASES = [
           'Turn off the months you weren’t a member and films from those months drop out of your savings, so a partial year counts only the months it should.',
         ],
       },
+      {
+        title: 'Tap any stat for the full story',
+        items: [
+          'Every number in the In Review overview now opens a detail sheet — A-List savings (what you paid vs. what tickets were worth), films, runtime, ratings distribution, and your full genre ranking.',
+          'Tap any figure inside for a plain-English note on what it means.',
+        ],
+      },
     ],
   },
   {

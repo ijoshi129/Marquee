@@ -18,20 +18,22 @@ function isMemberMonth(excludedYears, monthOverride, year, monthKey) {
 function computeAlistValue(watches, opts) {
   const { excludedYears, monthOverride, period, start, fee, ticket, premium, premiumFormats } = opts;
 
-  const byYear = new Map(); // year -> { ticketValue, months: Set<'YYYY-MM'> }
+  // year -> { films (every watched row), ticketValue + months (member only) }
+  const byYear = new Map();
   let creditedTickets = 0;
   for (const w of watches) {
     if (!w.watched_at) continue;
     const d = new Date(w.watched_at);
     const yr = d.getUTCFullYear();
     const monthKey = monthKeyOf(d);
-    if (!isMemberMonth(excludedYears, monthOverride, yr, monthKey)) continue;
-    const isPremium = (w.tags || []).some((tag) => premiumFormats.has(tag));
     let b = byYear.get(yr);
     if (!b) {
-      b = { ticketValue: 0, months: new Set() };
+      b = { films: 0, ticketValue: 0, months: new Set() };
       byYear.set(yr, b);
     }
+    b.films += 1;
+    if (!isMemberMonth(excludedYears, monthOverride, yr, monthKey)) continue;
+    const isPremium = (w.tags || []).some((tag) => premiumFormats.has(tag));
     b.ticketValue += ticket + (isPremium ? premium : 0);
     b.months.add(monthKey);
     creditedTickets += 1;
@@ -45,6 +47,23 @@ function computeAlistValue(watches, opts) {
     billedMonths += b.months.size;
     creditedTicketValue += b.ticketValue;
   }
+
+  // Newest year first. A year with no member months carries null savings so the
+  // UI can render it as "not a member".
+  const byYearBreakdown = [...byYear.entries()]
+    .map(([year, b]) => {
+      const months = b.months.size;
+      const member = months > 0;
+      return {
+        year,
+        films: b.films,
+        months,
+        ticket_value: b.ticketValue,
+        savings: member ? b.ticketValue - fee * months : null,
+        is_member: member,
+      };
+    })
+    .sort((a, b) => b.year - a.year);
 
   const periodYear = period === 'year' || period === 'month' ? start.getUTCFullYear() : null;
   let periodHasAlist;
@@ -65,6 +84,7 @@ function computeAlistValue(watches, opts) {
     billedMonths,
     savings: isExcludedPeriod ? null : savingsSum,
     has_alist: periodHasAlist,
+    byYear: byYearBreakdown,
   };
 }
 

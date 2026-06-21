@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtMoney, fmtRuntime, MONTH_NAMES } from '../format';
 import AListMembershipModal from './AListMembershipModal';
+import AListValueModal from './AListValueModal';
+import StatDetailModal from './StatDetailModal';
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 
@@ -16,6 +18,8 @@ export default function StatsBar({
   const [allStats, setAllStats] = useState(null);
   const [yearStats, setYearStats] = useState(null);
   const [editingMembership, setEditingMembership] = useState(false);
+  const [valueOpen, setValueOpen] = useState(false);
+  const [detail, setDetail] = useState(null); // 'films' | 'runtime' | 'rating' | 'genre'
   const [bump, setBump] = useState(0);
   const [err, setErr] = useState(null);
 
@@ -60,17 +64,31 @@ export default function StatsBar({
       {err && <div className="error-banner">Stats failed: {err}</div>}
 
       <div className="overview">
-        <Overview label="Films Logged" value={yirStats?.count} />
-        <Overview label="Total Runtime" value={yirStats ? fmtRuntime(yirStats.total_runtime_minutes) : '—'} />
-        <Overview label="Mean Rating" value={yirStats?.average_rating ?? '—'} />
+        <Overview
+          label="Films Logged"
+          value={yirStats?.count}
+          onClick={yirStats ? () => setDetail('films') : undefined}
+        />
+        <Overview
+          label="Total Runtime"
+          value={yirStats ? fmtRuntime(yirStats.total_runtime_minutes) : '—'}
+          onClick={yirStats ? () => setDetail('runtime') : undefined}
+        />
+        <Overview
+          label="Mean Rating"
+          value={yirStats?.average_rating ?? '—'}
+          onClick={yirStats ? () => setDetail('rating') : undefined}
+        />
         <Overview
           label="A-List Saved"
           value={yirStats?.value ? fmtMoney(yirStats.value.savings) : '—'}
+          onClick={yirStats?.value ? () => setValueOpen(true) : undefined}
         />
         <Overview
           label="Signature Genre"
           value={yirStats?.genres?.[0]?.name || '—'}
           isText
+          onClick={yirStats?.genres?.length ? () => setDetail('genre') : undefined}
         />
       </div>
 
@@ -94,19 +112,45 @@ export default function StatsBar({
           onChanged={() => setBump((b) => b + 1)}
         />
       )}
+
+      {valueOpen && yirStats?.value && (
+        <AListValueModal
+          value={yirStats.value}
+          periodLabel={year === null ? 'All time' : String(year)}
+          onClose={() => setValueOpen(false)}
+        />
+      )}
+
+      {detail && yirStats && (
+        <StatDetailModal
+          stat={detail}
+          stats={yirStats}
+          periodLabel={year === null ? 'All time' : String(year)}
+          isAllTime={year === null}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </section>
   );
 }
 
-function Overview({ label, value, isText }) {
-  return (
-    <div className="overview-cell">
+function Overview({ label, value, isText, onClick }) {
+  const inner = (
+    <>
       <div className={`overview-value ${isText ? 'is-text' : ''}`}>
         {value === undefined ? <span className="skel" /> : value}
       </div>
       <div className="overview-label">{label}</div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" className="overview-cell is-clickable" onClick={onClick}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className="overview-cell">{inner}</div>;
 }
 
 function YearInReview({ stats, year, onEditMembership, onPrev, onNext, onDirectorClick, onGenreClick, onMonthClick }) {

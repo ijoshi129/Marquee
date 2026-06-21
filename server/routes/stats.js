@@ -95,9 +95,11 @@ router.get('/', async (req, res) => {
     let ratingSum = 0;
     let ratingCount = 0;
     let fiveStarCount = 0;
+    const ratingCounts = [0, 0, 0, 0, 0]; // index 0 = 1★ … index 4 = 5★
     let longest = null;
     let ticketValue = 0;
     let premiumTickets = 0;
+    const yearAgg = new Map(); // year -> { films, runtime }
 
     for (const w of watches) {
       const t = w.tmdb || {};
@@ -130,6 +132,7 @@ router.get('/', async (req, res) => {
         ratingSum += w.rating;
         ratingCount++;
         if (w.rating === 5) fiveStarCount++;
+        if (w.rating >= 1 && w.rating <= 5) ratingCounts[w.rating - 1]++;
       }
       if (w.watched_at) {
         const d = new Date(w.watched_at);
@@ -137,6 +140,11 @@ router.get('/', async (req, res) => {
         monthBuckets.set(key, (monthBuckets.get(key) || 0) + 1);
         const dayKey = `${key}-${String(d.getUTCDate()).padStart(2, '0')}`;
         dayBuckets.set(dayKey, (dayBuckets.get(dayKey) || 0) + 1);
+        const yr = d.getUTCFullYear();
+        const ya = yearAgg.get(yr) || { films: 0, runtime: 0 };
+        ya.films += 1;
+        ya.runtime += typeof t.runtime_minutes === 'number' ? t.runtime_minutes : 0;
+        yearAgg.set(yr, ya);
       }
     }
 
@@ -222,6 +230,14 @@ router.get('/', async (req, res) => {
       recent,
       films,
       rewatches,
+      rating_breakdown: {
+        counts: ratingCounts,
+        rated: ratingCount,
+        unrated: count - ratingCount,
+      },
+      years: [...yearAgg.entries()]
+        .map(([year, a]) => ({ year, films: a.films, runtime_minutes: a.runtime }))
+        .sort((a, b) => b.year - a.year),
       superlatives: {
         busiest_day: busiestDay,
         longest_film: longest,
@@ -262,6 +278,11 @@ router.get('/', async (req, res) => {
       fee: round2(ALIST.fee * v.billedMonths),
       savings: v.savings == null ? null : round2(v.savings),
       has_alist: v.has_alist,
+      by_year: v.byYear.map((y) => ({
+        ...y,
+        ticket_value: round2(y.ticket_value),
+        savings: y.savings == null ? null : round2(y.savings),
+      })),
     };
 
     // The month-over-month cadence chart is only meaningful across a year or
