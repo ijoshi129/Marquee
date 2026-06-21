@@ -117,6 +117,13 @@ export default function App() {
     setWrapped({ kind: 'month', month });
   }, []);
 
+  const openWatchById = useCallback(async (id) => {
+    try {
+      const w = await api.getWatch(id);
+      setEditing(w);
+    } catch {}
+  }, []);
+
   // In the last 4 days of a month, surface that month's Wrapped — without
   // nagging. Stage per month in localStorage: absent → auto-open the story
   // once; 'shown' → show the side prompt; 'min' → show the minimized chip.
@@ -238,6 +245,7 @@ export default function App() {
               onDirectorClick={filterByDirector}
               onGenreClick={filterByGenre}
               onMonthClick={openMonthWrapped}
+              onPickClick={openWatchById}
             />
 
             <div ref={filterAnchorRef}>
