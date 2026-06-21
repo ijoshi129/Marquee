@@ -2,12 +2,23 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '1.3';
+const WHATS_NEW_VERSION = '1.4';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '1.4',
+    sections: [
+      {
+        title: 'Fixes',
+        items: [
+          'A film you reserved and then cancelled no longer shows as “Seen” in Now Playing — you can add it back to your watchlist.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.3',
     sections: [

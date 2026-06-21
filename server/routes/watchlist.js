@@ -31,7 +31,7 @@ router.get('/now-playing', async (req, res) => {
     const ids = results.map((r) => r.tmdb_id);
     const [onList, watched] = await Promise.all([
       pool.query('SELECT tmdb_id FROM watchlist WHERE tmdb_id = ANY($1)', [ids]),
-      pool.query("SELECT DISTINCT tmdb_id FROM watches WHERE tmdb_id = ANY($1)", [ids]),
+      pool.query("SELECT DISTINCT tmdb_id FROM watches WHERE status = 'watched' AND tmdb_id = ANY($1)", [ids]),
     ]);
     const onSet = new Set(onList.rows.map((r) => r.tmdb_id));
     const seenSet = new Set(watched.rows.map((r) => r.tmdb_id));
