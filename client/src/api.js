@@ -101,6 +101,14 @@ export const api = {
     }),
   commentOnOwnWatch: (watchId, text) =>
     request(`/api/watches/${watchId}/comment`, { method: 'POST', body: JSON.stringify({ text }) }),
+  recommendFilm: (friendId, tmdb_id, title) =>
+    request(`/api/friends/${friendId}/recommend`, {
+      method: 'POST',
+      body: JSON.stringify({ tmdb_id, title }),
+    }),
+  recommendations: () => request('/api/recommendations'),
+  addRecommendation: (id) => request(`/api/recommendations/${id}/add`, { method: 'POST' }),
+  dismissRecommendation: (id) => request(`/api/recommendations/${id}/dismiss`, { method: 'POST' }),
   friendWatches: (id) => request(`/api/friends/${id}/watches`),
   friendProfile: (id) => request(`/api/friends/${id}/profile`),
   syncFriends: () => request('/api/friends/sync-now', { method: 'POST' }),

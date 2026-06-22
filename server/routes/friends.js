@@ -376,8 +376,8 @@ router.get('/:id/profile', async (req, res) => {
   }
 });
 
-// Push a social event to a friend's inbox (they're the hub for their own film).
-async function sendToFriendInbox(friendId, payload) {
+// Push to a friend's federation endpoint, signed with our outbound token.
+async function sendToFriend(friendId, path, payload) {
   const { rows } = await pool.query(
     `SELECT base_url, outbound_token FROM friends WHERE id = $1 AND status = 'active'`,
     [friendId]
@@ -387,7 +387,7 @@ async function sendToFriendInbox(friendId, payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const resp = await fetch(`${f.base_url.replace(/\/$/, '')}/api/federation/inbox`, {
+    const resp = await fetch(`${f.base_url.replace(/\/$/, '')}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${f.outbound_token}` },
       body: JSON.stringify(payload),
@@ -408,7 +408,7 @@ router.post('/:id/comment', async (req, res) => {
     if (!remote_watch_id || !(text || '').trim()) {
       return res.status(400).json({ error: 'remote_watch_id and text required' });
     }
-    const r = await sendToFriendInbox(req.params.id, {
+    const r = await sendToFriend(req.params.id, '/api/federation/inbox', {
       kind: 'comment',
       target_watch_id: remote_watch_id,
       body: text,
@@ -418,6 +418,20 @@ router.post('/:id/comment', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, 'comment');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/friends/:id/recommend { tmdb_id, title } — recommend a film to a friend.
+router.post('/:id/recommend', async (req, res) => {
+  try {
+    const { tmdb_id, title } = req.body || {};
+    if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
+    const r = await sendToFriend(req.params.id, '/api/federation/recommend', { tmdb_id, title });
+    if (r.status !== 200) return res.status(r.status).json({ error: 'Could not reach friend' });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, 'recommend');
     res.status(500).json({ error: 'Server error' });
   }
 });

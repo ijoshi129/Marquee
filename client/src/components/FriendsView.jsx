@@ -50,6 +50,7 @@ function Stars({ value }) {
 export default function FriendsView({ onAddFriend }) {
   const [feed, setFeed] = useState(null);
   const [friends, setFriends] = useState([]);
+  const [recs, setRecs] = useState([]);
   const [selected, setSelected] = useState(null);
   const [picker, setPicker] = useState(null);
   const [err, setErr] = useState(null);
@@ -68,13 +69,25 @@ export default function FriendsView({ onAddFriend }) {
 
   const load = useCallback(async () => {
     try {
-      const [f, fr] = await Promise.all([api.friendsFeed(), api.friends()]);
+      const [f, fr, rc] = await Promise.all([
+        api.friendsFeed(),
+        api.friends(),
+        api.recommendations().catch(() => []),
+      ]);
       setFeed(f);
       setFriends(fr);
+      setRecs(rc);
     } catch (e) {
       setErr(e.message);
     }
   }, []);
+
+  async function actRec(fn) {
+    try {
+      await fn();
+    } catch {}
+    load();
+  }
 
   // Poll while open so live-synced changes surface on their own.
   useEffect(() => {
@@ -118,20 +131,45 @@ export default function FriendsView({ onAddFriend }) {
     );
   }
 
-  if (feed.length === 0) {
-    return (
-      <div className="empty-state">
-        <div className="empty-glyph">◌</div>
-        <div className="empty-headline">Quiet so far.</div>
-        <p className="empty-body">When your friends log a film, it&rsquo;ll show up here.</p>
-      </div>
-    );
-  }
+  const recStrip = recs.length > 0 && (
+    <div className="rec-strip">
+      <div className="rec-strip-title">Recommended for you</div>
+      {recs.map((r) => (
+        <div key={r.id} className="rec-card">
+          {r.poster_url ? (
+            <img className="rec-poster" src={r.poster_url} alt="" loading="lazy" />
+          ) : (
+            <span className="rec-poster blank">{(r.title || '?').slice(0, 2).toUpperCase()}</span>
+          )}
+          <div className="rec-info">
+            <div className="rec-from">{r.from_name} recommends</div>
+            <div className="rec-title">{r.title}{r.release_year ? ` · ${r.release_year}` : ''}</div>
+          </div>
+          <div className="rec-actions">
+            <button type="button" className="rec-add" onClick={() => actRec(() => api.addRecommendation(r.id))}>
+              + Watchlist
+            </button>
+            <button type="button" className="rec-dismiss" onClick={() => actRec(() => api.dismissRecommendation(r.id))} aria-label="Dismiss">
+              ✕
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   let lastDay = null;
   return (
     <section className="feed">
       {err && <div className="error-banner">{err}</div>}
+      {recStrip}
+      {feed.length === 0 && (
+        <div className="empty-state">
+          <div className="empty-glyph">◌</div>
+          <div className="empty-headline">Quiet so far.</div>
+          <p className="empty-body">When your friends log a film, it&rsquo;ll show up here.</p>
+        </div>
+      )}
       {feed.map((it) => {
         const label = dayLabel(it.at);
         const head = label !== lastDay ? ((lastDay = label), label) : null;

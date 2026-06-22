@@ -8,6 +8,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const tmdb = require('../services/tmdb');
 const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 
@@ -277,6 +278,41 @@ router.post('/inbox', requireFriendToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, 'federation inbox');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/federation/recommend — a friend recommending a film to us. Store it
+// (enriching via TMDB) and notify; the owner can add it to their watchlist.
+router.post('/recommend', requireFriendToken, async (req, res) => {
+  try {
+    const { tmdb_id, title } = req.body || {};
+    if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
+    const name = req.friend.display_name || 'A friend';
+    let filmTitle = title;
+    if (tmdb_id) {
+      try {
+        const d = await tmdb.getOrFetchDetails(tmdb_id);
+        filmTitle = d.title || title;
+      } catch {}
+    }
+    await pool.query(
+      `INSERT INTO recommendations (from_instance_id, from_name, tmdb_id, title)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (from_instance_id, tmdb_id) WHERE tmdb_id IS NOT NULL
+       DO UPDATE SET from_name = EXCLUDED.from_name, title = EXCLUDED.title,
+                     status = 'pending', created_at = NOW()`,
+      [req.friend.remote_instance_id, name, tmdb_id || null, filmTitle || `TMDB ${tmdb_id}`]
+    );
+    notify({
+      kind: 'recommend',
+      title: `${name} recommends ${filmTitle}`,
+      body: 'Add it to your watchlist?',
+      payload: { tmdb_id: tmdb_id || null },
+    }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, 'federation recommend');
     res.status(500).json({ error: 'Server error' });
   }
 });

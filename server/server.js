@@ -22,6 +22,7 @@ const alist = require('./routes/alist');
 const federationRoute = require('./routes/federation');
 const friends = require('./routes/friends');
 const notificationsRoute = require('./routes/notifications');
+const recommendationsRoute = require('./routes/recommendations');
 const pushRoute = require('./routes/push');
 const authRoute = require('./routes/auth');
 const { requireOwner } = require('./middleware/owner-auth');
@@ -128,6 +129,7 @@ app.use('/api/alist-membership', alist);
 app.use('/api/federation', federationRoute);
 app.use('/api/friends', friends);
 app.use('/api/notifications', notificationsRoute);
+app.use('/api/recommendations', recommendationsRoute);
 app.use('/api/push', pushRoute);
 
 // Serve client build in production
