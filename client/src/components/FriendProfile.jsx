@@ -18,14 +18,12 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
         .then(([p, w]) => {
           if (!alive) return;
           setProfile(p);
-          // The cached payloads key on remote_id; give them an `id` so the grid
-          // (and its React keys) work unchanged.
+          // Cached payloads key on remote_id; give them an `id` for the grid keys.
           setWatches(w.map((x) => ({ ...x, id: x.remote_id })));
         })
         .catch((e) => alive && setErr(e.message));
     };
     fetchAll();
-    // Poll while open so a friend's freshly-synced changes appear on their own.
     const iv = setInterval(fetchAll, 2500);
     return () => {
       alive = false;
@@ -46,26 +44,25 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
   }
 
   const stats = profile?.stats;
+  const synced = profile?.last_synced_at || friend.last_synced_at;
+  const offline = profile?.last_error || friend.last_error;
 
   return (
-    <section className="friend-profile">
-      <div className="friend-profile-bar">
-        <button type="button" className="friend-back" onClick={onBack}>
-          ‹ Friends
-        </button>
-        <button type="button" className="friend-remove" onClick={remove}>
-          Remove
-        </button>
+    <section className="fp">
+      <div className="fp-top">
+        <button type="button" className="fp-back" onClick={onBack}>‹ Friends</button>
+        <button type="button" className="fp-remove" onClick={remove}>Remove</button>
       </div>
 
-      <header className="friend-profile-head">
-        <div className="friend-avatar lg" aria-hidden="true">
+      <header className="fp-head">
+        <div className="fp-avatar" aria-hidden="true">
           {(friend.display_name || '?').slice(0, 1).toUpperCase()}
         </div>
         <div>
-          <h2 className="friend-profile-name">{friend.display_name || 'Friend'}</h2>
-          <div className="friend-profile-synced">
-            {friend.last_error ? `Couldn't reach · synced ${fmtAgo(friend.last_synced_at)}` : `Synced ${fmtAgo(friend.last_synced_at)}`}
+          <h2 className="fp-name">{friend.display_name || 'Friend'}</h2>
+          <div className="fp-sync">
+            <span className={`fp-dot ${offline ? 'off' : ''}`} />
+            {offline ? `Couldn't reach · synced ${fmtAgo(synced)}` : `Synced ${fmtAgo(synced)}`}
           </div>
         </div>
       </header>
@@ -73,35 +70,23 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
       {err && <div className="error-banner">{err}</div>}
 
       {stats && (
-        <div className="friend-stats">
-          <div className="friend-stat">
-            <div className="friend-stat-num">{stats.films ?? 0}</div>
-            <div className="friend-stat-lbl">Films</div>
-          </div>
-          <div className="friend-stat">
-            <div className="friend-stat-num">{fmtRuntime(stats.runtime_minutes || 0)}</div>
-            <div className="friend-stat-lbl">Runtime</div>
-          </div>
+        <div className="fp-stats">
+          <div className="fp-stat"><b>{stats.films ?? 0}</b><span>Films</span></div>
+          <div className="fp-stat"><b>{fmtRuntime(stats.runtime_minutes || 0)}</b><span>Runtime</span></div>
           {stats.average_rating != null && (
-            <div className="friend-stat">
-              <div className="friend-stat-num">{stats.average_rating}★</div>
-              <div className="friend-stat-lbl">Mean</div>
-            </div>
+            <div className="fp-stat"><b>{stats.average_rating}★</b><span>Mean</span></div>
           )}
           {stats.genres?.[0] && (
-            <div className="friend-stat">
-              <div className="friend-stat-num">{stats.genres[0].name}</div>
-              <div className="friend-stat-lbl">Top genre</div>
-            </div>
+            <div className="fp-stat"><b>{stats.genres[0].name}</b><span>Top genre</span></div>
           )}
         </div>
       )}
 
-      <h3 className="friend-section-title">Recent watches</h3>
+      <div className="fp-sec">Recent watches</div>
       <WatchList
         watches={watches}
         readOnly
-        emptyBody={`Nothing shared yet${friend.last_error ? " — couldn't reach their instance." : '.'}`}
+        emptyBody={`Nothing shared yet${offline ? " — couldn't reach their instance." : '.'}`}
       />
     </section>
   );

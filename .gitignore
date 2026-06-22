@@ -9,3 +9,7 @@ build/
 backups/
 docker/backups/
 fixtures/
+
+# local federation test rig (secrets)
+.env.fedtest-mac
+compose.fedtest.yaml

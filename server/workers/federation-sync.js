@@ -8,6 +8,7 @@ const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const { notifyNewMatches } = require('../services/together');
 
 const SYNC_INTERVAL_MIN = parseInt(process.env.FEDERATION_SYNC_INTERVAL_MIN, 10) || 15;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -120,6 +121,7 @@ async function syncOnce() {
     for (const friend of rows) {
       (await runSyncFriend(friend)) ? synced++ : failed++;
     }
+    await notifyNewMatches().catch((err) => logger.error({ err }, 'together notify'));
     logger.info({ synced, failed, ms: Date.now() - t0 }, 'federation-sync: cycle done');
   } catch (err) {
     logger.error({ err }, 'federation-sync cycle failed');
@@ -139,7 +141,10 @@ async function syncFriendById(friendId) {
       `SELECT * FROM friends WHERE id = $1 AND status = 'active'`,
       [friendId]
     );
-    if (rows[0]) await runSyncFriend(rows[0]);
+    if (rows[0]) {
+      await runSyncFriend(rows[0]);
+      await notifyNewMatches().catch((err) => logger.error({ err }, 'together notify'));
+    }
   } catch (err) {
     logger.error({ err, friend_id: friendId }, 'federation-sync: targeted sync failed');
   } finally {

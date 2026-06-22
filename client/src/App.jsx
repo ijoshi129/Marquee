@@ -12,6 +12,11 @@ import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
 import WatchlistView from './components/WatchlistView';
 import FriendsView from './components/FriendsView';
+import NotificationsBell from './components/NotificationsBell';
+import FriendsMenu from './components/FriendsMenu';
+import AddFriendModal from './components/AddFriendModal';
+import ManageFriendsModal from './components/ManageFriendsModal';
+import SharingSettingsModal from './components/SharingSettingsModal';
 import Unlock from './components/Unlock';
 
 const DEFAULT_STATUS_KEY = 'active';
@@ -36,6 +41,10 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   // null = still checking; true = show unlock gate; false = unlocked/no lock.
   const [locked, setLocked] = useState(null);
+  const [friendsMenu, setFriendsMenu] = useState(false);
+  const [addFriend, setAddFriend] = useState(false);
+  const [manageFriends, setManageFriends] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const [q, setQ] = useState('');
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
@@ -247,12 +256,36 @@ export default function App() {
           >
             Friends
           </button>
+          <NotificationsBell onOpen={() => setView('friends')} />
+          {view === 'friends' && (
+            <button
+              type="button"
+              className="friends-cog"
+              onClick={() => setFriendsMenu(true)}
+              aria-label="Friends settings"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              </svg>
+            </button>
+          )}
         </nav>
       </header>
 
       <main>
         {view === 'friends' ? (
-          <FriendsView />
+          <FriendsView onAddFriend={() => setAddFriend(true)} />
         ) : view === 'watchlist' ? (
           <WatchlistView
             onWatched={() => {
@@ -336,6 +369,27 @@ export default function App() {
       )}
 
       {wrapped && <WrappedStory period={wrapped} onClose={closeWrapped} />}
+
+      {friendsMenu && (
+        <FriendsMenu
+          onClose={() => setFriendsMenu(false)}
+          onAdd={() => {
+            setFriendsMenu(false);
+            setAddFriend(true);
+          }}
+          onManage={() => {
+            setFriendsMenu(false);
+            setManageFriends(true);
+          }}
+          onSharing={() => {
+            setFriendsMenu(false);
+            setSharing(true);
+          }}
+        />
+      )}
+      {addFriend && <AddFriendModal onClose={() => setAddFriend(false)} />}
+      {manageFriends && <ManageFriendsModal onClose={() => setManageFriends(false)} />}
+      {sharing && <SharingSettingsModal onClose={() => setSharing(false)} />}
     </div>
   );
 }

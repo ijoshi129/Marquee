@@ -78,7 +78,18 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ has_alist }),
     }),
+  alerts: () => request('/api/notifications'),
+  markAlertsRead: () => request('/api/notifications/read', { method: 'POST' }),
+  markAlertRead: (id) => request(`/api/notifications/${id}/read`, { method: 'POST' }),
+  deleteAlert: (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
+  clearAlerts: () => request('/api/notifications', { method: 'DELETE' }),
+  pushKey: () => request('/api/push/key'),
+  subscribePush: (subscription) =>
+    request('/api/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+  unsubscribePush: (endpoint) =>
+    request('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
   friends: () => request('/api/friends'),
+  friendsFeed: () => request('/api/friends/feed'),
   inviteFriend: () => request('/api/friends/invite', { method: 'POST' }),
   acceptFriend: (invite) =>
     request('/api/friends/accept', { method: 'POST', body: JSON.stringify({ invite }) }),

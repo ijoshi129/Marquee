@@ -8,6 +8,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
@@ -109,6 +110,13 @@ router.post('/pair', async (req, res) => {
       [friendRes.rows[0].id, invite.id]
     );
     await client.query('COMMIT');
+
+    notify({
+      kind: 'friend_added',
+      title: `You're now connected with ${display_name || 'a friend'}`,
+      payload: { friend_id: friendRes.rows[0].id },
+      dedupeKey: `friend:${instance_id}`,
+    }).catch(() => {});
 
     const me = await fed.getIdentity();
     res.json({

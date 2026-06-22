@@ -6,6 +6,7 @@ const { upsertTheater } = require('../services/theaters');
 const unseenLookup = require('../services/unseen-lookup');
 const trakt = require('../services/trakt');
 const fed = require('../services/federation');
+const { notifyNewMatches } = require('../services/together');
 
 const router = express.Router();
 
@@ -246,6 +247,7 @@ router.post('/', async (req, res) => {
 
     const created = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [insert.rows[0].id]);
     fed.notifyFriends();
+    notifyNewMatches().catch(() => {});
     if (finalStatus === 'watched') {
       trakt.queueWatch(insert.rows[0].id).catch((err) => {
         logger.error({ err, watch_id: insert.rows[0].id }, 'trakt queue failed (non-fatal)');
@@ -325,6 +327,7 @@ router.patch('/:id', async (req, res) => {
     const refreshed = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [req.params.id]);
     const watch = refreshed.rows[0];
     fed.notifyFriends();
+    notifyNewMatches().catch(() => {});
     const shouldQueueTrakt =
       watch?.status === 'watched' &&
       (

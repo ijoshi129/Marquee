@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import AddFriendModal from './AddFriendModal';
-import SharingSettingsModal from './SharingSettingsModal';
+import { fmtShowtime } from '../format';
 import FriendProfile from './FriendProfile';
 
 // Short relative time, shared with FriendProfile.
@@ -16,40 +15,72 @@ export function fmtAgo(iso) {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
-export default function FriendsView() {
-  const [friends, setFriends] = useState(null);
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function dayLabel(at) {
+  if (!at) return 'Earlier';
+  const d = new Date(at);
+  const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff === -1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// "You & Alice" / "Alice & Bob" / "You, Alice & Bob" — You first.
+function peopleLabel(people) {
+  const ns = [...people].sort((a, b) => (a.you ? -1 : b.you ? 1 : 0)).map((p) => p.name);
+  if (ns.length <= 1) return ns[0] || '';
+  if (ns.length === 2) return `${ns[0]} & ${ns[1]}`;
+  return `${ns.slice(0, -1).join(', ')} & ${ns[ns.length - 1]}`;
+}
+
+function Stars({ value }) {
+  return (
+    <span className="feed-stars">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n} className={n <= value ? '' : 'off'}>★</span>
+      ))}
+    </span>
+  );
+}
+
+export default function FriendsView({ onAddFriend }) {
+  const [feed, setFeed] = useState(null);
+  const [friends, setFriends] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [adding, setAdding] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [picker, setPicker] = useState(null);
   const [err, setErr] = useState(null);
+
+  // Open a feed item: watched → that friend; upcoming with one friend → that
+  // friend; upcoming with several → a "who's going" picker.
+  function openItem(it) {
+    if (it.kind === 'watched') {
+      if (it.friend_id) setSelected({ id: it.friend_id, display_name: it.friend_name });
+      return;
+    }
+    const fr = (it.people || []).filter((p) => !p.you && p.friend_id);
+    if (fr.length === 1) setSelected({ id: fr[0].friend_id, display_name: fr[0].name });
+    else if (fr.length > 1) setPicker(fr);
+  }
 
   const load = useCallback(async () => {
     try {
-      setFriends(await api.friends());
+      const [f, fr] = await Promise.all([api.friendsFeed(), api.friends()]);
+      setFeed(f);
+      setFriends(fr);
     } catch (e) {
       setErr(e.message);
     }
   }, []);
 
-  // Refresh the list periodically so synced changes appear without a reload.
+  // Poll while open so live-synced changes surface on their own.
   useEffect(() => {
     load();
     const id = setInterval(load, 2500);
     return () => clearInterval(id);
   }, [load]);
-
-  async function syncNow() {
-    setSyncing(true);
-    try {
-      await api.syncFriends();
-      await load();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   if (selected) {
     return (
@@ -67,75 +98,122 @@ export default function FriendsView() {
     );
   }
 
-  return (
-    <section className="friends-view">
-      <div className="friends-head">
-        <div>
-          <h2 className="friends-title">Friends</h2>
-          <p className="friends-sub">See what the people you trust are watching.</p>
-        </div>
-        <div className="friends-actions">
-          <button type="button" className="friends-ghost" onClick={() => setSettingsOpen(true)}>
-            Sharing
-          </button>
-          <button type="button" className="friends-add" onClick={() => setAdding(true)}>
-            + Add friend
-          </button>
-        </div>
+  if (feed === null) {
+    return <div className="friends-empty">Loading&hellip;</div>;
+  }
+
+  if (friends.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-glyph">◌</div>
+        <div className="empty-headline">No friends yet.</div>
+        <p className="empty-body">
+          Connect another Marquee to see what the people you trust are watching.
+        </p>
+        <button type="button" className="feed-empty-add" onClick={onAddFriend}>
+          + Add a friend
+        </button>
       </div>
+    );
+  }
 
+  if (feed.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-glyph">◌</div>
+        <div className="empty-headline">Quiet so far.</div>
+        <p className="empty-body">When your friends log a film, it&rsquo;ll show up here.</p>
+      </div>
+    );
+  }
+
+  let lastDay = null;
+  return (
+    <section className="feed">
       {err && <div className="error-banner">{err}</div>}
+      {feed.map((it) => {
+        const label = dayLabel(it.at);
+        const head = label !== lastDay ? ((lastDay = label), label) : null;
+        const who = it.kind === 'upcoming' ? peopleLabel(it.people) : it.friend_name;
+        const verb =
+          it.kind === 'upcoming'
+            ? it.together ? 'are seeing' : 'is seeing'
+            : it.rating ? 'rated' : 'logged';
+        const avatarName =
+          it.kind === 'upcoming'
+            ? (it.people.find((p) => !p.you) || it.people[0]).name
+            : it.friend_name;
+        return (
+          <div key={it.id}>
+            {head && <div className="feed-day">{head}</div>}
+            <button
+              type="button"
+              className={`feed-card ${it.kind === 'upcoming' ? 'up' : ''}`}
+              onClick={() => openItem(it)}
+            >
+              {it.kind === 'watched' && <span className="feed-time">{fmtAgo(it.at)}</span>}
+              <span className="feed-poster">
+                {it.poster_url ? (
+                  <img src={it.poster_url} alt="" loading="lazy" />
+                ) : (
+                  <span className="feed-poster-blank">
+                    {(it.title || '?').slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </span>
+              <span className="feed-body">
+                <span className="feed-line1">
+                  <span className="feed-ava">{(avatarName || '?').slice(0, 1).toUpperCase()}</span>
+                  <span className="feed-who">{who}</span>
+                  <span className="feed-verb">{verb}{it.together ? ' together' : ''}</span>
+                </span>
+                <span className="feed-title">{it.title}</span>
+                {it.kind === 'upcoming' ? (
+                  <span className="feed-tix">
+                    🎟 {fmtShowtime(it.showtime)}
+                    {it.theater_name ? ` · ${it.theater_name}` : ''}
+                  </span>
+                ) : it.rating ? (
+                  <Stars value={it.rating} />
+                ) : (
+                  <span className="feed-meta">Not yet rated</span>
+                )}
+                {it.kind !== 'upcoming' && (it.director || it.release_year) && (
+                  <span className="feed-meta">
+                    {[it.director, it.release_year].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+              </span>
+            </button>
+          </div>
+        );
+      })}
 
-      {friends === null ? (
-        <div className="friends-empty">Loading&hellip;</div>
-      ) : friends.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-glyph">◌</div>
-          <div className="empty-headline">No friends yet.</div>
-          <p className="empty-body">
-            Add a friend running their own Marquee to start sharing what you watch.
-          </p>
-        </div>
-      ) : (
-        <>
-          <ul className="friend-list">
-            {friends.map((f) => (
-              <li key={f.id}>
-                <button type="button" className="friend-row" onClick={() => setSelected(f)}>
-                  <span className="friend-avatar" aria-hidden="true">
-                    {(f.display_name || '?').slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="friend-row-text">
-                    <span className="friend-row-name">{f.display_name || 'Pending…'}</span>
-                    <span className="friend-row-meta">
-                      {f.status === 'revoked'
-                        ? 'Disconnected'
-                        : f.last_error
-                          ? `Couldn't reach · ${fmtAgo(f.last_synced_at)}`
-                          : `Synced ${fmtAgo(f.last_synced_at)}`}
-                    </span>
-                  </span>
-                  <span className="friend-row-chevron" aria-hidden="true">›</span>
-                </button>
-              </li>
+      {picker && (
+        <div className="fmenu-backdrop" onClick={() => setPicker(null)}>
+          <div className="fmenu-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="fmenu-grab" />
+            <div className="picker-title">Open a profile</div>
+            {picker.map((f) => (
+              <button
+                key={f.friend_id}
+                type="button"
+                className="fmenu-row"
+                onClick={() => {
+                  setSelected({ id: f.friend_id, display_name: f.name });
+                  setPicker(null);
+                }}
+              >
+                <span className="fmenu-ico picker-ava">{(f.name || '?').slice(0, 1).toUpperCase()}</span>
+                <span className="fmenu-text">
+                  <span className="fmenu-t">{f.name}</span>
+                </span>
+                <span className="fmenu-chev">›</span>
+              </button>
             ))}
-          </ul>
-          <button type="button" className="friends-sync" onClick={syncNow} disabled={syncing}>
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </button>
-        </>
+          </div>
+        </div>
       )}
-
-      {adding && (
-        <AddFriendModal
-          onClose={() => setAdding(false)}
-          onChanged={() => {
-            load();
-            syncNow();
-          }}
-        />
-      )}
-      {settingsOpen && <SharingSettingsModal onClose={() => setSettingsOpen(false)} />}
     </section>
   );
 }

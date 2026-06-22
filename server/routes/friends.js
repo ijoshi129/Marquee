@@ -7,6 +7,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
@@ -170,6 +171,12 @@ router.post('/accept', async (req, res) => {
       ]
     );
 
+    notify({
+      kind: 'friend_added',
+      title: `You're now connected with ${pairRes.display_name || 'a friend'}`,
+      payload: { friend_id: rows[0].id },
+      dedupeKey: `friend:${pairRes.instance_id}`,
+    }).catch(() => {});
     federationSync.syncOnce().catch(() => {});
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -185,6 +192,124 @@ router.post('/sync-now', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, 'manual sync');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/friends/feed — merged, chronological activity across all friends.
+// Watched films are listed per friend. Upcoming reservations that share the same
+// film + theatre + showtime (across friends and you) are merged into a single
+// "seeing together" card.
+router.get('/feed', async (req, res) => {
+  try {
+    const [watched, profiles, mine] = await Promise.all([
+      pool.query(
+        `SELECT fw.friend_id, f.display_name AS friend_name, fw.payload, fw.watched_at
+           FROM friend_watches fw JOIN friends f ON f.id = fw.friend_id
+          WHERE f.status = 'active'
+          ORDER BY fw.watched_at DESC NULLS LAST
+          LIMIT 200`
+      ),
+      pool.query(
+        `SELECT fp.friend_id, f.display_name AS friend_name, fp.now_playing
+           FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id
+          WHERE f.status = 'active'`
+      ),
+      pool.query(
+        `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
+           FROM watches w
+           LEFT JOIN theaters t ON t.id = w.theater_id
+           LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+          WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
+      ),
+    ]);
+
+    const watchedItems = watched.rows.map((r) => {
+      const p = r.payload || {};
+      return {
+        id: `${r.friend_id}:${p.remote_id}`,
+        kind: 'watched',
+        friend_id: r.friend_id,
+        friend_name: r.friend_name,
+        title: p.tmdb?.title || p.title,
+        poster_url: p.tmdb?.poster_url || null,
+        release_year: p.tmdb?.release_year || null,
+        director: p.tmdb?.director || null,
+        rating: p.rating ?? null,
+        at: r.watched_at || null,
+      };
+    });
+
+    // Strict match key: film (tmdb id, else normalized title) + theatre + minute.
+    const norm = (s) => (s || '').trim().toLowerCase();
+    const filmKey = (p) => (p.tmdb_id ? `t:${p.tmdb_id}` : `n:${norm(p.tmdb?.title || p.title)}`);
+    const matchKey = (p) =>
+      `${filmKey(p)}|${norm(p.theater_name)}|${new Date(p.showtime).toISOString().slice(0, 16)}`;
+
+    // Gather every upcoming reservation (friends' shared + your own) that has a
+    // showtime and theatre, so it can participate in a match.
+    const groups = new Map();
+    const add = (p, who) => {
+      if (!p.showtime || !p.theater_name) return;
+      const k = matchKey(p);
+      if (!groups.has(k)) groups.set(k, { p, people: [] });
+      groups.get(k).people.push(who);
+    };
+    for (const r of profiles.rows) {
+      for (const p of Array.isArray(r.now_playing) ? r.now_playing : []) {
+        add(p, { friend_id: r.friend_id, name: r.friend_name });
+      }
+    }
+    for (const p of mine.rows) add(p, { you: true });
+
+    const upcomingItems = [];
+    for (const [k, g] of groups) {
+      // Dedupe people (one entry per friend / you).
+      const seen = new Set();
+      const people = g.people.filter((w) => {
+        const id = w.you ? 'you' : w.friend_id;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      const friends = people.filter((w) => !w.you);
+      const youIn = people.some((w) => w.you);
+
+      // A solo *your-only* reservation isn't friend activity — skip it.
+      if (friends.length === 0) continue;
+
+      const p = g.p;
+      upcomingItems.push({
+        id: `up:${k}`,
+        kind: 'upcoming',
+        together: people.length > 1,
+        you: youIn,
+        people: people.map((w) =>
+          w.you ? { name: 'You', you: true } : { name: w.name, friend_id: w.friend_id }
+        ),
+        // Link to a profile only when exactly one friend is involved.
+        friend_id: friends.length === 1 ? friends[0].friend_id : null,
+        friend_name: friends.length === 1 ? friends[0].name : null,
+        title: p.tmdb?.title || p.title,
+        poster_url: p.tmdb?.poster_url || null,
+        release_year: p.tmdb?.release_year || null,
+        director: p.tmdb?.director || null,
+        theater_name: p.theater_name || null,
+        showtime: p.showtime || null,
+        at: p.showtime || null,
+      });
+    }
+
+    const items = [...watchedItems, ...upcomingItems].sort((a, b) => {
+      if (!a.at && !b.at) return 0;
+      if (!a.at) return 1;
+      if (!b.at) return -1;
+      return new Date(b.at) - new Date(a.at);
+    });
+
+    res.json(items.slice(0, 200));
+  } catch (err) {
+    logger.error({ err }, 'friends feed');
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -68,16 +68,11 @@ function Switch({ on, onClick, label }) {
   return (
     <button
       type="button"
-      className={`alist-switch ${on ? 'on' : 'off'}`}
+      className={`fed-toggle ${on ? '' : 'off'}`}
       role="switch"
       aria-checked={on}
       onClick={onClick}
       aria-label={label}
-    >
-      <span className="alist-switch-track">
-        <span className="alist-switch-thumb" />
-      </span>
-      <span className="alist-switch-state">{on ? 'yes' : 'no'}</span>
-    </button>
+    />
   );
 }
