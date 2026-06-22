@@ -33,8 +33,10 @@ async function fetchJson(base, path, token) {
 }
 
 async function syncFriend(friend) {
-  const profile = await fetchJson(friend.base_url, '/api/federation/profile', friend.outbound_token);
-  const activity = await fetchJson(friend.base_url, '/api/federation/activity', friend.outbound_token);
+  const [profile, activity] = await Promise.all([
+    fetchJson(friend.base_url, '/api/federation/profile', friend.outbound_token),
+    fetchJson(friend.base_url, '/api/federation/activity', friend.outbound_token),
+  ]);
 
   // Full replace, not incremental: re-pulling the whole shared set is what makes
   // edits propagate — a re-rated film updates, and a film the friend marked

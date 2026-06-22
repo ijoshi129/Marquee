@@ -26,7 +26,7 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
     };
     fetchAll();
     // Poll while open so a friend's freshly-synced changes appear on their own.
-    const iv = setInterval(fetchAll, 10000);
+    const iv = setInterval(fetchAll, 2500);
     return () => {
       alive = false;
       clearInterval(iv);

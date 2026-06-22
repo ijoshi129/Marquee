@@ -35,7 +35,7 @@ export default function FriendsView() {
   // Refresh the list periodically so synced changes appear without a reload.
   useEffect(() => {
     load();
-    const id = setInterval(load, 10000);
+    const id = setInterval(load, 2500);
     return () => clearInterval(id);
   }, [load]);
 

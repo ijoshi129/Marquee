@@ -55,7 +55,7 @@ function isEnabled() {
   return process.env.FEDERATION_ENABLED === '1' || process.env.FEDERATION_ENABLED === 'true';
 }
 
-const PING_DEBOUNCE_MS = 1500;
+const PING_DEBOUNCE_MS = 400;
 const PING_TIMEOUT_MS = 5000;
 let pingTimer = null;
 
