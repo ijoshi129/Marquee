@@ -8,6 +8,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
 
@@ -218,6 +219,14 @@ router.get('/activity', requireFriendToken, async (req, res) => {
     logger.error({ err }, 'federation activity');
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// POST /api/federation/ping — a friend telling us they just changed something.
+// Respond immediately and pull just them, so updates land within seconds instead
+// of waiting for the next poll.
+router.post('/ping', requireFriendToken, async (req, res) => {
+  res.json({ ok: true });
+  federationSync.syncFriendById(req.friend.id).catch(() => {});
 });
 
 module.exports = router;

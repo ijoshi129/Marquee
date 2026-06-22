@@ -55,6 +55,43 @@ function isEnabled() {
   return process.env.FEDERATION_ENABLED === '1' || process.env.FEDERATION_ENABLED === 'true';
 }
 
+const PING_DEBOUNCE_MS = 1500;
+const PING_TIMEOUT_MS = 5000;
+let pingTimer = null;
+
+async function pingFriend(friend) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+  try {
+    await fetch(`${friend.base_url.replace(/\/$/, '')}/api/federation/ping`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${friend.outbound_token}` },
+      signal: controller.signal,
+    });
+  } catch {
+    // Best-effort liveness; the periodic poll is the backstop.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Tell every active friend "I changed — pull me now", debounced so a burst of
+// edits collapses into one round of pings. Fire-and-forget; safe to call often.
+function notifyFriends() {
+  if (!isEnabled() || pingTimer) return;
+  pingTimer = setTimeout(async () => {
+    pingTimer = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT base_url, outbound_token FROM friends WHERE status = 'active'`
+      );
+      await Promise.allSettled(rows.map((f) => pingFriend(f)));
+    } catch {
+      // ignore — the backstop poll will catch up
+    }
+  }, PING_DEBOUNCE_MS);
+}
+
 module.exports = {
   generateSecret,
   sha256,
@@ -64,4 +101,5 @@ module.exports = {
   ensureSettings,
   getSettings,
   isEnabled,
+  notifyFriends,
 };

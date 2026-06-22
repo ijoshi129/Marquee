@@ -78,6 +78,30 @@ async function syncFriend(friend) {
   return watches.length;
 }
 
+// Sync one friend, recording the outcome on its row. A 401 means they revoked
+// us; any other error is transient — keep the stale cache and the active status.
+async function runSyncFriend(friend) {
+  try {
+    await syncFriend(friend);
+    return true;
+  } catch (err) {
+    if (err.unauthorized) {
+      await pool.query(
+        `UPDATE friends SET status = 'revoked', last_error = 'Revoked by friend', updated_at = NOW() WHERE id = $1`,
+        [friend.id]
+      );
+      logger.warn({ friend_id: friend.id }, 'federation-sync: friend revoked us');
+    } else {
+      await pool.query(
+        `UPDATE friends SET last_error = $2, updated_at = NOW() WHERE id = $1`,
+        [friend.id, err.message || 'sync failed']
+      );
+      logger.error({ err, friend_id: friend.id }, 'federation-sync: friend failed');
+    }
+    return false;
+  }
+}
+
 let running = false;
 async function syncOnce() {
   if (running) {
@@ -92,31 +116,32 @@ async function syncOnce() {
   try {
     const { rows } = await pool.query(`SELECT * FROM friends WHERE status = 'active'`);
     for (const friend of rows) {
-      try {
-        await syncFriend(friend);
-        synced++;
-      } catch (err) {
-        failed++;
-        if (err.unauthorized) {
-          await pool.query(
-            `UPDATE friends SET status = 'revoked', last_error = 'Revoked by friend', updated_at = NOW() WHERE id = $1`,
-            [friend.id]
-          );
-          logger.warn({ friend_id: friend.id }, 'federation-sync: friend revoked us');
-        } else {
-          await pool.query(
-            `UPDATE friends SET last_error = $2, updated_at = NOW() WHERE id = $1`,
-            [friend.id, err.message || 'sync failed']
-          );
-          logger.error({ err, friend_id: friend.id }, 'federation-sync: friend failed');
-        }
-      }
+      (await runSyncFriend(friend)) ? synced++ : failed++;
     }
     logger.info({ synced, failed, ms: Date.now() - t0 }, 'federation-sync: cycle done');
   } catch (err) {
     logger.error({ err }, 'federation-sync cycle failed');
   } finally {
     running = false;
+  }
+}
+
+// Sync a single friend immediately — used by the live "ping" path. A per-friend
+// in-flight guard coalesces a burst of pings for the same friend.
+const inFlight = new Set();
+async function syncFriendById(friendId) {
+  if (!fed.isEnabled() || inFlight.has(friendId)) return;
+  inFlight.add(friendId);
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM friends WHERE id = $1 AND status = 'active'`,
+      [friendId]
+    );
+    if (rows[0]) await runSyncFriend(rows[0]);
+  } catch (err) {
+    logger.error({ err, friend_id: friendId }, 'federation-sync: targeted sync failed');
+  } finally {
+    inFlight.delete(friendId);
   }
 }
 
@@ -136,4 +161,4 @@ function stop() {
   if (task) task.stop();
 }
 
-module.exports = { start, stop, syncOnce };
+module.exports = { start, stop, syncOnce, syncFriendById };

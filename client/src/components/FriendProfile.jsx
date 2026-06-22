@@ -13,17 +13,23 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([api.friendProfile(friend.id), api.friendWatches(friend.id)])
-      .then(([p, w]) => {
-        if (!alive) return;
-        setProfile(p);
-        // The cached payloads key on remote_id; give them an `id` so the grid
-        // (and its React keys) work unchanged.
-        setWatches(w.map((x) => ({ ...x, id: x.remote_id })));
-      })
-      .catch((e) => alive && setErr(e.message));
+    const fetchAll = () => {
+      Promise.all([api.friendProfile(friend.id), api.friendWatches(friend.id)])
+        .then(([p, w]) => {
+          if (!alive) return;
+          setProfile(p);
+          // The cached payloads key on remote_id; give them an `id` so the grid
+          // (and its React keys) work unchanged.
+          setWatches(w.map((x) => ({ ...x, id: x.remote_id })));
+        })
+        .catch((e) => alive && setErr(e.message));
+    };
+    fetchAll();
+    // Poll while open so a friend's freshly-synced changes appear on their own.
+    const iv = setInterval(fetchAll, 10000);
     return () => {
       alive = false;
+      clearInterval(iv);
     };
   }, [friend.id]);
 

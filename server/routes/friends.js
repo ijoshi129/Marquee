@@ -67,6 +67,7 @@ router.put('/settings', async (req, res) => {
       `UPDATE federation_settings SET ${updates.join(', ')}, updated_at = NOW() WHERE id = TRUE`,
       params
     );
+    fed.notifyFriends();
     res.json(await fed.getSettings());
   } catch (err) {
     logger.error({ err }, 'update federation settings');
