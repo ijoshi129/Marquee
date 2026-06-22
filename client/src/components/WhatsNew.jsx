@@ -2,12 +2,57 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '1.5';
+const WHATS_NEW_VERSION = '2.0';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.0',
+    sections: [
+      {
+        title: 'Friends',
+        items: [
+          'Marquee can now connect to a friend’s Marquee — pair once with an invite code and you’ll each see what the other is watching. There’s no middleman; the two instances talk straight to each other.',
+          'A new Friends tab gathers their activity into a single feed.',
+        ],
+      },
+      {
+        title: 'Seeing it together',
+        items: [
+          'When you and a friend have booked the same showtime, it shows up as one card — with a comment thread you both share.',
+          'Once a film starts, friends headed to that showing show as “Watching now”.',
+        ],
+      },
+      {
+        title: 'Recommendations',
+        items: [
+          'Send a film to a friend and it lands in their watchlist with a “Recommended by you” badge — and the other way around.',
+        ],
+      },
+      {
+        title: 'Taste-match',
+        items: [
+          'Open a friend’s profile to see how often your ratings agree and which films you’ve both seen.',
+        ],
+      },
+      {
+        title: 'Notifications',
+        items: [
+          'A bell for recommendations, comments, and “seeing it together” alerts — mark them read, dismiss, or clear.',
+          'On an installed iPhone, these can arrive as push notifications.',
+        ],
+      },
+      {
+        title: 'Yours stays yours',
+        items: [
+          'Sharing is off until you turn it on, and a passcode keeps your diary private even when a friend can reach your instance.',
+          'Choose exactly what friends see, and mark any single entry private so it never leaves your Marquee.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.5',
     sections: [
