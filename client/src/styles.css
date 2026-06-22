@@ -3295,6 +3295,14 @@ input[type='date'].input-naked { color-scheme: dark; }
   border: 1px solid #3a2c0f; padding: 2px 8px; border-radius: 99px;
   font-family: var(--font-mono); letter-spacing: 0.03em; margin-top: 2px;
 }
+.feed-now {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 2px;
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  color: #5bbf73; background: rgba(91, 191, 115, 0.12); border: 1px solid rgba(91, 191, 115, 0.4);
+  padding: 3px 9px; border-radius: 99px;
+}
+.feed-now-dot { width: 7px; height: 7px; border-radius: 50%; background: #5bbf73; animation: nowPulse 1.6s ease-in-out infinite; }
+@keyframes nowPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 .feed-empty-add {
   margin-top: 18px; font: inherit; font-weight: 600; cursor: pointer; padding: 11px 18px;
   border-radius: var(--radius-md); background: var(--accent); color: var(--accent-fg); border: none;

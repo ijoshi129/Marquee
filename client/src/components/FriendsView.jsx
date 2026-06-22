@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import { fmtShowtime } from '../format';
+import { fmtShowtime, isShowingNow } from '../format';
 import FriendProfile from './FriendProfile';
 import SocialBar from './SocialBar';
 
@@ -174,9 +174,12 @@ export default function FriendsView({ onAddFriend }) {
         const label = dayLabel(it.at);
         const head = label !== lastDay ? ((lastDay = label), label) : null;
         const who = it.kind === 'upcoming' ? peopleLabel(it.people) : it.friend_name;
+        const watchingNow = it.kind === 'upcoming' && isShowingNow(it.showtime, it.runtime_minutes);
         const verb =
           it.kind === 'upcoming'
-            ? it.together ? 'are seeing' : 'is seeing'
+            ? watchingNow
+              ? it.together ? 'are watching' : 'is watching'
+              : it.together ? 'are seeing' : 'is seeing'
             : it.rating ? 'rated' : 'logged';
         const avatarName =
           it.kind === 'upcoming'
@@ -209,10 +212,17 @@ export default function FriendsView({ onAddFriend }) {
                 </span>
                 <span className="feed-title">{it.title}</span>
                 {it.kind === 'upcoming' ? (
-                  <span className="feed-tix">
-                    🎟 {fmtShowtime(it.showtime)}
-                    {it.theater_name ? ` · ${it.theater_name}` : ''}
-                  </span>
+                  watchingNow ? (
+                    <span className="feed-now">
+                      <span className="feed-now-dot" aria-hidden="true" />
+                      Watching now{it.theater_name ? ` · ${it.theater_name}` : ''}
+                    </span>
+                  ) : (
+                    <span className="feed-tix">
+                      🎟 {fmtShowtime(it.showtime)}
+                      {it.theater_name ? ` · ${it.theater_name}` : ''}
+                    </span>
+                  )
                 ) : it.rating ? (
                   <Stars value={it.rating} />
                 ) : (

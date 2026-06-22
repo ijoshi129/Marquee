@@ -321,6 +321,7 @@ router.get('/feed', async (req, res) => {
         poster_url: p.tmdb?.poster_url || null,
         release_year: p.tmdb?.release_year || null,
         director: p.tmdb?.director || null,
+        runtime_minutes: p.tmdb?.runtime_minutes || null,
         theater_name: p.theater_name || null,
         showtime: p.showtime || null,
         at: p.showtime || null,

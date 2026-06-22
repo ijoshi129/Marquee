@@ -58,6 +58,22 @@ export function unseenRevealed(showtime) {
   return Date.now() >= real + UNSEEN_REVEAL_AFTER_MS;
 }
 
+// True when a reservation's showtime is happening right now (from a bit before
+// the start through roughly when the film lets out). Showtimes are wall-clock
+// parts labelled UTC; rebuild them in the browser's local zone for the true
+// instant, same as unseenRevealed.
+export function isShowingNow(showtime, runtimeMinutes) {
+  if (!showtime) return false;
+  const d = new Date(showtime);
+  const start = new Date(
+    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()
+  ).getTime();
+  const runtime = (runtimeMinutes || 130) * 60000;
+  const trailers = 18 * 60000;
+  const now = Date.now();
+  return now >= start - 5 * 60000 && now <= start + trailers + runtime;
+}
+
 // True when an 'YYYY-MM-DD' release date is still in the future.
 export function isUpcoming(iso) {
   if (!iso) return false;
