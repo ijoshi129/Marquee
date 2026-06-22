@@ -11,6 +11,7 @@ import WhatsNew from './components/WhatsNew';
 import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
 import WatchlistView from './components/WatchlistView';
+import FriendsView from './components/FriendsView';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -220,11 +221,20 @@ export default function App() {
           >
             Watchlist
           </button>
+          <button
+            type="button"
+            className={`topnav-tab ${view === 'friends' ? 'is-on' : ''}`}
+            onClick={() => setView('friends')}
+          >
+            Friends
+          </button>
         </nav>
       </header>
 
       <main>
-        {view === 'watchlist' ? (
+        {view === 'friends' ? (
+          <FriendsView />
+        ) : view === 'watchlist' ? (
           <WatchlistView
             onWatched={() => {
               setRefreshKey((k) => k + 1);

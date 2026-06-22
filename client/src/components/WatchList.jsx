@@ -32,13 +32,13 @@ const STATUS_LABEL = {
   no_show: 'No-show',
 };
 
-export default function WatchList({ watches, onSelect, onWatchUpdated }) {
+export default function WatchList({ watches, onSelect, onWatchUpdated, readOnly = false, emptyBody }) {
   if (!watches.length) {
     return (
       <div className="empty-state">
         <div className="empty-glyph">◌</div>
         <div className="empty-headline">A blank reel.</div>
-        <p className="empty-body">No watches match your filters. Tap + to add one.</p>
+        <p className="empty-body">{emptyBody || 'No watches match your filters. Tap + to add one.'}</p>
       </div>
     );
   }
@@ -51,20 +51,24 @@ export default function WatchList({ watches, onSelect, onWatchUpdated }) {
           index={i}
           onSelect={onSelect}
           onWatchUpdated={onWatchUpdated}
+          readOnly={readOnly}
         />
       ))}
     </div>
   );
 }
 
-function WatchCard({ w, index, onSelect, onWatchUpdated }) {
+function WatchCard({ w, index, onSelect, onWatchUpdated, readOnly = false }) {
   const [savingRating, setSavingRating] = useState(false);
 
+  const interactive = !readOnly && !!onSelect;
+
   function open() {
-    onSelect(w);
+    if (interactive) onSelect(w);
   }
 
   function onKey(e) {
+    if (!interactive) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       open();
@@ -101,8 +105,8 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
   return (
     <article
       className={`poster-card status-${w.status}`}
-      role="button"
-      tabIndex={0}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
       onClick={open}
       onKeyDown={onKey}
       style={{ animationDelay: `${Math.min(index * 28, 600)}ms` }}
@@ -183,7 +187,7 @@ function WatchCard({ w, index, onSelect, onWatchUpdated }) {
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <StarRating value={w.rating} onChange={quickRate} size={14} />
+          <StarRating value={w.rating} onChange={quickRate} size={14} readOnly={readOnly} />
         </div>
       </div>
     </article>

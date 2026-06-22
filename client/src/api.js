@@ -56,4 +56,15 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ has_alist }),
     }),
+  friends: () => request('/api/friends'),
+  inviteFriend: () => request('/api/friends/invite', { method: 'POST' }),
+  acceptFriend: (invite) =>
+    request('/api/friends/accept', { method: 'POST', body: JSON.stringify({ invite }) }),
+  removeFriend: (id) => request(`/api/friends/${id}`, { method: 'DELETE' }),
+  friendWatches: (id) => request(`/api/friends/${id}/watches`),
+  friendProfile: (id) => request(`/api/friends/${id}/profile`),
+  syncFriends: () => request('/api/friends/sync-now', { method: 'POST' }),
+  federationSettings: () => request('/api/friends/settings'),
+  setFederationSettings: (body) =>
+    request('/api/friends/settings', { method: 'PUT', body: JSON.stringify(body) }),
 };
