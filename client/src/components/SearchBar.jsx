@@ -72,7 +72,15 @@ export default function SearchBar({
     const t = setTimeout(async () => {
       try {
         const data = await api.searchSuggest(text);
-        if (!cancelled) setSuggest(data);
+        // Normalize so every group is always an array — the render and the
+        // visibility check below index .length on all four.
+        if (!cancelled)
+          setSuggest({
+            movies: data?.movies || [],
+            directors: data?.directors || [],
+            theaters: data?.theaters || [],
+            genres: data?.genres || [],
+          });
       } catch {}
     }, 200);
     return () => {

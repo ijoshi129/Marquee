@@ -14,7 +14,16 @@ async function tmdbFetch(path, params = {}) {
   const url = new URL(TMDB_BASE + path);
   url.searchParams.set('api_key', key());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url);
+
+  let res = await fetch(url);
+  // Honour a single Retry-After backoff on rate-limit before giving up, so a
+  // 429 burst doesn't surface as a hard failure (which would burn rechecker
+  // retries). Capped so we never stall a request for long.
+  if (res.status === 429) {
+    const wait = Math.min(Number(res.headers.get('retry-after')) || 1, 10);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await fetch(url);
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`TMDB ${res.status}: ${body.slice(0, 200)}`);
@@ -52,7 +61,10 @@ async function nowPlaying() {
     tmdbFetch('/movie/now_playing', { region: 'US', page: 3 }),
     tmdbFetch('/movie/upcoming', { region: 'US', page: 1 }),
   ];
-  const pages = await Promise.all(reqs);
+  // Tolerate a single page failing — a partial feed beats no feed at all.
+  const settled = await Promise.allSettled(reqs);
+  const pages = settled.filter((s) => s.status === 'fulfilled').map((s) => s.value);
+  if (!pages.length) throw new Error('TMDB now_playing: all pages failed');
   // now_playing is broad and noisy: it leaks old catalog/re-release records
   // (a 1999 Fight Club) and a long tail of tiny limited releases that never
   // hit a multiplex. Keep only recent films above a notability floor so the

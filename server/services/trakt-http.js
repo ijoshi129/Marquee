@@ -35,9 +35,14 @@ function retryAfterMs(headers) {
 }
 
 async function throttle() {
-  const waitMs = Math.max(0, nextRequestAt - Date.now());
+  // Reserve our slot synchronously (before any await) so concurrent callers each
+  // claim a distinct, increasing slot instead of all reading the same
+  // nextRequestAt and firing together.
+  const now = Date.now();
+  const slot = Math.max(now, nextRequestAt);
+  nextRequestAt = slot + MIN_REQUEST_INTERVAL_MS;
+  const waitMs = slot - now;
   if (waitMs > 0) await sleep(waitMs);
-  nextRequestAt = Date.now() + MIN_REQUEST_INTERVAL_MS;
 }
 
 // One client-side rate limiter shared by every Trakt request in this process.

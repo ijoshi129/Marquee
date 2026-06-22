@@ -7,7 +7,7 @@ const trakt = require('../services/trakt');
 const router = express.Router();
 
 const LIST_SELECT = `
-  SELECT wl.id, wl.tmdb_id, wl.title, wl.added_at, tc.payload AS tmdb
+  SELECT wl.id, wl.tmdb_id, wl.title, wl.added_at, wl.recommended_by, tc.payload AS tmdb
   FROM watchlist wl
   LEFT JOIN tmdb_cache tc ON tc.tmdb_id = wl.tmdb_id
 `;

@@ -13,6 +13,9 @@ const matcher = require('../services/matcher');
 const poller = require('../workers/email-poller');
 const pendingExpirer = require('../workers/pending-expirer');
 const backup = require('../workers/backup');
+const tmdbRechecker = require('../workers/tmdb-rechecker');
+const traktSync = require('../workers/trakt-sync');
+const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
 
@@ -234,13 +237,17 @@ router.post(
         return res.status(400).json({ error: 'Body does not look like a SQL dump' });
       }
 
-      // Pause background workers so they don't write to tables psql is in the
+      // Pause ALL background workers so they don't write to tables psql is in the
       // middle of dropping/recreating. We restart them in `finally` regardless
       // of outcome. In-flight queries that started before stop() will still
-      // race the restore, but new scheduled invocations won't fire.
+      // race the restore, but new scheduled invocations won't fire. federation-
+      // sync matters most here — a friend's push can trigger it at any instant.
       poller.stop();
       pendingExpirer.stop();
       backup.stop();
+      tmdbRechecker.stop();
+      traktSync.stop();
+      federationSync.stop();
       try {
         // --single-transaction wraps the entire dump in BEGIN/COMMIT so a
         // failure mid-restore rolls back instead of leaving the DB partially
@@ -283,6 +290,9 @@ router.post(
         poller.start();
         pendingExpirer.start();
         backup.start();
+        tmdbRechecker.start();
+        traktSync.start();
+        federationSync.start();
       }
     } catch (err) {
       logger.error({ err }, 'database import failed');

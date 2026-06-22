@@ -7,7 +7,7 @@
  * - Never caches /api/* — those are always live.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v4';
 const SHELL_CACHE = `marquee-shell-${VERSION}`;
 const POSTER_CACHE = `marquee-posters-${VERSION}`;
 const SHELL_PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
@@ -54,6 +54,38 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin) {
     event.respondWith(networkFirst(req, SHELL_CACHE));
   }
+});
+
+// Web Push: show the notification, and focus/open the app when tapped.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Marquee', {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) {
+          if ('navigate' in c) c.navigate(url);
+          return c.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
 });
 
 async function cacheFirst(req, cacheName) {

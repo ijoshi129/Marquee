@@ -26,6 +26,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   const [watchedDate, setWatchedDate] = useState(fmtDateInput(watch.watched_at));
   const [theater, setTheater] = useState(watch.theater_name || '');
   const [tags, setTags] = useState(watch.tags || []);
+  const [isPrivate, setIsPrivate] = useState(!!watch.is_private);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [info, setInfo] = useState(null);
@@ -56,6 +57,7 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
         notes: notes.trim() || null,
         theater_name: theater.trim() || null,
         tags,
+        is_private: isPrivate,
       };
       if (watchedDate) {
         patch.watched_at = new Date(watchedDate + 'T20:00:00').toISOString();
@@ -279,6 +281,20 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
           <div className="sheet-field">
             <label className="sheet-label">Tags</label>
             <TagEditor tags={tags} onChange={setTags} />
+          </div>
+
+          <div className="sheet-field">
+            <label className="private-toggle">
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+              />
+              <span>
+                Keep private
+                <span className="private-hint">Hidden from friends — never leaves this instance.</span>
+              </span>
+            </label>
           </div>
 
           <div className="sheet-row">

@@ -58,7 +58,13 @@ function periodBounds(period, monthParam) {
 router.get('/', async (req, res) => {
   try {
     const period = req.query.period || 'month';
-    const { start, end, label } = periodBounds(period, req.query.month);
+    let bounds;
+    try {
+      bounds = periodBounds(period, req.query.month);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+    const { start, end, label } = bounds;
 
     const watchesQ = await pool.query(
       `SELECT w.id, w.tmdb_id, w.title, w.rating, w.watched_at, w.tags, t.name AS theater_name, tc.payload AS tmdb
@@ -94,18 +100,13 @@ router.get('/', async (req, res) => {
     const dayBuckets = new Map(); // 'YYYY-MM-DD' -> count
     let ratingSum = 0;
     let ratingCount = 0;
-    let fiveStarCount = 0;
+    const fiveStarFilms = new Set(); // distinct films rated 5★ (the grid dedupes too)
     const ratingCounts = [0, 0, 0, 0, 0]; // index 0 = 1★ … index 4 = 5★
     let longest = null;
-    let ticketValue = 0;
-    let premiumTickets = 0;
     const yearAgg = new Map(); // year -> { films, runtime }
 
     for (const w of watches) {
       const t = w.tmdb || {};
-      const isPremium = (w.tags || []).some((tag) => PREMIUM_FORMATS.has(tag));
-      ticketValue += ALIST.ticket + (isPremium ? ALIST.premium : 0);
-      if (isPremium) premiumTickets += 1;
       if (typeof t.runtime_minutes === 'number') {
         totalRuntime += t.runtime_minutes;
         if (!longest || t.runtime_minutes > longest.runtime_minutes) {
@@ -131,7 +132,7 @@ router.get('/', async (req, res) => {
       if (typeof w.rating === 'number') {
         ratingSum += w.rating;
         ratingCount++;
-        if (w.rating === 5) fiveStarCount++;
+        if (w.rating === 5) fiveStarFilms.add(w.tmdb_id || `t:${w.title}`);
         if (w.rating >= 1 && w.rating <= 5) ratingCounts[w.rating - 1]++;
       }
       if (w.watched_at) {
@@ -241,7 +242,7 @@ router.get('/', async (req, res) => {
       superlatives: {
         busiest_day: busiestDay,
         longest_film: longest,
-        five_star_count: fiveStarCount,
+        five_star_count: fiveStarFilms.size,
       },
     };
 
@@ -271,7 +272,7 @@ router.get('/', async (req, res) => {
 
     response.value = {
       tickets: v.creditedTickets,
-      premium_tickets: premiumTickets,
+      premium_tickets: v.creditedPremiumTickets,
       ticket_value: round2(v.creditedTicketValue),
       monthly_fee: ALIST.fee,
       months: v.billedMonths,

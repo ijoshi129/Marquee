@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api';
+import { api, onLocked } from './api';
 import StatsBar from './components/StatsBar';
 import WatchList from './components/WatchList';
 import AddWatchModal from './components/AddWatchModal';
@@ -11,6 +11,13 @@ import WhatsNew from './components/WhatsNew';
 import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
 import WatchlistView from './components/WatchlistView';
+import FriendsView from './components/FriendsView';
+import NotificationsBell from './components/NotificationsBell';
+import FriendsMenu from './components/FriendsMenu';
+import AddFriendModal from './components/AddFriendModal';
+import ManageFriendsModal from './components/ManageFriendsModal';
+import SharingSettingsModal from './components/SharingSettingsModal';
+import Unlock from './components/Unlock';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -32,6 +39,12 @@ export default function App() {
   const [wrappedAutoMonth, setWrappedAutoMonth] = useState(null);
   const [view, setView] = useState('diary');
   const [refreshKey, setRefreshKey] = useState(0);
+  // null = still checking; true = show unlock gate; false = unlocked/no lock.
+  const [locked, setLocked] = useState(null);
+  const [friendsMenu, setFriendsMenu] = useState(false);
+  const [addFriend, setAddFriend] = useState(false);
+  const [manageFriends, setManageFriends] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const [q, setQ] = useState('');
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
@@ -164,9 +177,29 @@ export default function App() {
     setWrapped({ kind: 'month', month });
   }, []);
 
+  // Decide on load whether the instance is locked and this device needs to
+  // unlock. Until resolved we render nothing, so we never flash the diary.
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    api
+      .authStatus()
+      .then((s) => alive && setLocked(s.required && !s.unlocked))
+      .catch(() => alive && setLocked(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // If a request later 401s because the stored passcode went stale, re-show the
+  // unlock gate rather than leaving the user stuck on error banners.
+  useEffect(() => {
+    onLocked(() => setLocked(true));
+    return () => onLocked(null);
+  }, []);
+
+  useEffect(() => {
+    if (locked === false) load();
+  }, [load, locked]);
 
   function handleCreated(watch) {
     setAdding(false);
@@ -196,6 +229,9 @@ export default function App() {
     return row?.tmdb?.poster_url || null;
   }, [editing, watches]);
 
+  if (locked === null) return null;
+  if (locked) return <Unlock onUnlocked={() => setLocked(false)} />;
+
   return (
     <div className="app">
       <Backdrop posterUrl={featuredPoster} intensity="ambient" />
@@ -220,11 +256,44 @@ export default function App() {
           >
             Watchlist
           </button>
+          <button
+            type="button"
+            className={`topnav-tab ${view === 'friends' ? 'is-on' : ''}`}
+            onClick={() => setView('friends')}
+          >
+            Friends
+          </button>
+          <NotificationsBell onOpen={() => setView('friends')} />
+          {view === 'friends' && (
+            <button
+              type="button"
+              className="friends-cog"
+              onClick={() => setFriendsMenu(true)}
+              aria-label="Friends settings"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              </svg>
+            </button>
+          )}
         </nav>
       </header>
 
       <main>
-        {view === 'watchlist' ? (
+        {view === 'friends' ? (
+          <FriendsView onAddFriend={() => setAddFriend(true)} />
+        ) : view === 'watchlist' ? (
           <WatchlistView
             onWatched={() => {
               setRefreshKey((k) => k + 1);
@@ -307,6 +376,27 @@ export default function App() {
       )}
 
       {wrapped && <WrappedStory period={wrapped} onClose={closeWrapped} />}
+
+      {friendsMenu && (
+        <FriendsMenu
+          onClose={() => setFriendsMenu(false)}
+          onAdd={() => {
+            setFriendsMenu(false);
+            setAddFriend(true);
+          }}
+          onManage={() => {
+            setFriendsMenu(false);
+            setManageFriends(true);
+          }}
+          onSharing={() => {
+            setFriendsMenu(false);
+            setSharing(true);
+          }}
+        />
+      )}
+      {addFriend && <AddFriendModal onClose={() => setAddFriend(false)} />}
+      {manageFriends && <ManageFriendsModal onClose={() => setManageFriends(false)} />}
+      {sharing && <SharingSettingsModal onClose={() => setSharing(false)} />}
     </div>
   );
 }

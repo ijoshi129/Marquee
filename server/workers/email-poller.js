@@ -30,7 +30,19 @@ async function ingestPhase() {
     ? new Date(new Date(maxRecv).getTime() - 24 * 3600_000)
     : null; // null = backfill all
 
-  const messages = await fetchAmcMessages({ since });
+  // Hand the fetcher the ids we already have in the lookback window so it skips
+  // re-downloading their full source every cycle. ON CONFLICT below is still the
+  // correctness backstop if anything slips through.
+  let knownIds;
+  if (since) {
+    const known = await pool.query(
+      'SELECT gmail_message_id FROM email_log WHERE received_at >= $1',
+      [since]
+    );
+    knownIds = new Set(known.rows.map((r) => r.gmail_message_id));
+  }
+
+  const messages = await fetchAmcMessages({ since, knownIds });
   let newCount = 0;
   for (const m of messages) {
     const ins = await pool.query(
@@ -93,8 +105,10 @@ async function processPhase() {
       }
 
       // Parser may indicate "skip" — semantically OK but no dispatch (e.g. concession orders).
+      // Keep the real classification and record why it was skipped, so an
+      // intentional skip stays distinguishable from a genuine 'unknown'.
       if (parsed.skip) {
-        await markStatus(gmail_message_id, 'unknown', 'ok', null, null);
+        await markStatus(gmail_message_id, type, 'ok', `skipped: ${parsed.reason || 'non-ticket order'}`, null);
         skipped++;
         continue;
       }

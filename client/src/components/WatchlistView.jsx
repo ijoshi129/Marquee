@@ -163,6 +163,9 @@ export default function WatchlistView({ onWatched }) {
                   >
                     ✕
                   </button>
+                  {it.recommended_by && (
+                    <span className="poster-status pending">Recommended by {it.recommended_by}</span>
+                  )}
                 </div>
                 <div className="wl-title">{title}</div>
                 <div className="wl-year">{tmdb.release_year || ''}</div>

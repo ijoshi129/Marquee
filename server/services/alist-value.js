@@ -21,6 +21,7 @@ function computeAlistValue(watches, opts) {
   // year -> { films (every watched row), ticketValue + months (member only) }
   const byYear = new Map();
   let creditedTickets = 0;
+  let creditedPremiumTickets = 0;
   for (const w of watches) {
     if (!w.watched_at) continue;
     const d = new Date(w.watched_at);
@@ -37,6 +38,7 @@ function computeAlistValue(watches, opts) {
     b.ticketValue += ticket + (isPremium ? premium : 0);
     b.months.add(monthKey);
     creditedTickets += 1;
+    if (isPremium) creditedPremiumTickets += 1;
   }
 
   let savingsSum = 0;
@@ -80,6 +82,7 @@ function computeAlistValue(watches, opts) {
 
   return {
     creditedTickets,
+    creditedPremiumTickets,
     creditedTicketValue,
     billedMonths,
     savings: isExcludedPeriod ? null : savingsSum,

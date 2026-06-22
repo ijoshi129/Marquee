@@ -343,10 +343,17 @@ async function resolveAndAssign(watchId, opts = {}) {
     });
     if (match) {
       tmdbId = match.tmdb_id;
-      needsReview = match.needs_review;
+      needsReview = !!match.needs_review;
     }
   } catch (err) {
     logger.error({ err: err }, 'unseen-lookup TMDB enrichment failed');
+  }
+
+  // We found the megathread entry but couldn't pin it to a TMDB id (no match or
+  // a transient TMDB error). Report not-resolved so the rechecker burns a normal
+  // retry and eventually abandons, and never write a NULL over an existing id.
+  if (!tmdbId) {
+    return { resolved: false, reason: 'no TMDB match for revealed title' };
   }
 
   await pool.query(

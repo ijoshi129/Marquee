@@ -19,11 +19,20 @@ const exportRoute = require('./routes/export');
 const tagsRoute = require('./routes/tags');
 const watchlist = require('./routes/watchlist');
 const alist = require('./routes/alist');
+const federationRoute = require('./routes/federation');
+const friends = require('./routes/friends');
+const notificationsRoute = require('./routes/notifications');
+const recommendationsRoute = require('./routes/recommendations');
+const pushRoute = require('./routes/push');
+const authRoute = require('./routes/auth');
+const { requireOwner } = require('./middleware/owner-auth');
+const federation = require('./services/federation');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
 const backup = require('./workers/backup');
 const tmdbRechecker = require('./workers/tmdb-rechecker');
 const traktSync = require('./workers/trakt-sync');
+const federationSync = require('./workers/federation-sync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,7 +76,7 @@ app.use(
     max: 600,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path === '/health',
+    skip: (req) => req.path === '/health' || req.path === '/api/health',
   })
 );
 
@@ -83,15 +92,30 @@ async function healthHandler(req, res) {
       uptime_seconds: Math.round(process.uptime()),
     });
   } catch (err) {
+    // Don't leak the raw DB error (host, driver internals) to callers — log it.
+    logger.error({ err }, 'health check: database unreachable');
     res.status(503).json({
       status: 'degraded',
       db: 'unreachable',
-      error: err.message,
     });
   }
 }
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+
+app.use('/api/auth', authRoute);
+
+// Owner lock: gate every API route except the friend-facing federation API
+// (per-friend tokens), the unlock/status endpoints, and health. Static assets
+// and the SPA shell load freely so the unlock screen can render. No-op until
+// OWNER_PASSCODE is set.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (req.path.startsWith('/api/federation')) return next();
+  if (req.path.startsWith('/api/auth')) return next();
+  if (req.path === '/api/health') return next();
+  return requireOwner(req, res, next);
+});
 
 app.use('/api/watches', watches);
 app.use('/api/stats', stats);
@@ -103,6 +127,11 @@ app.use('/api/export', exportRoute);
 app.use('/api/tags', tagsRoute);
 app.use('/api/watchlist', watchlist);
 app.use('/api/alist-membership', alist);
+app.use('/api/federation', federationRoute);
+app.use('/api/friends', friends);
+app.use('/api/notifications', notificationsRoute);
+app.use('/api/recommendations', recommendationsRoute);
+app.use('/api/push', pushRoute);
 
 // Serve client build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -134,6 +163,8 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     await initSchema();
     await runMigrations();
     logger.info('Schema ready');
+    await federation.ensureIdentity();
+    await federation.ensureSettings();
     const server = app.listen(PORT, () =>
       logger.info({ port: PORT }, `Marquee server on http://localhost:${PORT}`)
     );
@@ -143,6 +174,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     backup.start();
     tmdbRechecker.start();
     traktSync.start();
+    federationSync.start();
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -151,6 +183,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       backup.stop();
       tmdbRechecker.stop();
       traktSync.stop();
+      federationSync.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };

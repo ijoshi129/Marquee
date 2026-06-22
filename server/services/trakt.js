@@ -44,6 +44,24 @@ function canRefresh() {
   return Boolean(c.clientId && c.clientSecret && c.refreshToken && c.redirectUri);
 }
 
+// Proactively refresh when the persisted expiry has (nearly) passed, rather than
+// always waiting for a 401 round-trip. Falls back to the stored token if refresh
+// isn't possible — the reactive 401 path still covers us.
+function tokenExpired() {
+  const exp = Number(process.env.TRAKT_TOKEN_EXPIRES_AT) || 0;
+  return exp > 0 && Date.now() > exp - 60_000;
+}
+async function validAccessToken() {
+  if (tokenExpired() && canRefresh()) {
+    try {
+      return await refreshAccessToken();
+    } catch (err) {
+      logger.warn({ err }, 'trakt: proactive token refresh failed, falling back to reactive');
+    }
+  }
+  return credentials().accessToken;
+}
+
 function persistEnv(updates) {
   for (const [key, value] of Object.entries(updates)) {
     process.env[key] = String(value);
@@ -167,8 +185,18 @@ async function findHistoryId(tmdbId, watchedAtIso, accessToken, opts = {}) {
       if (opts.strict) throw new Error('Trakt history lookup returned an unexpected response');
       return null;
     }
-    const match = items.find((it) => Number(it?.movie?.ids?.tmdb) === Number(tmdbId));
-    return match?.id ?? null;
+    // Of the same-film plays in the window, pick the one closest in time to the
+    // watch we're syncing. Matching on tmdb_id alone would collapse two showings
+    // of the same film (a double feature) onto the first play's id, leaving the
+    // second never posted and both watches pointing at one history row.
+    const candidates = items.filter((it) => Number(it?.movie?.ids?.tmdb) === Number(tmdbId));
+    if (!candidates.length) return null;
+    candidates.sort(
+      (a, b) =>
+        Math.abs(Date.parse(a.watched_at) - watchedAtMs) -
+        Math.abs(Date.parse(b.watched_at) - watchedAtMs)
+    );
+    return candidates[0]?.id ?? null;
   } catch (err) {
     if (err.status === 401 && opts.throwUnauthorized) throw err;
     if (opts.strict) throw err;
@@ -235,7 +263,7 @@ async function syncWatch(watchId) {
     const watchedAtIso = new Date(row.showtime || row.watched_at).toISOString();
 
     try {
-      let token = credentials().accessToken;
+      let token = await validAccessToken();
 
       // A leftover history id with no trakt_synced_at means this is a resync —
       // the watch's date or TMDB id changed. Drop the stale play before
