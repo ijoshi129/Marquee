@@ -294,7 +294,7 @@ function CadenceChart({ breakdown, max, onMonthClick }) {
   // unlogged months at the start of the earliest year, trailing empties for
   // unfinished current year).
   const grouped = [];
-  for (const m of breakdown) {
+  for (const m of breakdown || []) {
     const yr = m.month.slice(0, 4);
     const last = grouped[grouped.length - 1];
     if (!last || last[0] !== yr) grouped.push([yr, [m]]);

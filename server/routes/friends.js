@@ -265,6 +265,9 @@ router.get('/feed', async (req, res) => {
     const groups = new Map();
     const add = (p, who) => {
       if (!p.showtime || !p.theater_name) return;
+      // A peer-supplied showtime that's present but unparseable would throw in
+      // matchKey (new Date(...).toISOString()) and take down the whole feed.
+      if (Number.isNaN(Date.parse(p.showtime))) return;
       const k = matchKey(p);
       if (!groups.has(k)) groups.set(k, { p, people: [] });
       groups.get(k).people.push(who);

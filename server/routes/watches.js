@@ -10,6 +10,28 @@ const { notifyNewMatches } = require('../services/together');
 
 const router = express.Router();
 
+// Watch ids are UUIDs. Reject a malformed :id with 404 up front so it never
+// reaches Postgres as an invalid-uuid cast (which would surface as an opaque 500).
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+router.param('id', (req, res, next, id) => {
+  if (!UUID_RX.test(id)) return res.status(404).json({ error: 'Not found' });
+  next();
+});
+
+const VALID_STATUSES = new Set(['pending', 'watched', 'cancelled', 'no_show']);
+// Validate the two constrained fields up front so a bad value returns 400 with a
+// clear message instead of a Postgres CHECK/type error bubbling up as a 500.
+function validateStatusRating(body) {
+  if ('status' in body && body.status != null && !VALID_STATUSES.has(body.status)) {
+    return 'status must be one of: pending, watched, cancelled, no_show';
+  }
+  if ('rating' in body && body.rating != null && body.rating !== '') {
+    const r = Number(body.rating);
+    if (!Number.isInteger(r) || r < 1 || r > 5) return 'rating must be an integer from 1 to 5';
+  }
+  return null;
+}
+
 const SELECT_WATCH = `
   SELECT
     w.id, w.tmdb_id, w.title, w.showtime,
@@ -90,13 +112,15 @@ router.get('/', async (req, res) => {
     // Broad search: own title + notes + theater + entire TMDB payload (title,
     // original_title, director, genres array, overview).
     if (req.query.q && req.query.q.trim()) {
-      params.push(`%${req.query.q.trim().toLowerCase()}%`);
+      // Escape LIKE wildcards so a literal % or _ in the query is matched as text.
+      const term = req.query.q.trim().toLowerCase().replace(/[\\%_]/g, '\\$&');
+      params.push(`%${term}%`);
       const i = params.length;
       where.push(
-        `(LOWER(w.title) LIKE $${i}
-           OR LOWER(COALESCE(w.notes, '')) LIKE $${i}
-           OR LOWER(COALESCE(t.name, '')) LIKE $${i}
-           OR LOWER(COALESCE(tc.payload::text, '')) LIKE $${i})`
+        `(LOWER(w.title) LIKE $${i} ESCAPE '\\'
+           OR LOWER(COALESCE(w.notes, '')) LIKE $${i} ESCAPE '\\'
+           OR LOWER(COALESCE(t.name, '')) LIKE $${i} ESCAPE '\\'
+           OR LOWER(COALESCE(tc.payload::text, '')) LIKE $${i} ESCAPE '\\')`
       );
     }
 
@@ -192,6 +216,8 @@ router.post('/', async (req, res) => {
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'title is required' });
     }
+    const invalid = validateStatusRating(req.body || {});
+    if (invalid) return res.status(400).json({ error: invalid });
 
     const theater = theater_name ? await upsertTheater(theater_name) : null;
 
@@ -268,6 +294,9 @@ const PATCH_FIELDS = [
 
 router.patch('/:id', async (req, res) => {
   try {
+    const invalid = validateStatusRating(req.body || {});
+    if (invalid) return res.status(400).json({ error: invalid });
+
     const updates = [];
     const params = [];
 

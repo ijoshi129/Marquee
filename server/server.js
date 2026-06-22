@@ -76,7 +76,7 @@ app.use(
     max: 600,
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path === '/health',
+    skip: (req) => req.path === '/health' || req.path === '/api/health',
   })
 );
 
@@ -92,10 +92,11 @@ async function healthHandler(req, res) {
       uptime_seconds: Math.round(process.uptime()),
     });
   } catch (err) {
+    // Don't leak the raw DB error (host, driver internals) to callers — log it.
+    logger.error({ err }, 'health check: database unreachable');
     res.status(503).json({
       status: 'degraded',
       db: 'unreachable',
-      error: err.message,
     });
   }
 }

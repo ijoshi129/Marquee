@@ -69,10 +69,20 @@ async function computeMatches() {
   return out;
 }
 
+// Match keys we've already announced this process lifetime. The notifications
+// table also dedupes by key, but the owner can "Clear all" — which would let the
+// same still-upcoming match re-announce on the next sync. This in-memory guard
+// survives a clear; keys are forgotten once the match is no longer live so a
+// genuinely new future match can announce again.
+const announced = new Set();
+
 // Notify for any matches not already announced (deduped by the match key).
 async function notifyNewMatches() {
   const matches = await computeMatches();
+  const live = new Set();
   for (const m of matches) {
+    live.add(m.key);
+    if (announced.has(m.key)) continue;
     const film = m.p.tmdb?.title || m.p.title;
     const youIn = m.people.some((w) => w.you);
     const friendNames = m.people.filter((w) => !w.you).map((w) => w.name);
@@ -88,7 +98,9 @@ async function notifyNewMatches() {
       payload: { key: m.key, film },
       dedupeKey: `together:${m.key}`,
     });
+    announced.add(m.key);
   }
+  for (const k of announced) if (!live.has(k)) announced.delete(k);
 }
 
 module.exports = { computeMatches, notifyNewMatches };

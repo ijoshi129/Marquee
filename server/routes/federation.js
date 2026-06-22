@@ -305,8 +305,10 @@ router.post('/recommend', requireFriendToken, async (req, res) => {
   try {
     const { tmdb_id, title } = req.body || {};
     if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
-    const name = req.friend.display_name || 'A friend';
-    let filmTitle = title;
+    // Cap peer-supplied strings so a friend can't store an unbounded blob.
+    const clamp = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s);
+    const name = clamp(req.friend.display_name, 120) || 'A friend';
+    let filmTitle = clamp(title, 300);
     if (tmdb_id) {
       try {
         const d = await tmdb.getOrFetchDetails(tmdb_id);

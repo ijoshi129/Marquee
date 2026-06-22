@@ -99,15 +99,21 @@ async function recheckOnce() {
       if (isUnseen(row) && !unseenRevealed(row.showtime)) continue;
       checked++;
       let hit = false;
+      let errored = false;
       try {
         hit = await recheckOne(row);
       } catch (err) {
-        logger.error({ err, watch_id: row.id }, 'tmdb-rechecker: row failed');
+        // Transient failure (network blip, TMDB 429/5xx) — don't penalise the
+        // row, or a brief outage would permanently abandon resolvable films.
+        // Only a clean "no match" burns a retry.
+        errored = true;
+        logger.error({ err, watch_id: row.id }, 'tmdb-rechecker: row failed (transient, no retry burned)');
       }
       if (hit) {
         resolved++;
         continue;
       }
+      if (errored) continue;
       const next = (row.tmdb_retry_count || 0) + 1;
       if (next >= MAX_RETRIES) abandoned++;
       await pool.query(

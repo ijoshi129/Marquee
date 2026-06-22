@@ -120,12 +120,16 @@ export default function Notifications({ refreshKey, onWatchUpdated, onSelectWatc
   async function dismissAll() {
     setBusyId('all');
     try {
-      await Promise.all(
+      // allSettled so one failed update doesn't strand the rows that did
+      // succeed — clear those, keep any that failed so they can be retried.
+      const results = await Promise.allSettled(
         items.map((w) => api.updateWatch(w.id, { acknowledged: true }))
       );
-      setItems([]);
-    } catch (err) {
-      console.error('dismiss all:', err);
+      const failedIds = new Set(
+        items.filter((_, i) => results[i].status === 'rejected').map((w) => w.id)
+      );
+      setItems((prev) => prev.filter((w) => failedIds.has(w.id)));
+      if (failedIds.size) console.error(`dismiss all: ${failedIds.size} failed`);
     } finally {
       setBusyId(null);
     }

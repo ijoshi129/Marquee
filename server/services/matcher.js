@@ -77,8 +77,32 @@ async function ingestReservation({ fields, gmail_message_id }) {
 
 // Mark a pending watch as 'cancelled' based on its order_number.
 async function ingestCancellation({ fields, gmail_message_id }) {
-  const { order_number } = fields;
+  const { order_number, title } = fields;
   if (!order_number) return { action: 'orphan', watch_id: null };
+
+  const pending = await pool.query(
+    `SELECT id, title FROM watches WHERE order_number = $1 AND status = 'pending'`,
+    [order_number]
+  );
+  if (!pending.rows.length) {
+    // No matching pending row. Could be a reservation we never saw — log and move on.
+    logger.info(`cancellation: no pending watch found for order_number=${order_number}`);
+    return { action: 'orphan', watch_id: null };
+  }
+
+  // order_number is AMC's canonical key, but if the cancellation also carried a
+  // title, sanity-check it so a reused or mis-parsed order number can't silently
+  // cancel an unrelated reservation.
+  if (title) {
+    const want = normTitle(title);
+    const matches = pending.rows.every((row) => normTitle(row.title) === want);
+    if (!matches) {
+      logger.warn(
+        `cancellation: order_number=${order_number} title "${title}" doesn't match the pending reservation — skipping`
+      );
+      return { action: 'mismatch', watch_id: null };
+    }
+  }
 
   const r = await pool.query(
     `UPDATE watches
@@ -87,13 +111,7 @@ async function ingestCancellation({ fields, gmail_message_id }) {
      RETURNING id`,
     [order_number]
   );
-
-  if (r.rows.length) {
-    return { action: 'cancelled', watch_id: r.rows[0].id };
-  }
-  // No matching pending row. Could be a reservation we never saw — log and move on.
-  logger.info(`cancellation: no pending watch found for order_number=${order_number}`);
-  return { action: 'orphan', watch_id: null };
+  return { action: 'cancelled', watch_id: r.rows[0].id };
 }
 
 // Match a parsed Thank You against pending watches.

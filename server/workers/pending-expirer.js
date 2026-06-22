@@ -102,7 +102,11 @@ async function dailyMaintenance() {
 let task = null;
 function start() {
   logger.info('pending-expirer: starting (daily at 03:00)');
-  task = cron.schedule('0 3 * * *', dailyMaintenance);
+  task = cron.schedule('0 3 * * *', () =>
+    dailyMaintenance().catch((err) =>
+      logger.error({ err }, 'pending-expirer: daily maintenance failed')
+    )
+  );
   return task;
 }
 
