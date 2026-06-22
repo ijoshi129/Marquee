@@ -52,6 +52,21 @@ export default function NotificationsBell({ onOpen }) {
     return () => clearInterval(id);
   }, [load, open]);
 
+  // Refresh immediately when the app returns to the foreground so the badge is
+  // current the instant you reopen it (a push received while closed shows up
+  // right away rather than waiting for the next poll tick).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', load);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', load);
+    };
+  }, [load]);
+
   // Push is only available on the installed PWA over HTTPS (so the service
   // worker is registered). Hide the toggle otherwise.
   useEffect(() => {
