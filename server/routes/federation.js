@@ -76,6 +76,11 @@ router.post('/pair', async (req, res) => {
       return res.status(400).json({ error: 'code, instance_id, base_url and token are required' });
     }
 
+    const safeUrl = fed.safeBaseUrl(base_url);
+    if (!safeUrl) {
+      return res.status(400).json({ error: 'Invalid base_url' });
+    }
+
     const codeHash = fed.sha256(code);
     await client.query('BEGIN');
 
@@ -87,6 +92,18 @@ router.post('/pair', async (req, res) => {
     if (!invite) {
       await client.query('ROLLBACK');
       return res.status(401).json({ error: 'Invalid or expired invite code' });
+    }
+
+    // A valid code must not be usable to overwrite an existing, active
+    // friendship's tokens/URL (which would hijack it). Re-pairing after a revoke
+    // is fine — that row isn't active. Owner removes the friend to re-pair fresh.
+    const existing = await client.query(
+      `SELECT status FROM friends WHERE remote_instance_id = $1`,
+      [instance_id]
+    );
+    if (existing.rows[0] && existing.rows[0].status === 'active') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Already connected to this instance' });
     }
 
     // The token WE will accept from this friend on future calls (store its hash).
@@ -105,7 +122,7 @@ router.post('/pair', async (req, res) => {
          outbound_token = EXCLUDED.outbound_token,
          updated_at = NOW()
        RETURNING id`,
-      [instance_id, display_name || null, base_url, fed.sha256(ourInboundToken), token]
+      [instance_id, display_name || null, safeUrl, fed.sha256(ourInboundToken), token]
     );
 
     await client.query(

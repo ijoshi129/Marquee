@@ -55,6 +55,28 @@ function isEnabled() {
   return process.env.FEDERATION_ENABLED === '1' || process.env.FEDERATION_ENABLED === 'true';
 }
 
+// A friend's base_url is fetched server-side with our outbound token attached,
+// so a peer-supplied value is an SSRF / token-exfiltration vector. We can't ban
+// private addresses (friends legitimately live on localhost / LAN / Tailscale),
+// but we can require a sane http(s) URL and block the link-local range that
+// cloud metadata services sit on (169.254.0.0/16, e.g. 169.254.169.254). Returns
+// the normalized origin string, or null if the URL is unacceptable.
+function safeBaseUrl(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let url;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  const host = url.hostname;
+  if (host === '0.0.0.0' || host === '[::]' || host === '::') return null;
+  if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)) return null; // link-local / metadata
+  if (/^fe80:/i.test(host)) return null; // IPv6 link-local
+  return url.origin;
+}
+
 const PING_DEBOUNCE_MS = 400;
 const PING_TIMEOUT_MS = 5000;
 let pingTimer = null;
@@ -101,5 +123,6 @@ module.exports = {
   ensureSettings,
   getSettings,
   isEnabled,
+  safeBaseUrl,
   notifyFriends,
 };

@@ -43,11 +43,14 @@ export default function NotificationsBell({ onOpen }) {
     api.alerts().then(setData).catch(() => {});
   }, []);
 
+  // Poll briskly while the panel is open; back off to a slow heartbeat when it's
+  // closed (just enough to keep the unread badge current) so we're not hitting
+  // the server every 5s in the background all day.
   useEffect(() => {
     load();
-    const id = setInterval(load, 5000);
+    const id = setInterval(load, open ? 5000 : 30000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, open]);
 
   // Push is only available on the installed PWA over HTTPS (so the service
   // worker is registered). Hide the toggle otherwise.

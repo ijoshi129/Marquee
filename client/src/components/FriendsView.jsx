@@ -31,7 +31,7 @@ function dayLabel(at) {
 
 // "You & Alice" / "Alice & Bob" / "You, Alice & Bob" — You first.
 function peopleLabel(people) {
-  const ns = [...people].sort((a, b) => (a.you ? -1 : b.you ? 1 : 0)).map((p) => p.name);
+  const ns = [...(people || [])].sort((a, b) => (a.you ? -1 : b.you ? 1 : 0)).map((p) => p.name);
   if (ns.length <= 1) return ns[0] || '';
   if (ns.length === 2) return `${ns[0]} & ${ns[1]}`;
   return `${ns.slice(0, -1).join(', ')} & ${ns[ns.length - 1]}`;
@@ -181,9 +181,10 @@ export default function FriendsView({ onAddFriend }) {
               ? it.together ? 'are watching' : 'is watching'
               : it.together ? 'are seeing' : 'is seeing'
             : it.rating ? 'rated' : 'logged';
+        const people = it.people || [];
         const avatarName =
           it.kind === 'upcoming'
-            ? (it.people.find((p) => !p.you) || it.people[0]).name
+            ? (people.find((p) => !p.you) || people[0] || {}).name
             : it.friend_name;
         return (
           <div key={it.id}>

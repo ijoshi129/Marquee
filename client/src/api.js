@@ -14,6 +14,14 @@ function storedPasscode() {
   }
 }
 
+// The app registers a handler so a mid-session lock (a stale/rotated passcode
+// causing a 401) re-shows the Unlock gate instead of stranding the user on
+// error banners with no way back.
+let lockedHandler = null;
+export function onLocked(fn) {
+  lockedHandler = fn;
+}
+
 async function request(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   const pass = storedPasscode();
@@ -29,7 +37,12 @@ async function request(path, opts = {}) {
       locked = !!j.locked;
     } catch {}
     const err = new Error(body || `HTTP ${res.status}`);
-    if (res.status === 401 && locked) err.locked = true;
+    if (res.status === 401 && locked) {
+      err.locked = true;
+      // The stored passcode is no longer accepted — drop it and re-gate.
+      setStoredPasscode(null);
+      lockedHandler?.();
+    }
     throw err;
   }
   return res.json();

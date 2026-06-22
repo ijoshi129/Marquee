@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api';
+import { api, onLocked } from './api';
 import StatsBar from './components/StatsBar';
 import WatchList from './components/WatchList';
 import AddWatchModal from './components/AddWatchModal';
@@ -188,6 +188,13 @@ export default function App() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // If a request later 401s because the stored passcode went stale, re-show the
+  // unlock gate rather than leaving the user stuck on error banners.
+  useEffect(() => {
+    onLocked(() => setLocked(true));
+    return () => onLocked(null);
   }, []);
 
   useEffect(() => {

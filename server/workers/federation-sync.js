@@ -42,18 +42,37 @@ async function syncFriend(friend) {
   // Full replace, not incremental: re-pulling the whole shared set is what makes
   // edits propagate — a re-rated film updates, and a film the friend marked
   // private (or deleted) disappears from our cache. Cheap at personal scale.
+  // Watches, profile, and identity are written in one transaction so a mid-sync
+  // failure can never leave a half-updated snapshot.
   const watches = Array.isArray(activity.watches) ? activity.watches : [];
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM friend_watches WHERE friend_id = $1', [friend.id]);
     for (const w of watches) {
+      // Skip a malformed row rather than aborting the whole batch — one bad
+      // entry shouldn't wipe out the friend's entire cache for the cycle.
+      if (!w || !w.remote_id) continue;
       await client.query(
         `INSERT INTO friend_watches (friend_id, remote_watch_id, payload, watched_at, fetched_at)
          VALUES ($1, $2, $3, $4, NOW())`,
         [friend.id, w.remote_id, w, w.watched_at || null]
       );
     }
+    await client.query(
+      `INSERT INTO friend_profiles (friend_id, stats, now_playing, fetched_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (friend_id) DO UPDATE SET
+         stats = EXCLUDED.stats, now_playing = EXCLUDED.now_playing, fetched_at = NOW()`,
+      [friend.id, profile.stats || null, JSON.stringify(profile.upcoming || [])]
+    );
+    // Friends can rename themselves; refresh the cached identity.
+    await client.query(
+      `UPDATE friends SET display_name = $2, avatar_url = $3,
+              last_synced_at = NOW(), last_error = NULL, updated_at = NOW()
+         WHERE id = $1`,
+      [friend.id, profile.display_name || friend.display_name, profile.avatar_url || friend.avatar_url]
+    );
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -62,31 +81,23 @@ async function syncFriend(friend) {
     client.release();
   }
 
-  await pool.query(
-    `INSERT INTO friend_profiles (friend_id, stats, now_playing, fetched_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (friend_id) DO UPDATE SET
-       stats = EXCLUDED.stats, now_playing = EXCLUDED.now_playing, fetched_at = NOW()`,
-    [friend.id, profile.stats || null, JSON.stringify(profile.upcoming || [])]
-  );
-
-  // Friends can rename themselves; refresh the cached identity.
-  await pool.query(
-    `UPDATE friends SET display_name = $2, avatar_url = $3,
-            last_synced_at = NOW(), last_error = NULL, updated_at = NOW()
-       WHERE id = $1`,
-    [friend.id, profile.display_name || friend.display_name, profile.avatar_url || friend.avatar_url]
-  );
-
   return watches.length;
 }
+
+// Per-friend in-flight guard, shared by the periodic cron and the live "ping"
+// path so the same friend is never synced concurrently (which would race two
+// full-replace transactions and let stale data win). Returns 'skipped' when a
+// sync for that friend is already running.
+const inFlight = new Set();
 
 // Sync one friend, recording the outcome on its row. A 401 means they revoked
 // us; any other error is transient — keep the stale cache and the active status.
 async function runSyncFriend(friend) {
+  if (inFlight.has(friend.id)) return 'skipped';
+  inFlight.add(friend.id);
   try {
     await syncFriend(friend);
-    return true;
+    return 'synced';
   } catch (err) {
     if (err.unauthorized) {
       await pool.query(
@@ -101,7 +112,9 @@ async function runSyncFriend(friend) {
       );
       logger.error({ err, friend_id: friend.id }, 'federation-sync: friend failed');
     }
-    return false;
+    return 'failed';
+  } finally {
+    inFlight.delete(friend.id);
   }
 }
 
@@ -119,7 +132,9 @@ async function syncOnce() {
   try {
     const { rows } = await pool.query(`SELECT * FROM friends WHERE status = 'active'`);
     for (const friend of rows) {
-      (await runSyncFriend(friend)) ? synced++ : failed++;
+      const r = await runSyncFriend(friend);
+      if (r === 'synced') synced++;
+      else if (r === 'failed') failed++;
     }
     await notifyNewMatches().catch((err) => logger.error({ err }, 'together notify'));
     logger.info({ synced, failed, ms: Date.now() - t0 }, 'federation-sync: cycle done');
@@ -130,25 +145,19 @@ async function syncOnce() {
   }
 }
 
-// Sync a single friend immediately — used by the live "ping" path. A per-friend
-// in-flight guard coalesces a burst of pings for the same friend.
-const inFlight = new Set();
+// Sync a single friend immediately — used by the live "ping" path.
 async function syncFriendById(friendId) {
-  if (!fed.isEnabled() || inFlight.has(friendId)) return;
-  inFlight.add(friendId);
+  if (!fed.isEnabled()) return;
   try {
     const { rows } = await pool.query(
       `SELECT * FROM friends WHERE id = $1 AND status = 'active'`,
       [friendId]
     );
-    if (rows[0]) {
-      await runSyncFriend(rows[0]);
+    if (rows[0] && (await runSyncFriend(rows[0])) !== 'skipped') {
       await notifyNewMatches().catch((err) => logger.error({ err }, 'together notify'));
     }
   } catch (err) {
     logger.error({ err, friend_id: friendId }, 'federation-sync: targeted sync failed');
-  } finally {
-    inFlight.delete(friendId);
   }
 }
 

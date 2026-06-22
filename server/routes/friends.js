@@ -112,6 +112,12 @@ router.post('/accept', async (req, res) => {
     if (!decoded.base_url || !decoded.code) {
       return res.status(400).json({ error: 'Invalid invite string' });
     }
+    // The invite's base_url is fetched server-side with our token — vet it before
+    // we ever call it, and store the normalized form.
+    const inviterUrl = fed.safeBaseUrl(decoded.base_url);
+    if (!inviterUrl) {
+      return res.status(400).json({ error: 'Invite points at an unacceptable address' });
+    }
 
     const me = await fed.getIdentity();
     // The token the inviter will present to US on future calls.
@@ -121,7 +127,7 @@ router.post('/accept', async (req, res) => {
     const timer = setTimeout(() => controller.abort(), PAIR_TIMEOUT_MS);
     let pairRes;
     try {
-      const resp = await fetch(`${decoded.base_url.replace(/\/$/, '')}/api/federation/pair`, {
+      const resp = await fetch(`${inviterUrl}/api/federation/pair`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -165,7 +171,7 @@ router.post('/accept', async (req, res) => {
         pairRes.instance_id,
         pairRes.display_name || null,
         pairRes.avatar_url || null,
-        decoded.base_url,
+        inviterUrl,
         fed.sha256(ourInboundToken),
         pairRes.token,
       ]

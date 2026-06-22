@@ -9,6 +9,7 @@ export default function SocialBar({ item, onChanged }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const comments = item.comments || [];
   const n = comments.length;
 
@@ -17,6 +18,7 @@ export default function SocialBar({ item, onChanged }) {
     const body = text.trim();
     if (!body || busy) return;
     setBusy(true);
+    setFailed(false);
     try {
       // Route to the thread's canonical host: a friend's copy, or your own film.
       if (item.host_own_watch_id) {
@@ -26,7 +28,10 @@ export default function SocialBar({ item, onChanged }) {
       }
       setText('');
       setTimeout(() => onChanged?.(), 1500);
-    } catch {} finally {
+    } catch {
+      // Keep the typed text so the user can retry; just flag that it didn't send.
+      setFailed(true);
+    } finally {
       setBusy(false);
     }
   }
@@ -41,7 +46,7 @@ export default function SocialBar({ item, onChanged }) {
       {open && (
         <div className="cmt-inline">
           {comments.map((c, i) => (
-            <div key={i} className="cmt">
+            <div key={c.id || `${c.at}-${i}`} className="cmt">
               <span className="cmt-ava">{(c.name || '?').slice(0, 1).toUpperCase()}</span>
               <span className="cmt-body">
                 <span className="cmt-name">{c.name}</span>
@@ -62,6 +67,7 @@ export default function SocialBar({ item, onChanged }) {
               {busy ? '…' : 'Post'}
             </button>
           </form>
+          {failed && <div className="cmt-error">Couldn’t post — try again.</div>}
         </div>
       )}
     </div>

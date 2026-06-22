@@ -3210,6 +3210,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .cmt-input { flex: 1; min-width: 0; font: inherit; font-size: 0.9rem; background: #0b0b0e; border: 1px solid var(--bg-tint-strong); border-radius: var(--radius-md); color: var(--fg); padding: 10px 12px; }
 .cmt-send { font: inherit; font-weight: 600; cursor: pointer; padding: 10px 16px; border: none; border-radius: var(--radius-md); background: var(--accent); color: var(--accent-fg); }
 .cmt-send:disabled { opacity: 0.5; cursor: default; }
+.cmt-error { font-size: 0.78rem; color: var(--danger, #e06c6c); margin-top: 6px; }
 .picker-title { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-mute); margin: 2px 12px 8px; }
 .fmenu-ico.picker-ava { border-radius: 50%; font-family: var(--font-body); font-weight: 700; font-size: 0.95rem; }
 
