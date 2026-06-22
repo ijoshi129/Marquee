@@ -58,7 +58,6 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
         </div>
         <div>
           <h2 className="friend-profile-name">{friend.display_name || 'Friend'}</h2>
-          {friend.handle && <div className="friend-profile-handle">@{friend.handle}</div>}
           <div className="friend-profile-synced">
             {friend.last_error ? `Couldn't reach · synced ${fmtAgo(friend.last_synced_at)}` : `Synced ${fmtAgo(friend.last_synced_at)}`}
           </div>

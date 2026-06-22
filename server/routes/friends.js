@@ -29,7 +29,7 @@ function decodeInvite(str) {
 router.get('/', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, remote_instance_id, display_name, handle, avatar_url, base_url,
+      `SELECT id, remote_instance_id, display_name, avatar_url, base_url,
               status, direction, last_synced_at, last_error, created_at
          FROM friends ORDER BY created_at DESC`
     );
@@ -126,7 +126,6 @@ router.post('/accept', async (req, res) => {
           code: decoded.code,
           instance_id: me.instance_id,
           display_name: me.display_name,
-          handle: me.handle,
           base_url: baseUrl(),
           token: ourInboundToken,
         }),
@@ -148,23 +147,21 @@ router.post('/accept', async (req, res) => {
 
     const { rows } = await pool.query(
       `INSERT INTO friends
-         (remote_instance_id, display_name, handle, avatar_url, base_url, status,
+         (remote_instance_id, display_name, avatar_url, base_url, status,
           direction, inbound_token_hash, outbound_token)
-       VALUES ($1, $2, $3, $4, $5, 'active', 'accepted', $6, $7)
+       VALUES ($1, $2, $3, $4, 'active', 'accepted', $5, $6)
        ON CONFLICT (remote_instance_id) DO UPDATE SET
          display_name = EXCLUDED.display_name,
-         handle = EXCLUDED.handle,
          avatar_url = EXCLUDED.avatar_url,
          base_url = EXCLUDED.base_url,
          status = 'active',
          inbound_token_hash = EXCLUDED.inbound_token_hash,
          outbound_token = EXCLUDED.outbound_token,
          updated_at = NOW()
-       RETURNING id, remote_instance_id, display_name, handle, base_url, status`,
+       RETURNING id, remote_instance_id, display_name, base_url, status`,
       [
         pairRes.instance_id,
         pairRes.display_name || null,
-        pairRes.handle || null,
         pairRes.avatar_url || null,
         decoded.base_url,
         fed.sha256(ourInboundToken),
@@ -210,7 +207,7 @@ router.get('/:id/watches', async (req, res) => {
 router.get('/:id/profile', async (req, res) => {
   try {
     const friendRes = await pool.query(
-      `SELECT id, display_name, handle, avatar_url, last_synced_at, last_error
+      `SELECT id, display_name, avatar_url, last_synced_at, last_error
          FROM friends WHERE id = $1`,
       [req.params.id]
     );

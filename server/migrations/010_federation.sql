@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS federation_identity (
   id           BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
   instance_id  UUID NOT NULL DEFAULT gen_random_uuid(),
   display_name TEXT NOT NULL DEFAULT 'Marquee',
-  handle       TEXT,
   avatar_url   TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -24,7 +23,6 @@ CREATE TABLE IF NOT EXISTS friends (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   remote_instance_id UUID UNIQUE,
   display_name       TEXT,
-  handle             TEXT,
   avatar_url         TEXT,
   base_url           TEXT NOT NULL,
   status             TEXT NOT NULL DEFAULT 'pending'

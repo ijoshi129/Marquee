@@ -105,7 +105,6 @@ export default function FriendsView() {
                   <span className="friend-row-text">
                     <span className="friend-row-name">{f.display_name || 'Pending…'}</span>
                     <span className="friend-row-meta">
-                      {f.handle ? `@${f.handle} · ` : ''}
                       {f.status === 'revoked'
                         ? 'Disconnected'
                         : f.last_error

@@ -69,10 +69,10 @@ async function syncFriend(friend) {
 
   // Friends can rename themselves; refresh the cached identity.
   await pool.query(
-    `UPDATE friends SET display_name = $2, handle = $3, avatar_url = $4,
+    `UPDATE friends SET display_name = $2, avatar_url = $3,
             last_synced_at = NOW(), last_error = NULL, updated_at = NOW()
        WHERE id = $1`,
-    [friend.id, profile.display_name || friend.display_name, profile.handle || friend.handle, profile.avatar_url || friend.avatar_url]
+    [friend.id, profile.display_name || friend.display_name, profile.avatar_url || friend.avatar_url]
   );
 
   return watches.length;

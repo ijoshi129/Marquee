@@ -66,7 +66,7 @@ router.post('/pair', async (req, res) => {
     if (!fed.isEnabled()) {
       return res.status(503).json({ error: 'Federation is not enabled on this instance' });
     }
-    const { code, instance_id, display_name, handle, base_url, token } = req.body || {};
+    const { code, instance_id, display_name, base_url, token } = req.body || {};
     if (!code || !instance_id || !base_url || !token) {
       return res.status(400).json({ error: 'code, instance_id, base_url and token are required' });
     }
@@ -89,19 +89,18 @@ router.post('/pair', async (req, res) => {
 
     const friendRes = await client.query(
       `INSERT INTO friends
-         (remote_instance_id, display_name, handle, base_url, status, direction,
+         (remote_instance_id, display_name, base_url, status, direction,
           inbound_token_hash, outbound_token)
-       VALUES ($1, $2, $3, $4, 'active', 'invited', $5, $6)
+       VALUES ($1, $2, $3, 'active', 'invited', $4, $5)
        ON CONFLICT (remote_instance_id) DO UPDATE SET
          display_name = EXCLUDED.display_name,
-         handle = EXCLUDED.handle,
          base_url = EXCLUDED.base_url,
          status = 'active',
          inbound_token_hash = EXCLUDED.inbound_token_hash,
          outbound_token = EXCLUDED.outbound_token,
          updated_at = NOW()
        RETURNING id`,
-      [instance_id, display_name || null, handle || null, base_url, fed.sha256(ourInboundToken), token]
+      [instance_id, display_name || null, base_url, fed.sha256(ourInboundToken), token]
     );
 
     await client.query(
@@ -114,7 +113,6 @@ router.post('/pair', async (req, res) => {
     res.json({
       instance_id: me.instance_id,
       display_name: me.display_name,
-      handle: me.handle,
       avatar_url: me.avatar_url,
       token: ourInboundToken,
     });
@@ -187,7 +185,6 @@ router.get('/profile', requireFriendToken, async (req, res) => {
     res.json({
       instance_id: identity.instance_id,
       display_name: identity.display_name,
-      handle: identity.handle,
       avatar_url: identity.avatar_url,
       stats,
       upcoming,

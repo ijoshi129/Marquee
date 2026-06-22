@@ -19,16 +19,15 @@ function safeEqualHex(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-// Seed this instance's identity once. display_name/handle come from env on
-// first boot; later edits live in the row and aren't overwritten.
+// Seed this instance's identity once. display_name comes from env on first
+// boot; later edits live in the row and aren't overwritten.
 async function ensureIdentity() {
   const name = process.env.INSTANCE_NAME || 'Marquee';
-  const handle = process.env.INSTANCE_HANDLE || null;
   await pool.query(
-    `INSERT INTO federation_identity (id, display_name, handle)
-     VALUES (TRUE, $1, $2)
+    `INSERT INTO federation_identity (id, display_name)
+     VALUES (TRUE, $1)
      ON CONFLICT (id) DO NOTHING`,
-    [name, handle]
+    [name]
   );
   return getIdentity();
 }
