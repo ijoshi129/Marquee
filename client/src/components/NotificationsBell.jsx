@@ -22,7 +22,7 @@ function BellIcon() {
   );
 }
 
-const ICON = { together: '🍿', friend_added: '👋' };
+const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨' };
 
 function urlB64ToUint8Array(base64) {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);

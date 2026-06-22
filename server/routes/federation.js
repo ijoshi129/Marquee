@@ -21,7 +21,9 @@ const SELECT_SHARED = `
     w.id AS remote_id, w.tmdb_id, w.title, w.showtime, w.status,
     w.rating, w.tags, w.watched_at,
     t.name AS theater_name,
-    tc.payload AS tmdb
+    tc.payload AS tmdb,
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+                FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
   FROM watches w
   LEFT JOIN theaters t ON t.id = w.theater_id
   LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
@@ -235,6 +237,48 @@ router.get('/activity', requireFriendToken, async (req, res) => {
 router.post('/ping', requireFriendToken, async (req, res) => {
   res.json({ ok: true });
   federationSync.syncFriendById(req.friend.id).catch(() => {});
+});
+
+// POST /api/federation/inbox — a friend commenting on one of our films. We're
+// the hub for events on our watches: store it, notify the owner, and it gets
+// re-broadcast to our friends via /activity. Gated by friend token.
+const COMMENT_MAX = 1000;
+router.post('/inbox', requireFriendToken, async (req, res) => {
+  try {
+    const { kind, target_watch_id, body } = req.body || {};
+    if (kind !== 'comment' || !target_watch_id) {
+      return res.status(400).json({ error: 'comment kind and target_watch_id are required' });
+    }
+    const text = (body || '').trim().slice(0, COMMENT_MAX);
+    if (!text) return res.status(400).json({ error: 'Empty comment' });
+
+    const w = await pool.query(
+      `SELECT w.title, tc.payload->>'title' AS tmdb_title
+         FROM watches w LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+        WHERE w.id = $1 AND w.is_private = FALSE`,
+      [target_watch_id]
+    );
+    if (!w.rows.length) return res.status(404).json({ error: 'Unknown film' });
+    const filmTitle = w.rows[0].tmdb_title || w.rows[0].title;
+    const name = req.friend.display_name || 'A friend';
+
+    await pool.query(
+      `INSERT INTO social_events (watch_id, author_instance_id, author_name, kind, body)
+       VALUES ($1, $2, $3, 'comment', $4)`,
+      [target_watch_id, req.friend.remote_instance_id, name, text]
+    );
+    notify({
+      kind: 'comment',
+      title: `${name} commented on your ${filmTitle}`,
+      body: text.length > 80 ? text.slice(0, 80) + '…' : text,
+      payload: { watch_id: target_watch_id },
+    }).catch(() => {});
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, 'federation inbox');
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 module.exports = router;

@@ -202,7 +202,7 @@ router.post('/sync-now', async (req, res) => {
 // "seeing together" card.
 router.get('/feed', async (req, res) => {
   try {
-    const [watched, profiles, mine] = await Promise.all([
+    const [watched, profiles, mine, identity] = await Promise.all([
       pool.query(
         `SELECT fw.friend_id, f.display_name AS friend_name, fw.payload, fw.watched_at
            FROM friend_watches fw JOIN friends f ON f.id = fw.friend_id
@@ -211,18 +211,22 @@ router.get('/feed', async (req, res) => {
           LIMIT 200`
       ),
       pool.query(
-        `SELECT fp.friend_id, f.display_name AS friend_name, fp.now_playing
+        `SELECT fp.friend_id, f.display_name AS friend_name, f.remote_instance_id, fp.now_playing
            FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id
           WHERE f.status = 'active'`
       ),
       pool.query(
-        `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
+        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+                            FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
            LEFT JOIN theaters t ON t.id = w.theater_id
            LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
           WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
       ),
+      fed.getIdentity(),
     ]);
+    const myInstanceId = identity?.instance_id || null;
 
     const watchedItems = watched.rows.map((r) => {
       const p = r.payload || {};
@@ -231,11 +235,15 @@ router.get('/feed', async (req, res) => {
         kind: 'watched',
         friend_id: r.friend_id,
         friend_name: r.friend_name,
+        host_friend_id: r.friend_id,
+        host_remote_id: p.remote_id,
+        host_own_watch_id: null,
         title: p.tmdb?.title || p.title,
         poster_url: p.tmdb?.poster_url || null,
         release_year: p.tmdb?.release_year || null,
         director: p.tmdb?.director || null,
         rating: p.rating ?? null,
+        comments: Array.isArray(p.comments) ? p.comments : [],
         at: r.watched_at || null,
       };
     });
@@ -257,10 +265,12 @@ router.get('/feed', async (req, res) => {
     };
     for (const r of profiles.rows) {
       for (const p of Array.isArray(r.now_playing) ? r.now_playing : []) {
-        add(p, { friend_id: r.friend_id, name: r.friend_name });
+        add(p, { friend_id: r.friend_id, name: r.friend_name, instance_id: r.remote_instance_id, p });
       }
     }
-    for (const p of mine.rows) add(p, { you: true });
+    for (const p of mine.rows) {
+      add(p, { you: true, instance_id: myInstanceId, watch_id: p.watch_id, comments: p.comments });
+    }
 
     const upcomingItems = [];
     for (const [k, g] of groups) {
@@ -279,6 +289,16 @@ router.get('/feed', async (req, res) => {
       if (friends.length === 0) continue;
 
       const p = g.p;
+      // Canonical host for the shared thread: the participant whose instance id
+      // sorts first. Everyone in a mutual group computes the same host, so all
+      // comments converge on one thread. The host can be a friend or you.
+      const host = people
+        .filter((w) => w.instance_id)
+        .sort((a, b) => (a.instance_id < b.instance_id ? -1 : 1))[0];
+      const friendHost = host && !host.you ? host : null;
+      const youHost = host && host.you ? host : null;
+      const profileFriend = friends.length === 1 ? friends[0] : null;
+
       upcomingItems.push({
         id: `up:${k}`,
         kind: 'upcoming',
@@ -287,9 +307,16 @@ router.get('/feed', async (req, res) => {
         people: people.map((w) =>
           w.you ? { name: 'You', you: true } : { name: w.name, friend_id: w.friend_id }
         ),
-        // Link to a profile only when exactly one friend is involved.
-        friend_id: friends.length === 1 ? friends[0].friend_id : null,
-        friend_name: friends.length === 1 ? friends[0].name : null,
+        // Tapping the card opens a profile only when there's exactly one friend.
+        friend_id: profileFriend ? profileFriend.friend_id : null,
+        friend_name: profileFriend ? profileFriend.name : null,
+        // The comment thread lives on the host's copy of the film.
+        host_friend_id: friendHost ? friendHost.friend_id : null,
+        host_remote_id: friendHost ? friendHost.p.remote_id : null,
+        host_own_watch_id: youHost ? youHost.watch_id : null,
+        comments: friendHost
+          ? Array.isArray(friendHost.p.comments) ? friendHost.p.comments : []
+          : youHost && Array.isArray(youHost.comments) ? youHost.comments : [],
         title: p.tmdb?.title || p.title,
         poster_url: p.tmdb?.poster_url || null,
         release_year: p.tmdb?.release_year || null,
@@ -345,6 +372,52 @@ router.get('/:id/profile', async (req, res) => {
     res.json({ ...friendRes.rows[0], ...(profRes.rows[0] || {}) });
   } catch (err) {
     logger.error({ err }, 'friend profile');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Push a social event to a friend's inbox (they're the hub for their own film).
+async function sendToFriendInbox(friendId, payload) {
+  const { rows } = await pool.query(
+    `SELECT base_url, outbound_token FROM friends WHERE id = $1 AND status = 'active'`,
+    [friendId]
+  );
+  if (!rows.length) return { status: 404 };
+  const f = rows[0];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const resp = await fetch(`${f.base_url.replace(/\/$/, '')}/api/federation/inbox`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${f.outbound_token}` },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    return { status: resp.ok ? 200 : 502 };
+  } catch {
+    return { status: 502 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// POST /api/friends/:id/comment { remote_watch_id, text } — comment on a friend's film.
+router.post('/:id/comment', async (req, res) => {
+  try {
+    const { remote_watch_id, text } = req.body || {};
+    if (!remote_watch_id || !(text || '').trim()) {
+      return res.status(400).json({ error: 'remote_watch_id and text required' });
+    }
+    const r = await sendToFriendInbox(req.params.id, {
+      kind: 'comment',
+      target_watch_id: remote_watch_id,
+      body: text,
+    });
+    if (r.status !== 200) return res.status(r.status).json({ error: 'Could not reach friend' });
+    federationSync.syncFriendById(req.params.id).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, 'comment');
     res.status(500).json({ error: 'Server error' });
   }
 });

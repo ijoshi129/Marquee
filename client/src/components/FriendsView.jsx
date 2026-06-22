@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtShowtime } from '../format';
 import FriendProfile from './FriendProfile';
+import SocialBar from './SocialBar';
 
 // Short relative time, shared with FriendProfile.
 export function fmtAgo(iso) {
@@ -146,9 +147,10 @@ export default function FriendsView({ onAddFriend }) {
         return (
           <div key={it.id}>
             {head && <div className="feed-day">{head}</div>}
+            <div className={`feed-card ${it.kind === 'upcoming' ? 'up' : ''}`}>
             <button
               type="button"
-              className={`feed-card ${it.kind === 'upcoming' ? 'up' : ''}`}
+              className="feed-main"
               onClick={() => openItem(it)}
             >
               {it.kind === 'watched' && <span className="feed-time">{fmtAgo(it.at)}</span>}
@@ -185,6 +187,10 @@ export default function FriendsView({ onAddFriend }) {
                 )}
               </span>
             </button>
+              {((it.host_friend_id && it.host_remote_id) || it.host_own_watch_id) && (
+                <SocialBar item={it} onChanged={load} />
+              )}
+            </div>
           </div>
         );
       })}

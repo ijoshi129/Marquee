@@ -94,6 +94,13 @@ export const api = {
   acceptFriend: (invite) =>
     request('/api/friends/accept', { method: 'POST', body: JSON.stringify({ invite }) }),
   removeFriend: (id) => request(`/api/friends/${id}`, { method: 'DELETE' }),
+  commentOnWatch: (friendId, remote_watch_id, text) =>
+    request(`/api/friends/${friendId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ remote_watch_id, text }),
+    }),
+  commentOnOwnWatch: (watchId, text) =>
+    request(`/api/watches/${watchId}/comment`, { method: 'POST', body: JSON.stringify({ text }) }),
   friendWatches: (id) => request(`/api/friends/${id}/watches`),
   friendProfile: (id) => request(`/api/friends/${id}/profile`),
   syncFriends: () => request('/api/friends/sync-now', { method: 'POST' }),

@@ -377,6 +377,29 @@ router.post('/:id/recheck-unseen', async (req, res) => {
   }
 });
 
+// POST /api/watches/:id/comment — the owner commenting on their own film (used
+// when they're the canonical host of a shared thread). Stored locally and
+// re-broadcast to friends, who can then see and reply.
+router.post('/:id/comment', async (req, res) => {
+  try {
+    const text = ((req.body || {}).text || '').trim().slice(0, 1000);
+    if (!text) return res.status(400).json({ error: 'Empty comment' });
+    const me = await fed.getIdentity();
+    const w = await pool.query('SELECT 1 FROM watches WHERE id = $1', [req.params.id]);
+    if (!w.rows.length) return res.status(404).json({ error: 'Not found' });
+    await pool.query(
+      `INSERT INTO social_events (watch_id, author_instance_id, author_name, kind, body)
+       VALUES ($1, $2, $3, 'comment', $4)`,
+      [req.params.id, me.instance_id, me.display_name, text]
+    );
+    fed.notifyFriends();
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, 'own comment');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM watches WHERE id = $1 RETURNING id', [
