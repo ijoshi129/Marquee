@@ -12,6 +12,7 @@ import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
 import WatchlistView from './components/WatchlistView';
 import FriendsView from './components/FriendsView';
+import Unlock from './components/Unlock';
 
 const DEFAULT_STATUS_KEY = 'active';
 const CURRENT_YEAR = new Date().getUTCFullYear();
@@ -33,6 +34,8 @@ export default function App() {
   const [wrappedAutoMonth, setWrappedAutoMonth] = useState(null);
   const [view, setView] = useState('diary');
   const [refreshKey, setRefreshKey] = useState(0);
+  // null = still checking; true = show unlock gate; false = unlocked/no lock.
+  const [locked, setLocked] = useState(null);
 
   const [q, setQ] = useState('');
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
@@ -165,9 +168,22 @@ export default function App() {
     setWrapped({ kind: 'month', month });
   }, []);
 
+  // Decide on load whether the instance is locked and this device needs to
+  // unlock. Until resolved we render nothing, so we never flash the diary.
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    api
+      .authStatus()
+      .then((s) => alive && setLocked(s.required && !s.unlocked))
+      .catch(() => alive && setLocked(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (locked === false) load();
+  }, [load, locked]);
 
   function handleCreated(watch) {
     setAdding(false);
@@ -196,6 +212,9 @@ export default function App() {
     const row = watches.find((w) => w.tmdb?.poster_url);
     return row?.tmdb?.poster_url || null;
   }, [editing, watches]);
+
+  if (locked === null) return null;
+  if (locked) return <Unlock onUnlocked={() => setLocked(false)} />;
 
   return (
     <div className="app">

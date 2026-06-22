@@ -1,14 +1,36 @@
+const PASSCODE_KEY = 'marquee.passcode';
+
+export function setStoredPasscode(code) {
+  try {
+    if (code) localStorage.setItem(PASSCODE_KEY, code);
+    else localStorage.removeItem(PASSCODE_KEY);
+  } catch {}
+}
+function storedPasscode() {
+  try {
+    return localStorage.getItem(PASSCODE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 async function request(path, opts = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const pass = storedPasscode();
+  if (pass) headers['X-Owner-Passcode'] = pass;
+
+  const res = await fetch(path, { ...opts, headers });
   if (!res.ok) {
     let body = '';
+    let locked = false;
     try {
-      body = (await res.json()).error || '';
+      const j = await res.json();
+      body = j.error || '';
+      locked = !!j.locked;
     } catch {}
-    throw new Error(body || `HTTP ${res.status}`);
+    const err = new Error(body || `HTTP ${res.status}`);
+    if (res.status === 401 && locked) err.locked = true;
+    throw err;
   }
   return res.json();
 }
@@ -67,4 +89,7 @@ export const api = {
   federationSettings: () => request('/api/friends/settings'),
   setFederationSettings: (body) =>
     request('/api/friends/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  authStatus: () => request('/api/auth/status'),
+  unlock: (passcode) =>
+    request('/api/auth/unlock', { method: 'POST', body: JSON.stringify({ passcode }) }),
 };

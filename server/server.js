@@ -21,6 +21,8 @@ const watchlist = require('./routes/watchlist');
 const alist = require('./routes/alist');
 const federationRoute = require('./routes/federation');
 const friends = require('./routes/friends');
+const authRoute = require('./routes/auth');
+const { requireOwner } = require('./middleware/owner-auth');
 const federation = require('./services/federation');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
@@ -96,6 +98,20 @@ async function healthHandler(req, res) {
 }
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+
+app.use('/api/auth', authRoute);
+
+// Owner lock: gate every API route except the friend-facing federation API
+// (per-friend tokens), the unlock/status endpoints, and health. Static assets
+// and the SPA shell load freely so the unlock screen can render. No-op until
+// OWNER_PASSCODE is set.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (req.path.startsWith('/api/federation')) return next();
+  if (req.path.startsWith('/api/auth')) return next();
+  if (req.path === '/api/health') return next();
+  return requireOwner(req, res, next);
+});
 
 app.use('/api/watches', watches);
 app.use('/api/stats', stats);
