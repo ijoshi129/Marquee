@@ -3458,20 +3458,18 @@ input[type='date'].input-naked { color-scheme: dark; }
 
 /* Taste match on a friend's profile */
 .fp-taste {
-  width: 100%; display: flex; align-items: center; gap: 12px; margin: -8px 0 22px;
+  display: inline-flex; max-width: 100%; align-items: center; gap: 12px; margin: -8px 0 22px;
   text-align: left; font: inherit; cursor: pointer;
 }
 .fp-taste.scored {
   padding: 12px 14px; border-radius: var(--radius-md);
   background: var(--accent-soft); border: 1px solid #3a2c0f;
 }
-.fp-taste.plain { padding: 8px 2px; background: none; border: none; color: var(--fg-dim); }
 .fp-taste-pct {
   flex-shrink: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 600;
   color: var(--accent); line-height: 1;
 }
-.fp-taste-text { flex: 1; font-size: 0.85rem; color: var(--fg-dim); line-height: 1.3; }
-.fp-taste.plain .fp-taste-text { font-size: 0.9rem; }
+.fp-taste-text { min-width: 0; font-size: 0.85rem; color: var(--fg-dim); line-height: 1.3; }
 .fp-taste-chev { color: var(--fg-mute); font-size: 1.2rem; flex-shrink: 0; }
 
 /* Films-in-common list */
