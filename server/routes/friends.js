@@ -365,11 +365,41 @@ router.get('/:id/profile', async (req, res) => {
       [req.params.id]
     );
     if (!friendRes.rows.length) return res.status(404).json({ error: 'Not found' });
-    const profRes = await pool.query(
-      `SELECT stats, now_playing, fetched_at FROM friend_profiles WHERE friend_id = $1`,
-      [req.params.id]
-    );
-    res.json({ ...friendRes.rows[0], ...(profRes.rows[0] || {}) });
+    const [profRes, mineRes, theirsRes] = await Promise.all([
+      pool.query(`SELECT stats, now_playing, fetched_at FROM friend_profiles WHERE friend_id = $1`, [req.params.id]),
+      pool.query(
+        `SELECT tmdb_id, MAX(rating) AS rating FROM watches
+          WHERE status = 'watched' AND tmdb_id IS NOT NULL GROUP BY tmdb_id`
+      ),
+      pool.query(`SELECT payload FROM friend_watches WHERE friend_id = $1`, [req.params.id]),
+    ]);
+
+    // Taste match: films in common, and agreement among films you both rated.
+    const mine = new Map(mineRes.rows.map((r) => [r.tmdb_id, r.rating]));
+    const theirs = new Map();
+    for (const row of theirsRes.rows) {
+      const p = row.payload || {};
+      if (p.tmdb_id) theirs.set(p.tmdb_id, p.rating ?? null);
+    }
+    let inCommon = 0;
+    let bothRated = 0;
+    let agree = 0;
+    for (const [id, myRating] of mine) {
+      if (!theirs.has(id)) continue;
+      inCommon++;
+      const theirRating = theirs.get(id);
+      if (myRating != null && theirRating != null) {
+        bothRated++;
+        if (Math.abs(myRating - theirRating) <= 1) agree++;
+      }
+    }
+    const taste = {
+      in_common: inCommon,
+      rated_in_common: bothRated,
+      agreement_pct: bothRated >= 3 ? Math.round((agree / bothRated) * 100) : null,
+    };
+
+    res.json({ ...friendRes.rows[0], ...(profRes.rows[0] || {}), taste });
   } catch (err) {
     logger.error({ err }, 'friend profile');
     res.status(500).json({ error: 'Server error' });
@@ -432,6 +462,57 @@ router.post('/:id/recommend', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, 'recommend');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/friends/:id/common — films you and this friend have both watched,
+// with both ratings.
+router.get('/:id/common', async (req, res) => {
+  try {
+    const [mineRes, theirsRes] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT ON (w.tmdb_id) w.tmdb_id, w.rating,
+                tc.payload->>'title' AS title,
+                tc.payload->>'poster_url' AS poster_url,
+                tc.payload->>'release_year' AS release_year
+           FROM watches w LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+          WHERE w.status = 'watched' AND w.tmdb_id IS NOT NULL
+          ORDER BY w.tmdb_id, w.rating DESC NULLS LAST`
+      ),
+      pool.query(`SELECT payload FROM friend_watches WHERE friend_id = $1`, [req.params.id]),
+    ]);
+
+    const theirs = new Map();
+    for (const row of theirsRes.rows) {
+      const p = row.payload || {};
+      if (p.tmdb_id && !theirs.has(p.tmdb_id)) {
+        theirs.set(p.tmdb_id, { rating: p.rating ?? null, title: p.tmdb?.title, poster_url: p.tmdb?.poster_url });
+      }
+    }
+
+    const films = [];
+    for (const m of mineRes.rows) {
+      const t = theirs.get(m.tmdb_id);
+      if (!t) continue;
+      films.push({
+        tmdb_id: m.tmdb_id,
+        title: m.title || t.title || `TMDB ${m.tmdb_id}`,
+        poster_url: m.poster_url || t.poster_url || null,
+        release_year: m.release_year || null,
+        my_rating: m.rating ?? null,
+        their_rating: t.rating ?? null,
+      });
+    }
+    // Co-rated first, then by title.
+    films.sort((a, b) => {
+      const ar = a.my_rating != null && a.their_rating != null ? 0 : 1;
+      const br = b.my_rating != null && b.their_rating != null ? 0 : 1;
+      return ar - br || (a.title || '').localeCompare(b.title || '');
+    });
+    res.json(films);
+  } catch (err) {
+    logger.error({ err }, 'friend common films');
     res.status(500).json({ error: 'Server error' });
   }
 });

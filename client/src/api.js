@@ -111,6 +111,7 @@ export const api = {
   dismissRecommendation: (id) => request(`/api/recommendations/${id}/dismiss`, { method: 'POST' }),
   friendWatches: (id) => request(`/api/friends/${id}/watches`),
   friendProfile: (id) => request(`/api/friends/${id}/profile`),
+  commonFilms: (id) => request(`/api/friends/${id}/common`),
   syncFriends: () => request('/api/friends/sync-now', { method: 'POST' }),
   federationSettings: () => request('/api/friends/settings'),
   setFederationSettings: (body) =>

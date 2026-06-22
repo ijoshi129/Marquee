@@ -4,6 +4,7 @@ import { fmtRuntime } from '../format';
 import WatchList from './WatchList';
 import { fmtAgo } from './FriendsView';
 import RecommendSheet from './RecommendSheet';
+import CommonFilmsSheet from './CommonFilmsSheet';
 
 // A friend's shared world: a light stats header (no A-List money) plus their
 // recent watches rendered read-only with the same poster cards as the diary.
@@ -11,6 +12,7 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
   const [profile, setProfile] = useState(null);
   const [watches, setWatches] = useState([]);
   const [recommend, setRecommend] = useState(false);
+  const [common, setCommon] = useState(false);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
@@ -75,6 +77,22 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
       </header>
 
       {err && <div className="error-banner">{err}</div>}
+
+      {profile?.taste?.in_common > 0 && (
+        <button type="button" className="fp-taste scored" onClick={() => setCommon(true)}>
+          <span className="fp-taste-pct">
+            {profile.taste.agreement_pct != null ? `${profile.taste.agreement_pct}%` : profile.taste.in_common}
+          </span>
+          <span className="fp-taste-text">
+            {profile.taste.agreement_pct != null
+              ? `You agree on ${profile.taste.agreement_pct}% of the ${profile.taste.rated_in_common} films you've both rated · ${profile.taste.in_common} in common`
+              : `film${profile.taste.in_common > 1 ? 's' : ''} in common`}
+          </span>
+          <span className="fp-taste-chev">›</span>
+        </button>
+      )}
+
+      {common && <CommonFilmsSheet friend={friend} onClose={() => setCommon(false)} />}
 
       {stats && (
         <div className="fp-stats">
