@@ -138,10 +138,10 @@ router.post('/pair', async (req, res) => {
       dedupeKey: `friend:${instance_id}`,
     }).catch(() => {});
 
-    // Pull the new friend right away so the inviter's feed populates on pairing,
-    // matching what the accepting side already does — otherwise it waits for the
-    // next poll (or a change-triggered ping) to fill in.
-    federationSync.syncFriendById(friendRes.rows[0].id).catch(() => {});
+    // NB: don't sync the new friend here. At this point the accepting side hasn't
+    // finished storing its half of the token pair, so an immediate pull would 401
+    // and wrongly mark the friend revoked. The accepter pings us once it's ready
+    // (see /accept), which triggers a clean pull then.
 
     const me = await fed.getIdentity();
     res.json({
