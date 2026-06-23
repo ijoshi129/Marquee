@@ -3384,14 +3384,23 @@ input[type='date'].input-naked { color-scheme: dark; }
 
 /* Manage-friends list */
 .mf-list { list-style: none; margin: 0; padding: 0; }
-.mf-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--bg-tint); }
+.mf-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--bg-tint); }
 .mf-row:last-child { border-bottom: none; }
+.mf-main { display: flex; align-items: center; gap: 12px; }
 .mf-ava { width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
 .mf-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .mf-name { font-weight: 600; }
 .mf-sub { font-family: var(--font-mono); font-size: 0.68rem; color: var(--fg-mute); margin-top: 2px; letter-spacing: 0.03em; }
-.mf-remove { flex-shrink: 0; font: inherit; font-size: 0.78rem; cursor: pointer; color: var(--fg-mute); background: none; border: 1px solid var(--bg-tint-strong); border-radius: 99px; padding: 6px 12px; }
-.mf-remove:hover { color: #e0623c; border-color: #e0623c55; }
+.mf-actions { display: flex; gap: 8px; padding-left: 50px; }
+.mf-btn { flex: 1; font: inherit; font-size: 0.78rem; cursor: pointer; color: var(--fg); background: none; border: 1px solid var(--bg-tint-strong); border-radius: 99px; padding: 6px 12px; }
+.mf-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.mf-btn:disabled { opacity: 0.5; cursor: default; }
+.mf-remove { flex: 1; font: inherit; font-size: 0.78rem; cursor: pointer; color: var(--fg-mute); background: none; border: 1px solid var(--bg-tint-strong); border-radius: 99px; padding: 6px 12px; }
+.mf-remove:hover:not(:disabled) { color: #e0623c; border-color: #e0623c55; }
+.mf-remove:disabled { opacity: 0.5; cursor: default; }
+.mf-test { font-size: 0.78rem; padding-left: 50px; line-height: 1.35; }
+.mf-test.ok { color: #4caf7d; }
+.mf-test.bad { color: #e0734c; }
 
 /* iOS-style toggle (sharing) */
 .fed-toggle { width: 44px; height: 26px; border-radius: 99px; background: var(--accent); position: relative; flex-shrink: 0; cursor: pointer; border: none; }

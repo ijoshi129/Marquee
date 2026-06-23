@@ -126,6 +126,8 @@ export const api = {
   friendProfile: (id) => request(`/api/friends/${id}/profile`),
   commonFilms: (id) => request(`/api/friends/${id}/common`),
   syncFriends: () => request('/api/friends/sync-now', { method: 'POST' }),
+  syncFriend: (id) => request(`/api/friends/${id}/sync`, { method: 'POST' }),
+  testConnection: (id) => request(`/api/friends/${id}/test-connection`, { method: 'POST' }),
   federationSettings: () => request('/api/friends/settings'),
   setFederationSettings: (body) =>
     request('/api/friends/settings', { method: 'PUT', body: JSON.stringify(body) }),
