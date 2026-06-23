@@ -2,11 +2,16 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
 
-// All connected instances with their sync state, and a way to remove one —
-// the reach-everyone counterpart to the feed (which only shows active friends).
+// All connected instances with their sync state, plus per-friend Test / Sync /
+// Remove — the reach-everyone counterpart to the feed (which only shows active
+// friends).
 export default function ManageFriendsModal({ onClose }) {
   const [friends, setFriends] = useState(null);
   const [err, setErr] = useState(null);
+  // id -> 'sync' | 'test' while that action is running
+  const [busy, setBusy] = useState({});
+  // id -> { ok, message } result of the last connection test
+  const [tested, setTested] = useState({});
 
   function load() {
     api.friends().then(setFriends).catch((e) => setErr(e.message));
@@ -24,6 +29,34 @@ export default function ManageFriendsModal({ onClose }) {
       load();
     } catch (e) {
       setErr(e.message);
+    }
+  }
+
+  async function sync(f) {
+    setBusy((b) => ({ ...b, [f.id]: 'sync' }));
+    setTested((t) => ({ ...t, [f.id]: undefined }));
+    try {
+      await api.syncFriend(f.id);
+      load();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy((b) => ({ ...b, [f.id]: undefined }));
+    }
+  }
+
+  async function test(f) {
+    setBusy((b) => ({ ...b, [f.id]: 'test' }));
+    try {
+      const r = await api.testConnection(f.id);
+      const message = r.ok
+        ? `Connected${typeof r.ms === 'number' ? ` · ${r.ms}ms` : ''}`
+        : r.message || 'Connection failed';
+      setTested((t) => ({ ...t, [f.id]: { ok: r.ok, message } }));
+    } catch (e) {
+      setTested((t) => ({ ...t, [f.id]: { ok: false, message: e.message } }));
+    } finally {
+      setBusy((b) => ({ ...b, [f.id]: undefined }));
     }
   }
 
@@ -50,18 +83,37 @@ export default function ManageFriendsModal({ onClose }) {
           <div className="friends-empty">No friends yet.</div>
         ) : (
           <ul className="mf-list">
-            {friends.map((f) => (
-              <li key={f.id} className="mf-row">
-                <span className="mf-ava">{(f.display_name || '?').slice(0, 1).toUpperCase()}</span>
-                <span className="mf-text">
-                  <span className="mf-name">{f.display_name || 'Pending…'}</span>
-                  <span className="mf-sub">{status(f)}</span>
-                </span>
-                <button type="button" className="mf-remove" onClick={() => remove(f)}>
-                  Remove
-                </button>
-              </li>
-            ))}
+            {friends.map((f) => {
+              const b = busy[f.id];
+              const t = tested[f.id];
+              return (
+                <li key={f.id} className="mf-row">
+                  <div className="mf-main">
+                    <span className="mf-ava">{(f.display_name || '?').slice(0, 1).toUpperCase()}</span>
+                    <span className="mf-text">
+                      <span className="mf-name">{f.display_name || 'Pending…'}</span>
+                      <span className="mf-sub">{status(f)}</span>
+                    </span>
+                  </div>
+                  <div className="mf-actions">
+                    <button type="button" className="mf-btn" disabled={!!b} onClick={() => test(f)}>
+                      {b === 'test' ? 'Testing…' : 'Test'}
+                    </button>
+                    <button type="button" className="mf-btn" disabled={!!b} onClick={() => sync(f)}>
+                      {b === 'sync' ? 'Syncing…' : 'Sync'}
+                    </button>
+                    <button type="button" className="mf-remove" disabled={!!b} onClick={() => remove(f)}>
+                      Remove
+                    </button>
+                  </div>
+                  {t && (
+                    <div className={`mf-test ${t.ok ? 'ok' : 'bad'}`}>
+                      {t.ok ? '✓ ' : '✕ '}{t.message}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

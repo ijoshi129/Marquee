@@ -138,6 +138,11 @@ router.post('/pair', async (req, res) => {
       dedupeKey: `friend:${instance_id}`,
     }).catch(() => {});
 
+    // Pull the new friend right away so the inviter's feed populates on pairing,
+    // matching what the accepting side already does — otherwise it waits for the
+    // next poll (or a change-triggered ping) to fill in.
+    federationSync.syncFriendById(friendRes.rows[0].id).catch(() => {});
+
     const me = await fed.getIdentity();
     res.json({
       instance_id: me.instance_id,

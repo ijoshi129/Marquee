@@ -12,6 +12,14 @@ const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
 
+// Friend ids are UUIDs — reject a malformed :id with 404 before it reaches
+// Postgres as an invalid-uuid cast (which would surface as an opaque 500).
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+router.param('id', (req, res, next, id) => {
+  if (!UUID_RX.test(id)) return res.status(404).json({ error: 'Not found' });
+  next();
+});
+
 const INVITE_TTL_MS = 15 * 60 * 1000;
 const PAIR_TIMEOUT_MS = 10_000;
 
@@ -198,6 +206,74 @@ router.post('/sync-now', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, 'manual sync');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/friends/:id/sync — sync just this friend now, returning its fresh state.
+router.post('/:id/sync', async (req, res) => {
+  try {
+    await federationSync.syncFriendById(req.params.id);
+    const { rows } = await pool.query(
+      `SELECT id, display_name, status, last_synced_at, last_error FROM friends WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Friend not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    logger.error({ err }, 'manual friend sync');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/friends/:id/test-connection — actively probe whether we can reach this
+// friend's instance and whether our token is still accepted. Diagnostic only; it
+// doesn't change any stored state.
+const TEST_TIMEOUT_MS = 8000;
+router.post('/:id/test-connection', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT base_url, outbound_token FROM friends WHERE id = $1`,
+      [req.params.id]
+    );
+    const f = rows[0];
+    if (!f) return res.status(404).json({ error: 'Friend not found' });
+
+    const url = `${f.base_url.replace(/\/$/, '')}/api/federation/profile`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+    const t0 = Date.now();
+    try {
+      const resp = await fetch(url, {
+        headers: { authorization: `Bearer ${f.outbound_token}` },
+        signal: controller.signal,
+      });
+      const ms = Date.now() - t0;
+      if (resp.ok) {
+        return res.json({ ok: true, reachable: true, authorized: true, ms });
+      }
+      if (resp.status === 401) {
+        return res.json({
+          ok: false, reachable: true, authorized: false, ms,
+          message: 'Reached them, but our access was rejected — they may have removed you. Re-pair to fix.',
+        });
+      }
+      return res.json({
+        ok: false, reachable: true, authorized: false, ms,
+        message: `Reached them but got HTTP ${resp.status}.`,
+      });
+    } catch (err) {
+      const ms = Date.now() - t0;
+      const message =
+        err.name === 'AbortError'
+          ? "Timed out — their instance isn't reachable from here. Check their FEDERATION_BASE_URL and the network between you."
+          : `Couldn't connect: ${err.message}`;
+      return res.json({ ok: false, reachable: false, authorized: false, ms, message });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    logger.error({ err }, 'test connection');
     res.status(500).json({ error: 'Server error' });
   }
 });
