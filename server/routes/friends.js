@@ -192,6 +192,10 @@ router.post('/accept', async (req, res) => {
       dedupeKey: `friend:${pairRes.instance_id}`,
     }).catch(() => {});
     federationSync.syncOnce().catch(() => {});
+    // Our token pair is now stored on both sides, so it's safe to tell the inviter
+    // to pull us — this is what populates the inviter's feed on pairing, without
+    // the race that an immediate pull from /pair would hit.
+    fed.notifyFriends();
     res.status(201).json(rows[0]);
   } catch (err) {
     logger.error({ err }, 'accept invite');
