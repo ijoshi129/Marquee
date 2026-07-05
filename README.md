@@ -3,8 +3,8 @@
 A self-hosted AMC movie tracker. Marquee watches your Gmail for AMC reservation and
 "Thank You" emails, parses them, enriches each film with TMDB metadata, and surfaces
 your whole moviegoing history in a cinematic poster-grid PWA — plus an optional
-federated **Friends** layer that lets you pair with other Marquee instances and share
-what you're watching.
+federated **Friends** layer that lets you connect with other Marquee instances and
+share what you're watching.
 
 <table>
   <tr>
@@ -109,13 +109,26 @@ OWNER_PASSCODE=<long random string>                     # protects your diary
 ```
 
 `FEDERATION_BASE_URL` is what your friend URLs are built from, so it must be
-reachable from your friends' instances — a public HTTPS domain works for anyone.
-Only `/api/federation/*` needs to be exposed publicly (a path-filtered reverse
-proxy or Cloudflare Tunnel works well); the friend-facing API answers only to a
-valid secret URL and 404s everything else. `OWNER_PASSCODE` gates **every**
-screen except that friend-facing API, so exposing the instance never exposes
-your diary. You unlock once per device. Recreate the stack after editing `.env`
-(`docker compose up -d --build`).
+reachable from your friends' instances. Any of these works:
+
+- **Cloudflare Tunnel (recommended — no open ports, hides your home IP).** Needs a
+  domain on Cloudflare. In Zero Trust → Networks → Tunnels, create a tunnel and run
+  the install command it gives you on the box running Marquee. Add one public
+  hostname: e.g. `fed.your-domain.com`, **path** `api/federation/*`, service
+  `http://localhost:3000` (your Marquee port). Set
+  `FEDERATION_BASE_URL=https://fed.your-domain.com`. The path filter means nothing
+  but the friend-facing API is ever reachable from the internet — everything else
+  404s at Cloudflare's edge.
+- **Reverse proxy + port forward** — any HTTPS proxy (Caddy, NPM, …) in front of
+  the Marquee port; restrict it to `/api/federation/` if it supports path rules.
+- **Same network / VPN** — if you and your friend already share a LAN or VPN, a
+  plain `http://<ip>:<port>` address works; no public exposure needed.
+
+Either way, only `/api/federation/*` needs to be reachable by friends; it answers
+only to a valid secret URL and 404s everything else. `OWNER_PASSCODE` gates
+**every** screen except that friend-facing API, so exposing the instance never
+exposes your diary. You unlock once per device. Recreate the stack after editing
+`.env` (`docker compose up -d --build`).
 
 ### 2. Connect
 
@@ -128,6 +141,10 @@ your diary. You unlock once per device. Recreate the stack after editing `.env`
 Once connected, each side syncs the other every few minutes (and within ~2–3s on
 changes). Remove or rotate a friend's URL any time from **Manage friends**;
 control what you expose under **What friends see**.
+
+Treat these URLs like passwords: anyone holding yours can read what you share and
+post comments as that friend. Send them over something private, and rotate a URL
+if it leaks.
 
 ### 3. (Optional) iOS Web Push
 
