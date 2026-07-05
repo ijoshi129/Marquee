@@ -10,5 +10,6 @@ CREATE TABLE IF NOT EXISTS ntfy_settings (
   notify_comment   BOOLEAN NOT NULL DEFAULT TRUE,
   notify_recommend BOOLEAN NOT NULL DEFAULT TRUE,
   notify_together  BOOLEAN NOT NULL DEFAULT TRUE,
+  notify_booked    BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

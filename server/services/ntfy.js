@@ -9,6 +9,7 @@ const KINDS = {
   comment: { column: 'notify_comment', tags: ['speech_balloon'] },
   recommend: { column: 'notify_recommend', tags: ['envelope_with_arrow'] },
   together: { column: 'notify_together', tags: ['popcorn'] },
+  booked: { column: 'notify_booked', tags: ['tickets'] },
 };
 
 async function getSettings() {
@@ -17,7 +18,7 @@ async function getSettings() {
   return rows[0];
 }
 
-const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_recommend', 'notify_together'];
+const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_recommend', 'notify_together', 'notify_booked'];
 
 async function updateSettings(body) {
   await getSettings();
