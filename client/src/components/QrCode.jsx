@@ -1,14 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 
-// Renders a value as a QR code. White quiet zone kept so scanners cope with
-// the app's dark background.
+// Renders a value as a QR code — as an SVG data URI rather than a canvas so it
+// can't silently fail on browsers with quirky canvas support. White quiet zone
+// kept so scanners cope with the app's dark background.
 export default function QrCode({ value, size = 180 }) {
-  const ref = useRef(null);
+  const [src, setSrc] = useState(null);
   useEffect(() => {
-    if (ref.current && value) {
-      QRCode.toCanvas(ref.current, value, { width: size, margin: 2 }).catch(() => {});
-    }
-  }, [value, size]);
-  return <canvas ref={ref} className="qr-canvas" aria-label="QR code" />;
+    let alive = true;
+    if (!value) return;
+    QRCode.toString(value, { type: 'svg', margin: 2 })
+      .then((svg) => {
+        if (alive) setSrc(`data:image/svg+xml;base64,${btoa(svg)}`);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [value]);
+  if (!src) return null;
+  return <img className="qr-canvas" src={src} width={size} height={size} alt="QR code" />;
 }

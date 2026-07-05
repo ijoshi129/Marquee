@@ -3446,7 +3446,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 
 /* QR */
 .qr-wrap { display: flex; justify-content: center; padding: 4px 0; }
-.qr-canvas { border-radius: var(--radius-md); }
+.qr-canvas { border-radius: var(--radius-md); background: #fff; display: block; }
 
 /* Bell gear */
 .notif-gear { display: grid; place-items: center; width: 28px; height: 28px; cursor: pointer; background: none; border: none; color: var(--fg-mute); border-radius: 50%; }
