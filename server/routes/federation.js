@@ -1,8 +1,10 @@
-// Friend-facing federation API. This is the only externally-reachable surface
-// other instances call. Every data route is gated by a per-friend bearer token;
-// /pair is gated by a one-time invite code. Responses are deliberately a small,
-// explicit allowlist of fields — never the raw watch row — and every query
-// hard-excludes private films regardless of the owner's sharing settings.
+// Friend-facing federation API — the only externally-reachable surface other
+// instances call. Access is a capability URL: the secret token in the path is
+// the entire credential, matched (hashed, constant-time) against a friends row,
+// which also identifies the caller. A wrong or rotated token gets a 404, same
+// as a path that never existed. Responses are deliberately a small, explicit
+// allowlist of fields — never the raw watch row — and every query hard-excludes
+// private films regardless of the owner's sharing settings.
 
 const express = require('express');
 const logger = require('../logger');
@@ -30,24 +32,22 @@ const SELECT_SHARED = `
   LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
 `;
 
-// Authenticate a calling friend by the token they present. Fail-closed when
-// federation is disabled. Matches an *active* friend by sha256(token); a
-// revoked friend stops matching immediately.
-async function requireFriendToken(req, res, next) {
+// Resolve the path token to a friends row. Fail-closed when federation is
+// disabled; 404 (not 401) on no match so a rotated or removed URL is
+// indistinguishable from nothing being there.
+router.param('token', async (req, res, next, token) => {
   try {
     if (!fed.isEnabled()) {
       return res.status(503).json({ error: 'Federation is not enabled on this instance' });
     }
-    const auth = req.get('authorization') || '';
-    const token = auth.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!token) return res.status(401).json({ error: 'Friend token required' });
+    if (!fed.TOKEN_RX.test(token)) return res.status(404).json({ error: 'Not found' });
 
     const hash = fed.sha256(token);
     const { rows } = await pool.query(
-      `SELECT * FROM friends WHERE status = 'active' AND inbound_token_hash IS NOT NULL`
+      `SELECT * FROM friends WHERE inbound_token_hash IS NOT NULL`
     );
     const friend = rows.find((f) => fed.safeEqualHex(f.inbound_token_hash, hash));
-    if (!friend) return res.status(401).json({ error: 'Unknown or revoked friend' });
+    if (!friend) return res.status(404).json({ error: 'Not found' });
 
     req.friend = friend;
     next();
@@ -55,113 +55,17 @@ async function requireFriendToken(req, res, next) {
     logger.error({ err }, 'federation auth');
     res.status(500).json({ error: 'Server error' });
   }
-}
+});
 
 function nullRatings(rows, settings) {
   if (settings.share_ratings) return rows;
   return rows.map((r) => ({ ...r, rating: null }));
 }
 
-// POST /api/federation/pair — the invitee calls this on the inviter to complete
-// pairing. Gated entirely by knowledge of the one-time invite code. Idempotent
-// on remote_instance_id so a replayed call can't fork state.
-router.post('/pair', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    if (!fed.isEnabled()) {
-      return res.status(503).json({ error: 'Federation is not enabled on this instance' });
-    }
-    const { code, instance_id, display_name, base_url, token } = req.body || {};
-    if (!code || !instance_id || !base_url || !token) {
-      return res.status(400).json({ error: 'code, instance_id, base_url and token are required' });
-    }
-
-    const safeUrl = fed.safeBaseUrl(base_url);
-    if (!safeUrl) {
-      return res.status(400).json({ error: 'Invalid base_url' });
-    }
-
-    const codeHash = fed.sha256(code);
-    await client.query('BEGIN');
-
-    const inviteRes = await client.query(
-      `SELECT * FROM federation_invites
-         WHERE redeemed_at IS NULL AND expires_at > NOW()`
-    );
-    const invite = inviteRes.rows.find((i) => fed.safeEqualHex(i.code_hash, codeHash));
-    if (!invite) {
-      await client.query('ROLLBACK');
-      return res.status(401).json({ error: 'Invalid or expired invite code' });
-    }
-
-    // A valid code must not be usable to overwrite an existing, active
-    // friendship's tokens/URL (which would hijack it). Re-pairing after a revoke
-    // is fine — that row isn't active. Owner removes the friend to re-pair fresh.
-    const existing = await client.query(
-      `SELECT status FROM friends WHERE remote_instance_id = $1`,
-      [instance_id]
-    );
-    if (existing.rows[0] && existing.rows[0].status === 'active') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Already connected to this instance' });
-    }
-
-    // The token WE will accept from this friend on future calls (store its hash).
-    const ourInboundToken = fed.generateSecret();
-
-    const friendRes = await client.query(
-      `INSERT INTO friends
-         (remote_instance_id, display_name, base_url, status, direction,
-          inbound_token_hash, outbound_token)
-       VALUES ($1, $2, $3, 'active', 'invited', $4, $5)
-       ON CONFLICT (remote_instance_id) DO UPDATE SET
-         display_name = EXCLUDED.display_name,
-         base_url = EXCLUDED.base_url,
-         status = 'active',
-         inbound_token_hash = EXCLUDED.inbound_token_hash,
-         outbound_token = EXCLUDED.outbound_token,
-         updated_at = NOW()
-       RETURNING id`,
-      [instance_id, display_name || null, safeUrl, fed.sha256(ourInboundToken), token]
-    );
-
-    await client.query(
-      `UPDATE federation_invites SET redeemed_at = NOW(), friend_id = $1 WHERE id = $2`,
-      [friendRes.rows[0].id, invite.id]
-    );
-    await client.query('COMMIT');
-
-    notify({
-      kind: 'friend_added',
-      title: `You're now connected with ${display_name || 'a friend'}`,
-      payload: { friend_id: friendRes.rows[0].id },
-      dedupeKey: `friend:${instance_id}`,
-    }).catch(() => {});
-
-    // NB: don't sync the new friend here. At this point the accepting side hasn't
-    // finished storing its half of the token pair, so an immediate pull would 401
-    // and wrongly mark the friend revoked. The accepter pings us once it's ready
-    // (see /accept), which triggers a clean pull then.
-
-    const me = await fed.getIdentity();
-    res.json({
-      instance_id: me.instance_id,
-      display_name: me.display_name,
-      avatar_url: me.avatar_url,
-      token: ourInboundToken,
-    });
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    logger.error({ err }, 'federation pair');
-    res.status(500).json({ error: 'Server error' });
-  } finally {
-    client.release();
-  }
-});
-
-// GET /api/federation/profile — identity + a stats subset + (optionally) the
-// owner's upcoming reservations. A-List savings are never shared.
-router.get('/profile', requireFriendToken, async (req, res) => {
+// GET /api/federation/:token/feed — everything a friend syncs, in one payload:
+// identity, a stats subset, upcoming reservations, and recent watched films
+// (with their comment threads). A-List savings are never shared.
+router.get('/:token/feed', async (req, res) => {
   try {
     const [identity, settings] = await Promise.all([fed.getIdentity(), fed.getSettings()]);
     const shared = `status = 'watched' AND is_private = FALSE`;
@@ -216,127 +120,127 @@ router.get('/profile', requireFriendToken, async (req, res) => {
       upcoming = up.rows;
     }
 
+    let watches = [];
+    if (settings.share_activity) {
+      const limit = Math.min(settings.activity_limit || 50, 200);
+      const act = await pool.query(
+        `${SELECT_SHARED} WHERE w.status = 'watched' AND w.is_private = FALSE
+           ORDER BY w.watched_at DESC NULLS LAST LIMIT $1`,
+        [limit]
+      );
+      watches = nullRatings(act.rows, settings);
+    }
+
     res.json({
       instance_id: identity.instance_id,
       display_name: identity.display_name,
       avatar_url: identity.avatar_url,
       stats,
       upcoming,
+      shared: settings.share_activity,
+      watches,
     });
   } catch (err) {
-    logger.error({ err }, 'federation profile');
+    logger.error({ err }, 'federation feed');
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/federation/activity?since=&limit= — recent watched, non-private films.
-router.get('/activity', requireFriendToken, async (req, res) => {
-  try {
-    const settings = await fed.getSettings();
-    if (!settings.share_activity) return res.json({ shared: false, watches: [] });
+// The friends row matched by the token IS the authenticated author — no claimed
+// identity in the body is ever trusted. remote_instance_id may still be null if
+// we've never pulled this friend's feed; fall back to the row id (also a UUID)
+// so social_events' NOT NULL holds.
+function authorOf(friend) {
+  return {
+    instance_id: friend.remote_instance_id || friend.id,
+    name: (friend.display_name || 'A friend').slice(0, 120),
+  };
+}
 
-    const params = [];
-    const where = [`w.status = 'watched'`, `w.is_private = FALSE`];
-    if (req.query.since) {
-      params.push(req.query.since);
-      where.push(`w.watched_at > $${params.length}`);
-    }
-    const limit = Math.min(parseInt(req.query.limit, 10) || settings.activity_limit, 200);
-    params.push(limit);
-
-    const sql = `${SELECT_SHARED} WHERE ${where.join(' AND ')}
-      ORDER BY w.watched_at DESC NULLS LAST LIMIT $${params.length}`;
-    const { rows } = await pool.query(sql, params);
-    res.json({ shared: true, watches: nullRatings(rows, settings) });
-  } catch (err) {
-    logger.error({ err }, 'federation activity');
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/federation/ping — a friend telling us they just changed something.
-// Respond immediately and pull just them, so updates land within seconds instead
-// of waiting for the next poll.
-router.post('/ping', requireFriendToken, async (req, res) => {
-  res.json({ ok: true });
-  federationSync.syncFriendById(req.friend.id).catch(() => {});
-});
-
-// POST /api/federation/inbox — a friend commenting on one of our films. We're
-// the hub for events on our watches: store it, notify the owner, and it gets
-// re-broadcast to our friends via /activity. Gated by friend token.
 const COMMENT_MAX = 1000;
-router.post('/inbox', requireFriendToken, async (req, res) => {
+
+async function handleComment(req, res) {
+  const { target_watch_id, body } = req.body || {};
+  if (!target_watch_id) {
+    return res.status(400).json({ error: 'target_watch_id is required' });
+  }
+  const text = (body || '').trim().slice(0, COMMENT_MAX);
+  if (!text) return res.status(400).json({ error: 'Empty comment' });
+
+  const w = await pool.query(
+    `SELECT w.title, tc.payload->>'title' AS tmdb_title
+       FROM watches w LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+      WHERE w.id = $1 AND w.is_private = FALSE`,
+    [target_watch_id]
+  );
+  if (!w.rows.length) return res.status(404).json({ error: 'Unknown film' });
+  const filmTitle = w.rows[0].tmdb_title || w.rows[0].title;
+  const author = authorOf(req.friend);
+
+  await pool.query(
+    `INSERT INTO social_events (watch_id, author_instance_id, author_name, kind, body)
+     VALUES ($1, $2, $3, 'comment', $4)`,
+    [target_watch_id, author.instance_id, author.name, text]
+  );
+  notify({
+    kind: 'comment',
+    title: `${author.name} commented on your ${filmTitle}`,
+    body: text.length > 80 ? text.slice(0, 80) + '…' : text,
+    payload: { watch_id: target_watch_id },
+  }).catch(() => {});
+
+  res.json({ ok: true });
+}
+
+async function handleRecommend(req, res) {
+  const { tmdb_id, title } = req.body || {};
+  if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
+  // Cap peer-supplied strings so a friend can't store an unbounded blob.
+  const clamp = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s);
+  const author = authorOf(req.friend);
+  let filmTitle = clamp(title, 300);
+  if (tmdb_id) {
+    try {
+      const d = await tmdb.getOrFetchDetails(tmdb_id);
+      filmTitle = d.title || title;
+    } catch {}
+  }
+  await pool.query(
+    `INSERT INTO recommendations (from_instance_id, from_name, tmdb_id, title)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (from_instance_id, tmdb_id) WHERE tmdb_id IS NOT NULL
+     DO UPDATE SET from_name = EXCLUDED.from_name, title = EXCLUDED.title,
+                   status = 'pending', created_at = NOW()`,
+    [author.instance_id, author.name, tmdb_id || null, filmTitle || `TMDB ${tmdb_id}`]
+  );
+  notify({
+    kind: 'recommend',
+    title: `${author.name} recommends ${filmTitle}`,
+    body: 'Add it to your watchlist?',
+    payload: { tmdb_id: tmdb_id || null },
+  }).catch(() => {});
+  res.json({ ok: true });
+}
+
+// POST /api/federation/:token/inbox — everything a friend pushes to us:
+//   { kind: 'ping' }                                — "I changed, pull me now"
+//   { kind: 'comment', target_watch_id, body }      — comment on one of our films
+//   { kind: 'recommend', tmdb_id, title }           — recommend us a film
+// We're the hub for events on our watches: a stored comment is re-broadcast to
+// all friends inside our feed's comment threads.
+router.post('/:token/inbox', async (req, res) => {
   try {
-    const { kind, target_watch_id, body } = req.body || {};
-    if (kind !== 'comment' || !target_watch_id) {
-      return res.status(400).json({ error: 'comment kind and target_watch_id are required' });
+    const kind = (req.body || {}).kind;
+    if (kind === 'ping') {
+      res.json({ ok: true });
+      federationSync.syncFriendById(req.friend.id).catch(() => {});
+      return;
     }
-    const text = (body || '').trim().slice(0, COMMENT_MAX);
-    if (!text) return res.status(400).json({ error: 'Empty comment' });
-
-    const w = await pool.query(
-      `SELECT w.title, tc.payload->>'title' AS tmdb_title
-         FROM watches w LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
-        WHERE w.id = $1 AND w.is_private = FALSE`,
-      [target_watch_id]
-    );
-    if (!w.rows.length) return res.status(404).json({ error: 'Unknown film' });
-    const filmTitle = w.rows[0].tmdb_title || w.rows[0].title;
-    const name = req.friend.display_name || 'A friend';
-
-    await pool.query(
-      `INSERT INTO social_events (watch_id, author_instance_id, author_name, kind, body)
-       VALUES ($1, $2, $3, 'comment', $4)`,
-      [target_watch_id, req.friend.remote_instance_id, name, text]
-    );
-    notify({
-      kind: 'comment',
-      title: `${name} commented on your ${filmTitle}`,
-      body: text.length > 80 ? text.slice(0, 80) + '…' : text,
-      payload: { watch_id: target_watch_id },
-    }).catch(() => {});
-
-    res.json({ ok: true });
+    if (kind === 'comment') return await handleComment(req, res);
+    if (kind === 'recommend') return await handleRecommend(req, res);
+    res.status(400).json({ error: 'Unknown kind' });
   } catch (err) {
     logger.error({ err }, 'federation inbox');
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/federation/recommend — a friend recommending a film to us. Store it
-// (enriching via TMDB) and notify; the owner can add it to their watchlist.
-router.post('/recommend', requireFriendToken, async (req, res) => {
-  try {
-    const { tmdb_id, title } = req.body || {};
-    if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
-    // Cap peer-supplied strings so a friend can't store an unbounded blob.
-    const clamp = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s);
-    const name = clamp(req.friend.display_name, 120) || 'A friend';
-    let filmTitle = clamp(title, 300);
-    if (tmdb_id) {
-      try {
-        const d = await tmdb.getOrFetchDetails(tmdb_id);
-        filmTitle = d.title || title;
-      } catch {}
-    }
-    await pool.query(
-      `INSERT INTO recommendations (from_instance_id, from_name, tmdb_id, title)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (from_instance_id, tmdb_id) WHERE tmdb_id IS NOT NULL
-       DO UPDATE SET from_name = EXCLUDED.from_name, title = EXCLUDED.title,
-                     status = 'pending', created_at = NOW()`,
-      [req.friend.remote_instance_id, name, tmdb_id || null, filmTitle || `TMDB ${tmdb_id}`]
-    );
-    notify({
-      kind: 'recommend',
-      title: `${name} recommends ${filmTitle}`,
-      body: 'Add it to your watchlist?',
-      payload: { tmdb_id: tmdb_id || null },
-    }).catch(() => {});
-    res.json({ ok: true });
-  } catch (err) {
-    logger.error({ err }, 'federation recommend');
     res.status(500).json({ error: 'Server error' });
   }
 });

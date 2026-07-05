@@ -1,22 +1,27 @@
 import { useState } from 'react';
 import { api } from '../api';
 
-// Two ways to connect: generate an invite to hand a friend, or paste one they
-// gave you. Either side can initiate; pairing is mutual once redeemed.
+// Connecting is a URL swap: adding a friend mints your secret URL for them
+// (shown once — only its hash is kept), and you paste the one they send you.
+// Either half can happen first; paste theirs later from Manage friends.
 export default function AddFriendModal({ onClose, onChanged }) {
-  const [mode, setMode] = useState('accept');
-  const [invite, setInvite] = useState('');
-  const [generated, setGenerated] = useState('');
+  const [name, setName] = useState('');
+  const [theirUrl, setTheirUrl] = useState('');
+  const [myUrl, setMyUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  async function generate() {
+  async function add() {
+    if (!name.trim()) return;
     setBusy(true);
     setErr(null);
     try {
-      const { invite: code } = await api.inviteFriend();
-      setGenerated(code);
+      const body = { display_name: name.trim() };
+      if (theirUrl.trim()) body.friend_url = theirUrl.trim();
+      const created = await api.addFriend(body);
+      setMyUrl(created.my_url);
+      onChanged?.();
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -26,25 +31,10 @@ export default function AddFriendModal({ onClose, onChanged }) {
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(generated);
+      await navigator.clipboard.writeText(myUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {}
-  }
-
-  async function connect() {
-    if (!invite.trim()) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await api.acceptFriend(invite.trim());
-      onChanged?.();
-      onClose();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
   }
 
   return (
@@ -55,60 +45,47 @@ export default function AddFriendModal({ onClose, onChanged }) {
         <header className="friends-modal-head">
           <h2 className="friends-modal-title">Add a friend</h2>
           <p className="friends-modal-sub">
-            Connect two Marquee instances to share what you&rsquo;re watching.
+            Swap secret URLs to connect two Marquee instances.
           </p>
         </header>
 
-        <div className="friends-tabs">
-          <button
-            type="button"
-            className={`friends-tab ${mode === 'accept' ? 'is-on' : ''}`}
-            onClick={() => setMode('accept')}
-          >
-            I have an invite
-          </button>
-          <button
-            type="button"
-            className={`friends-tab ${mode === 'invite' ? 'is-on' : ''}`}
-            onClick={() => setMode('invite')}
-          >
-            Invite someone
-          </button>
-        </div>
-
         {err && <div className="error-banner">{err}</div>}
 
-        {mode === 'accept' ? (
+        {!myUrl ? (
           <div className="friends-form">
-            <label className="friends-label">Paste the invite your friend sent you</label>
+            <label className="friends-label">Friend&rsquo;s name</label>
+            <input
+              className="friends-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Kiran"
+              maxLength={120}
+            />
+            <label className="friends-label">Their URL for you (optional — paste it later if you don&rsquo;t have it yet)</label>
             <textarea
               className="friends-textarea"
-              rows={4}
-              value={invite}
-              onChange={(e) => setInvite(e.target.value)}
-              placeholder="eyJiYXNlX3VybCI6…"
+              rows={3}
+              value={theirUrl}
+              onChange={(e) => setTheirUrl(e.target.value)}
+              placeholder="https://…/api/federation/…"
             />
-            <button className="friends-primary" onClick={connect} disabled={busy || !invite.trim()}>
-              {busy ? 'Connecting…' : 'Connect'}
+            <button className="friends-primary" onClick={add} disabled={busy || !name.trim()}>
+              {busy ? 'Adding…' : 'Add friend'}
             </button>
           </div>
         ) : (
           <div className="friends-form">
-            {!generated ? (
-              <button className="friends-primary" onClick={generate} disabled={busy}>
-                {busy ? 'Generating…' : 'Generate invite'}
-              </button>
-            ) : (
-              <>
-                <label className="friends-label">
-                  Send this to your friend. It expires in 15 minutes and works once.
-                </label>
-                <textarea className="friends-textarea" rows={4} readOnly value={generated} />
-                <button className="friends-primary" onClick={copy}>
-                  {copied ? 'Copied ✓' : 'Copy invite'}
-                </button>
-              </>
-            )}
+            <label className="friends-label">
+              Send this URL to {name.trim()}. It&rsquo;s shown only once — if it&rsquo;s lost, rotate it from Manage friends.
+            </label>
+            <textarea className="friends-textarea" rows={3} readOnly value={myUrl} />
+            <button className="friends-primary" onClick={copy}>
+              {copied ? 'Copied ✓' : 'Copy URL'}
+            </button>
+            <button className="friends-secondary" onClick={onClose}>
+              Done
+            </button>
           </div>
         )}
       </div>

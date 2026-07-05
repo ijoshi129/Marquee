@@ -27,8 +27,7 @@ async function computeMatches() {
   const [profiles, mine] = await Promise.all([
     pool.query(
       `SELECT fp.friend_id, f.display_name AS friend_name, fp.now_playing
-         FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id
-        WHERE f.status = 'active'`
+         FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id`
     ),
     pool.query(
       `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb

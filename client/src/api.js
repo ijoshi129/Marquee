@@ -103,9 +103,11 @@ export const api = {
     request('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
   friends: () => request('/api/friends'),
   friendsFeed: () => request('/api/friends/feed'),
-  inviteFriend: () => request('/api/friends/invite', { method: 'POST' }),
-  acceptFriend: (invite) =>
-    request('/api/friends/accept', { method: 'POST', body: JSON.stringify({ invite }) }),
+  addFriend: (body) =>
+    request('/api/friends', { method: 'POST', body: JSON.stringify(body) }),
+  updateFriend: (id, body) =>
+    request(`/api/friends/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  rotateFriendUrl: (id) => request(`/api/friends/${id}/rotate`, { method: 'POST' }),
   removeFriend: (id) => request(`/api/friends/${id}`, { method: 'DELETE' }),
   commentOnWatch: (friendId, remote_watch_id, text) =>
     request(`/api/friends/${friendId}/comment`, {
