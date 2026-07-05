@@ -9,7 +9,7 @@ const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
-const { notifyNewMatches } = require('../services/together');
+const { notifyNewMatches, notifyNewBookings } = require('../services/together');
 
 const SYNC_INTERVAL_MIN = parseInt(process.env.FEDERATION_SYNC_INTERVAL_MIN, 10) || 15;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -38,6 +38,11 @@ async function syncFriend(friend) {
   // Watches, profile, and identity are written in one transaction so a mid-sync
   // failure can never leave a half-updated snapshot.
   const watches = Array.isArray(feed.watches) ? feed.watches : [];
+  const prevRes = await pool.query(
+    `SELECT now_playing FROM friend_profiles WHERE friend_id = $1`,
+    [friend.id]
+  );
+  const prevNowPlaying = prevRes.rows[0] ? prevRes.rows[0].now_playing : null;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -116,6 +121,10 @@ async function syncFriend(friend) {
   } finally {
     client.release();
   }
+
+  await notifyNewBookings(friend, prevNowPlaying, feed.upcoming).catch((err) =>
+    logger.error({ err, friend_id: friend.id }, 'booked notify')
+  );
 
   return watches.length;
 }

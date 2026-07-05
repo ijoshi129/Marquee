@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
+import NtfySettingsModal from './NtfySettingsModal';
 
 function BellIcon() {
   return (
@@ -22,7 +23,7 @@ function BellIcon() {
   );
 }
 
-const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨' };
+const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨', booked: '🎟️' };
 
 function urlB64ToUint8Array(base64) {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -36,6 +37,7 @@ function urlB64ToUint8Array(base64) {
 export default function NotificationsBell({ onOpen }) {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [open, setOpen] = useState(false);
+  const [ntfyOpen, setNtfyOpen] = useState(false);
   // 'unknown' | 'unsupported' | 'off' | 'on' | 'busy'
   const [push, setPush] = useState('unknown');
 
@@ -157,7 +159,7 @@ export default function NotificationsBell({ onOpen }) {
               </div>
               {push === 'off' && (
                 <button type="button" className="push-toggle" onClick={enablePush}>
-                  <span>🔔 Enable notifications on this device</span>
+                  <span>Enable notifications on this device</span>
                 </button>
               )}
               {push === 'on' && (
@@ -166,6 +168,10 @@ export default function NotificationsBell({ onOpen }) {
                   <span className="push-off">Turn off</span>
                 </button>
               )}
+              <button type="button" className="push-toggle" onClick={() => { setOpen(false); setNtfyOpen(true); }}>
+                <span>ntfy alerts</span>
+                <span className="push-off">Set up</span>
+              </button>
               {data.items.length === 0 ? (
                 <div className="friends-empty">Nothing yet.</div>
               ) : (
@@ -203,6 +209,8 @@ export default function NotificationsBell({ onOpen }) {
           </div>,
           document.body
         )}
+
+      {ntfyOpen && createPortal(<NtfySettingsModal onClose={() => setNtfyOpen(false)} />, document.body)}
     </>
   );
 }

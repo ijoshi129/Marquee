@@ -38,7 +38,7 @@ share what you're watching.
 - **Seeing together** — matching upcoming reservations merge into one card with a shared comment thread.
 - **Recommend films** — push a film to a friend's watchlist with a "Recommended by you" badge.
 - **Taste-match** — % agreement and films-in-common on each friend's profile.
-- **Notifications** — in-app bell plus iOS Web Push for recommendations, comments, and seeing-together alerts.
+- **Notifications** — in-app bell plus iOS Web Push and [ntfy](https://ntfy.sh) for recommendations, comments, and seeing-together alerts.
 
 **Operations**
 - **Daily backups** — automatic Postgres dumps, retained for 30 days.
@@ -163,6 +163,14 @@ VAPID_SUBJECT=mailto:you@example.com
 
 Push requires HTTPS, an installed (Add to Home Screen) PWA, and iOS 16.4+. Without VAPID
 keys the in-app notification bell still works.
+
+### 4. (Optional) ntfy
+
+Prefer ntfy (or can't use iOS push)? Open the bell → **ntfy alerts**, point it at
+ntfy.sh or your own server with a topic of your choice, and pick which alerts to
+send. Configured entirely in the UI — no env vars, works on any device with the
+ntfy app subscribed to that topic. Use a hard-to-guess topic name; on ntfy.sh,
+the topic is the only secret.
 
 ## Updating
 
