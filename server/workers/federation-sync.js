@@ -47,10 +47,12 @@ async function syncFriend(friend) {
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM friend_watches WHERE friend_id = $1', [friend.id]);
+    const seenIds = new Set();
     for (const w of watches) {
-      // Skip a malformed row rather than aborting the whole batch — one bad
-      // entry shouldn't wipe out the friend's entire cache for the cycle.
-      if (!w || !w.remote_id) continue;
+      // Skip a malformed or duplicate row rather than aborting the whole batch —
+      // one bad entry shouldn't wipe out the friend's entire cache for the cycle.
+      if (!w || !w.remote_id || seenIds.has(w.remote_id)) continue;
+      seenIds.add(w.remote_id);
       await client.query(
         `INSERT INTO friend_watches (friend_id, remote_watch_id, payload, watched_at, fetched_at)
          VALUES ($1, $2, $3, $4, NOW())`,
@@ -78,12 +80,41 @@ async function syncFriend(friend) {
         feed.avatar_url || friend.avatar_url,
       ]
     );
+    // Inbox writes that arrived before this first pull were keyed to the local
+    // row id (authorOf's fallback); re-key them to the real instance id so the
+    // friend has one identity — otherwise recommendation/reaction dedupe misses.
+    if (!friend.remote_instance_id && feed.instance_id) {
+      await client.query(
+        `DELETE FROM recommendations r
+          WHERE r.from_instance_id = $1 AND r.tmdb_id IS NOT NULL
+            AND EXISTS (SELECT 1 FROM recommendations r2
+                         WHERE r2.from_instance_id = $2 AND r2.tmdb_id = r.tmdb_id)`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `UPDATE recommendations SET from_instance_id = $2 WHERE from_instance_id = $1`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `DELETE FROM social_events se
+          WHERE se.author_instance_id = $1 AND se.kind = 'reaction'
+            AND EXISTS (SELECT 1 FROM social_events se2
+                         WHERE se2.author_instance_id = $2 AND se2.watch_id = se.watch_id
+                           AND se2.kind = 'reaction')`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `UPDATE social_events SET author_instance_id = $2 WHERE author_instance_id = $1`,
+        [friend.id, feed.instance_id]
+      );
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     // Unique violation on remote_instance_id: this URL belongs to an instance
-    // already stored under another friend row.
-    if (err.code === '23505') {
+    // already stored under another friend row. Match the specific constraint —
+    // a blanket 23505 remap would misattribute other unique violations.
+    if (err.code === '23505' && err.constraint === 'friends_remote_instance_id_key') {
       throw new Error('This URL belongs to a friend you already have');
     }
     throw err;
