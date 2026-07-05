@@ -3,8 +3,8 @@
 A self-hosted AMC movie tracker. Marquee watches your Gmail for AMC reservation and
 "Thank You" emails, parses them, enriches each film with TMDB metadata, and surfaces
 your whole moviegoing history in a cinematic poster-grid PWA — plus an optional
-federated **Friends** layer that lets you pair with other Marquee instances and share
-what you're watching.
+federated **Friends** layer that lets you connect with other Marquee instances and
+share what you're watching.
 
 <table>
   <tr>
@@ -33,7 +33,7 @@ what you're watching.
 - **Installable PWA** — works on phone and desktop, offline-friendly.
 
 **Friends (federation)**
-- **Pair instances directly** — no central server; two Marquee instances exchange a one-time invite code and sync over token-gated HTTP.
+- **Connect instances directly** — no central server; you and a friend swap secret URLs and the two instances sync over HTTP. Each URL is its own credential: revoke or rotate one friend without touching the rest.
 - **Activity feed** — see what friends have logged and what's coming up.
 - **Seeing together** — matching upcoming reservations merge into one card with a shared comment thread.
 - **Recommend films** — push a film to a friend's watchlist with a "Recommended by you" badge.
@@ -92,9 +92,10 @@ bulletin asking "did you go or miss it?".
 
 ## Friends (federation) — optional
 
-Pair your instance with a friend's so you can see each other's activity. Both
-instances must be reachable at a URL the other can hit (a LAN address,
-Tailscale MagicDNS, or a public domain).
+Connect your instance with a friend's so you can see each other's activity.
+Connecting is a URL swap: adding a friend mints a secret URL for them, they do
+the same for you, and you each paste the other's. The URL is the whole
+credential — no accounts, no invite codes.
 
 ### 1. Make your instance reachable & locked
 
@@ -107,19 +108,43 @@ INSTANCE_NAME=Your Name                                 # shown to friends
 OWNER_PASSCODE=<long random string>                     # protects your diary
 ```
 
-`OWNER_PASSCODE` gates **every** screen except the friend-facing federation API, so
-sharing the instance never exposes your diary. You unlock once per device. Recreate the
-stack after editing `.env` (`docker compose up -d --build`).
+`FEDERATION_BASE_URL` is what your friend URLs are built from, so it must be
+reachable from your friends' instances. Any of these works:
 
-### 2. Pair
+- **Cloudflare Tunnel (recommended — no open ports, hides your home IP).** Needs a
+  domain on Cloudflare. In Zero Trust → Networks → Tunnels, create a tunnel and run
+  the install command it gives you on the box running Marquee. Add one public
+  hostname: e.g. `fed.your-domain.com`, **path** `api/federation/*`, service
+  `http://localhost:3000` (your Marquee port). Set
+  `FEDERATION_BASE_URL=https://fed.your-domain.com`. The path filter means nothing
+  but the friend-facing API is ever reachable from the internet — everything else
+  404s at Cloudflare's edge.
+- **Reverse proxy + port forward** — any HTTPS proxy (Caddy, NPM, …) in front of
+  the Marquee port; restrict it to `/api/federation/` if it supports path rules.
+- **Same network / VPN** — if you and your friend already share a LAN or VPN, a
+  plain `http://<ip>:<port>` address works; no public exposure needed.
 
-1. Open the **Friends** tab → **Add a friend** → generate an invite code.
-2. Send the code to your friend out-of-band.
-3. They paste it into their **Add a friend → paste an invite**.
+Either way, only `/api/federation/*` needs to be reachable by friends; it answers
+only to a valid secret URL and 404s everything else. `OWNER_PASSCODE` gates
+**every** screen except that friend-facing API, so exposing the instance never
+exposes your diary. You unlock once per device. Recreate the stack after editing
+`.env` (`docker compose up -d --build`).
 
-Once paired, each side syncs the other every few minutes (and within ~2–3s on changes).
-Pairing is mutual and revocable from **Manage friends**. Control what you expose under
-**What friends see**.
+### 2. Connect
+
+1. Open the **Friends** tab → **Add a friend**, enter their name — you get a
+   secret URL to send them (shown once).
+2. They do the same on their instance and send you their URL.
+3. Paste each other's URLs (in **Add a friend**, or later via **Manage
+   friends → Add URL**).
+
+Once connected, each side syncs the other every few minutes (and within ~2–3s on
+changes). Remove or rotate a friend's URL any time from **Manage friends**;
+control what you expose under **What friends see**.
+
+Treat these URLs like passwords: anyone holding yours can read what you share and
+post comments as that friend. Send them over something private, and rotate a URL
+if it leaks.
 
 ### 3. (Optional) iOS Web Push
 
@@ -232,7 +257,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | Poller logs `imap: 0 messages` | No matching AMC emails, or IMAP is blocked. Run `node server/scripts/imap-debug.js` to verify the connection. |
 | `Invalid credentials` from Gmail | You're using your account password, not an app-specific one — see step 2. |
 | TMDB matches wrong/missing | Open the watch → **Assign movie** → pick the right film. Bulk re-run: `node server/scripts/backfill-tmdb.js`. |
-| Friend won't pair / shows offline | Confirm both sides have `FEDERATION_ENABLED=1` and a `FEDERATION_BASE_URL` each can reach. A `401` means the connection was revoked — re-invite. |
+| Friend won't sync / shows an error | Confirm both sides have `FEDERATION_ENABLED=1` and that each pasted URL is reachable from the other box. "Access rejected" means their URL for you was rotated or removed — ask for a fresh one and paste it via **Manage friends → Edit URL**. |
 | iOS push silent or missing | Needs HTTPS, an installed PWA, iOS 16.4+, and VAPID keys set. Remove and re-add the home-screen icon to refresh the service worker. |
 | Blank/white splash on iOS | iOS caches the splash at install. Remove the home-screen icon, force-quit Safari, reopen the site, re-Add to Home Screen. |
 | Backups missing from `BACKUP_HOST_PATH` | Confirm `BACKUP_DIR` is set (default `/backups`) and the host path is writable. Manual run: `docker exec marquee node -e "require('./workers/backup').runBackup().then(p => console.log(p))"`. |
@@ -260,14 +285,14 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 
 | Route | Purpose |
 |---|---|
-| `GET /api/friends` · `DELETE /api/friends/:id` | List / remove friends. |
-| `POST /api/friends/invite` · `POST /api/friends/accept` | Create / redeem an invite code. |
+| `GET\|POST /api/friends` · `PATCH\|DELETE /api/friends/:id` | List / add / edit / remove friends. |
+| `POST /api/friends/:id/rotate` | Mint a fresh secret URL for a friend. |
 | `GET /api/friends/feed` | Combined activity feed. |
 | `GET /api/friends/:id/watches` · `GET /api/friends/:id/profile` · `GET /api/friends/:id/common` | A friend's cached diary, profile, and films-in-common. |
 | `POST /api/friends/:id/comment` · `POST /api/friends/:id/recommend` | Comment on / recommend a film. |
 | `GET\|PUT /api/friends/settings` | What you share. |
 | `GET\|POST\|DELETE /api/notifications` | In-app notifications (list, mark read, dismiss/clear). |
-| `/api/federation/*` | Friend-facing, token-gated. Fails closed unless `FEDERATION_ENABLED=1`. |
+| `/api/federation/:token/*` | Friend-facing; the secret URL is the credential. Fails closed unless `FEDERATION_ENABLED=1`. |
 
 All `/api/*` routes are rate-limited to 600 req/min per IP. With `OWNER_PASSCODE` set,
 every route except `/api/federation`, `/api/auth`, and `/api/health` requires the
@@ -285,7 +310,7 @@ migrations under `server/migrations/`.
 - `watches` — one row per reservation/Thank You. `status` is `pending`, `watched`, `cancelled`, or `no_show`.
 - `tmdb_cache` — TMDB API responses, keyed by `tmdb_id`.
 - `email_log` — every parsed AMC email, deduped by `gmail_message_id`; pruned to the last 730 days.
-- `friends` / `friend_watches` / `friend_profiles` — paired instances and their cached diaries.
+- `friends` / `friend_watches` / `friend_profiles` — connected instances and their cached diaries.
 - `social_events` / `notifications` — comments, recommendations, and the notification feed.
 - `_migrations` — tracks which numbered SQL files have been applied.
 

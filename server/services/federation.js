@@ -1,10 +1,14 @@
 const crypto = require('node:crypto');
 const { pool } = require('../db');
 
-// 256-bit URL-safe secret, used for both pairing codes and per-friend tokens.
+// 256-bit URL-safe secret — the token embedded in a capability URL.
 function generateSecret() {
   return crypto.randomBytes(32).toString('base64url');
 }
+
+// Shape of a generateSecret() token as it appears in a URL path. Checked before
+// hashing so junk paths are rejected cheaply.
+const TOKEN_RX = /^[A-Za-z0-9_-]{40,50}$/;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -55,12 +59,12 @@ function isEnabled() {
   return process.env.FEDERATION_ENABLED === '1' || process.env.FEDERATION_ENABLED === 'true';
 }
 
-// A friend's base_url is fetched server-side with our outbound token attached,
-// so a peer-supplied value is an SSRF / token-exfiltration vector. We can't ban
-// private addresses (friends legitimately live on localhost / LAN / Tailscale),
-// but we can require a sane http(s) URL and block the link-local range that
-// cloud metadata services sit on (169.254.0.0/16, e.g. 169.254.169.254). Returns
-// the normalized origin string, or null if the URL is unacceptable.
+// A friend's URL is fetched server-side, so an owner-pasted value is still an
+// SSRF vector. We can't ban private addresses (friends legitimately live on
+// localhost / LAN / Tailscale), but we can require a sane http(s) URL and block
+// the link-local range that cloud metadata services sit on (169.254.0.0/16,
+// e.g. 169.254.169.254). Returns the normalized origin string, or null if the
+// URL is unacceptable.
 function safeBaseUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   let url;
@@ -77,6 +81,23 @@ function safeBaseUrl(raw) {
   return url.origin;
 }
 
+// Validate an owner-pasted capability URL: acceptable origin (same rules as
+// safeBaseUrl) and a path of exactly /api/federation/<token>. Returns the
+// normalized URL string, or null.
+function parseFriendUrl(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let url;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (!safeBaseUrl(url.origin)) return null;
+  const m = url.pathname.match(/^\/api\/federation\/([^/]+)\/?$/);
+  if (!m || !TOKEN_RX.test(m[1])) return null;
+  return `${url.origin}/api/federation/${m[1]}`;
+}
+
 const PING_DEBOUNCE_MS = 400;
 const PING_TIMEOUT_MS = 5000;
 let pingTimer = null;
@@ -85,9 +106,10 @@ async function pingFriend(friend) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   try {
-    await fetch(`${friend.base_url.replace(/\/$/, '')}/api/federation/ping`, {
+    await fetch(`${friend.friend_url}/inbox`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${friend.outbound_token}` },
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'ping' }),
       signal: controller.signal,
     });
   } catch {
@@ -97,15 +119,15 @@ async function pingFriend(friend) {
   }
 }
 
-// Tell every active friend "I changed — pull me now", debounced so a burst of
-// edits collapses into one round of pings. Fire-and-forget; safe to call often.
+// Tell every reachable friend "I changed — pull me now", debounced so a burst
+// of edits collapses into one round of pings. Fire-and-forget; safe to call often.
 function notifyFriends() {
   if (!isEnabled() || pingTimer) return;
   pingTimer = setTimeout(async () => {
     pingTimer = null;
     try {
       const { rows } = await pool.query(
-        `SELECT base_url, outbound_token FROM friends WHERE status = 'active'`
+        `SELECT friend_url FROM friends WHERE friend_url IS NOT NULL`
       );
       await Promise.allSettled(rows.map((f) => pingFriend(f)));
     } catch {
@@ -116,6 +138,7 @@ function notifyFriends() {
 
 module.exports = {
   generateSecret,
+  TOKEN_RX,
   sha256,
   safeEqualHex,
   ensureIdentity,
@@ -124,5 +147,6 @@ module.exports = {
   getSettings,
   isEnabled,
   safeBaseUrl,
+  parseFriendUrl,
   notifyFriends,
 };

@@ -1,8 +1,9 @@
-// Pulls each active friend's shared data on an interval and caches it locally so
-// the Friends UI is fast and survives a friend being offline. Polls the friend's
-// federation API presenting our outbound token; one friend failing never blocks
-// the others. Transient failures keep the friend active and leave the stale
-// cache in place — only a 401 means we've been revoked.
+// Pulls each friend's shared feed on an interval and caches it locally so the
+// Friends UI is fast and survives a friend being offline. The friend's
+// capability URL is the whole credential; one friend failing never blocks the
+// others. Any failure keeps the stale cache in place and records last_error —
+// there's no revoked state, so a friend who rotates their URL just shows an
+// error until the owner pastes the fresh one.
 
 const cron = require('node-cron');
 const logger = require('../logger');
@@ -13,18 +14,13 @@ const { notifyNewMatches, notifyNewBookings } = require('../services/together');
 const SYNC_INTERVAL_MIN = parseInt(process.env.FEDERATION_SYNC_INTERVAL_MIN, 10) || 15;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-async function fetchJson(base, path, token) {
+async function fetchFeed(friend) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const resp = await fetch(`${base.replace(/\/$/, '')}${path}`, {
-      headers: { authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    });
-    if (resp.status === 401) {
-      const err = new Error('unauthorized');
-      err.unauthorized = true;
-      throw err;
+    const resp = await fetch(`${friend.friend_url}/feed`, { signal: controller.signal });
+    if (resp.status === 401 || resp.status === 404) {
+      throw new Error('Access rejected — ask them for a fresh URL');
     }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return await resp.json();
@@ -34,17 +30,14 @@ async function fetchJson(base, path, token) {
 }
 
 async function syncFriend(friend) {
-  const [profile, activity] = await Promise.all([
-    fetchJson(friend.base_url, '/api/federation/profile', friend.outbound_token),
-    fetchJson(friend.base_url, '/api/federation/activity', friend.outbound_token),
-  ]);
+  const feed = await fetchFeed(friend);
 
   // Full replace, not incremental: re-pulling the whole shared set is what makes
   // edits propagate — a re-rated film updates, and a film the friend marked
   // private (or deleted) disappears from our cache. Cheap at personal scale.
   // Watches, profile, and identity are written in one transaction so a mid-sync
   // failure can never leave a half-updated snapshot.
-  const watches = Array.isArray(activity.watches) ? activity.watches : [];
+  const watches = Array.isArray(feed.watches) ? feed.watches : [];
   const prevRes = await pool.query(
     `SELECT now_playing FROM friend_profiles WHERE friend_id = $1`,
     [friend.id]
@@ -54,10 +47,12 @@ async function syncFriend(friend) {
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM friend_watches WHERE friend_id = $1', [friend.id]);
+    const seenIds = new Set();
     for (const w of watches) {
-      // Skip a malformed row rather than aborting the whole batch — one bad
-      // entry shouldn't wipe out the friend's entire cache for the cycle.
-      if (!w || !w.remote_id) continue;
+      // Skip a malformed or duplicate row rather than aborting the whole batch —
+      // one bad entry shouldn't wipe out the friend's entire cache for the cycle.
+      if (!w || !w.remote_id || seenIds.has(w.remote_id)) continue;
+      seenIds.add(w.remote_id);
       await client.query(
         `INSERT INTO friend_watches (friend_id, remote_watch_id, payload, watched_at, fetched_at)
          VALUES ($1, $2, $3, $4, NOW())`,
@@ -69,18 +64,59 @@ async function syncFriend(friend) {
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (friend_id) DO UPDATE SET
          stats = EXCLUDED.stats, now_playing = EXCLUDED.now_playing, fetched_at = NOW()`,
-      [friend.id, profile.stats || null, JSON.stringify(profile.upcoming || [])]
+      [friend.id, feed.stats || null, JSON.stringify(feed.upcoming || [])]
     );
-    // Friends can rename themselves; refresh the cached identity.
+    // Friends can rename themselves; refresh the cached identity. instance_id
+    // is learned here on the first successful pull.
     await client.query(
-      `UPDATE friends SET display_name = $2, avatar_url = $3,
+      `UPDATE friends SET remote_instance_id = COALESCE($2::uuid, remote_instance_id),
+              display_name = $3, avatar_url = $4,
               last_synced_at = NOW(), last_error = NULL, updated_at = NOW()
          WHERE id = $1`,
-      [friend.id, profile.display_name || friend.display_name, profile.avatar_url || friend.avatar_url]
+      [
+        friend.id,
+        feed.instance_id || null,
+        feed.display_name || friend.display_name,
+        feed.avatar_url || friend.avatar_url,
+      ]
     );
+    // Inbox writes that arrived before this first pull were keyed to the local
+    // row id (authorOf's fallback); re-key them to the real instance id so the
+    // friend has one identity — otherwise recommendation/reaction dedupe misses.
+    if (!friend.remote_instance_id && feed.instance_id) {
+      await client.query(
+        `DELETE FROM recommendations r
+          WHERE r.from_instance_id = $1 AND r.tmdb_id IS NOT NULL
+            AND EXISTS (SELECT 1 FROM recommendations r2
+                         WHERE r2.from_instance_id = $2 AND r2.tmdb_id = r.tmdb_id)`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `UPDATE recommendations SET from_instance_id = $2 WHERE from_instance_id = $1`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `DELETE FROM social_events se
+          WHERE se.author_instance_id = $1 AND se.kind = 'reaction'
+            AND EXISTS (SELECT 1 FROM social_events se2
+                         WHERE se2.author_instance_id = $2 AND se2.watch_id = se.watch_id
+                           AND se2.kind = 'reaction')`,
+        [friend.id, feed.instance_id]
+      );
+      await client.query(
+        `UPDATE social_events SET author_instance_id = $2 WHERE author_instance_id = $1`,
+        [friend.id, feed.instance_id]
+      );
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    // Unique violation on remote_instance_id: this URL belongs to an instance
+    // already stored under another friend row. Match the specific constraint —
+    // a blanket 23505 remap would misattribute other unique violations.
+    if (err.code === '23505' && err.constraint === 'friends_remote_instance_id_key') {
+      throw new Error('This URL belongs to a friend you already have');
+    }
     throw err;
   } finally {
     client.release();
@@ -99,8 +135,8 @@ async function syncFriend(friend) {
 // sync for that friend is already running.
 const inFlight = new Set();
 
-// Sync one friend, recording the outcome on its row. A 401 means they revoked
-// us; any other error is transient — keep the stale cache and the active status.
+// Sync one friend, recording the outcome on its row. Every failure is treated
+// as transient — stale cache kept, last_error set, polling continues.
 async function runSyncFriend(friend) {
   if (inFlight.has(friend.id)) return 'skipped';
   inFlight.add(friend.id);
@@ -108,19 +144,11 @@ async function runSyncFriend(friend) {
     await syncFriend(friend);
     return 'synced';
   } catch (err) {
-    if (err.unauthorized) {
-      await pool.query(
-        `UPDATE friends SET status = 'revoked', last_error = 'Revoked by friend', updated_at = NOW() WHERE id = $1`,
-        [friend.id]
-      );
-      logger.warn({ friend_id: friend.id }, 'federation-sync: friend revoked us');
-    } else {
-      await pool.query(
-        `UPDATE friends SET last_error = $2, updated_at = NOW() WHERE id = $1`,
-        [friend.id, err.message || 'sync failed']
-      );
-      logger.error({ err, friend_id: friend.id }, 'federation-sync: friend failed');
-    }
+    await pool.query(
+      `UPDATE friends SET last_error = $2, updated_at = NOW() WHERE id = $1`,
+      [friend.id, err.message || 'sync failed']
+    );
+    logger.error({ err, friend_id: friend.id }, 'federation-sync: friend failed');
     return 'failed';
   } finally {
     inFlight.delete(friend.id);
@@ -139,7 +167,7 @@ async function syncOnce() {
   let synced = 0;
   let failed = 0;
   try {
-    const { rows } = await pool.query(`SELECT * FROM friends WHERE status = 'active'`);
+    const { rows } = await pool.query(`SELECT * FROM friends WHERE friend_url IS NOT NULL`);
     for (const friend of rows) {
       const r = await runSyncFriend(friend);
       if (r === 'synced') synced++;
@@ -154,12 +182,13 @@ async function syncOnce() {
   }
 }
 
-// Sync a single friend immediately — used by the live "ping" path.
+// Sync a single friend immediately — used by the live "ping" path and right
+// after the owner pastes a friend's URL.
 async function syncFriendById(friendId) {
   if (!fed.isEnabled()) return;
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM friends WHERE id = $1 AND status = 'active'`,
+      `SELECT * FROM friends WHERE id = $1 AND friend_url IS NOT NULL`,
       [friendId]
     );
     if (rows[0] && (await runSyncFriend(rows[0])) !== 'skipped') {

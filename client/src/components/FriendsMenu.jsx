@@ -49,7 +49,7 @@ export default function FriendsMenu({ onClose, onAdd, onManage, onSharing }) {
           <span className="fmenu-ico"><AddIcon /></span>
           <span className="fmenu-text">
             <span className="fmenu-t">Add a friend</span>
-            <span className="fmenu-h">Invite someone or paste an invite</span>
+            <span className="fmenu-h">Swap URLs to connect</span>
           </span>
           <span className="fmenu-chev">›</span>
         </button>

@@ -3368,14 +3368,13 @@ input[type='date'].input-naked { color-scheme: dark; }
 .friends-modal-head { margin-bottom: 16px; }
 .friends-modal-title { margin: 0; font-size: 1.25rem; font-family: var(--font-display); }
 .friends-modal-sub { color: var(--fg-dim); font-size: 0.88rem; margin: 6px 0 0; }
-.friends-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
-.friends-tab { flex: 1; font: inherit; font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer; padding: 9px; border-radius: var(--radius-md); background: var(--bg-tint); border: 1px solid transparent; color: var(--fg-dim); }
-.friends-tab.is-on { background: var(--accent-soft); color: var(--accent); border-color: #3a2c0f; }
 .friends-form { display: flex; flex-direction: column; gap: 10px; }
 .friends-label { color: var(--fg-dim); font-size: 0.85rem; }
+.friends-input { font: inherit; background: #0b0b0e; border: 1px solid var(--bg-tint-strong); border-radius: var(--radius-md); color: var(--fg); padding: 12px; }
 .friends-textarea { font-family: var(--font-mono); font-size: 0.72rem; resize: vertical; background: #0b0b0e; border: 1px solid var(--bg-tint-strong); border-radius: var(--radius-md); color: var(--fg); padding: 12px; word-break: break-all; }
 .friends-primary { font: inherit; font-weight: 600; cursor: pointer; padding: 12px; border-radius: var(--radius-md); background: var(--accent); color: var(--accent-fg); border: none; }
 .friends-primary:disabled { opacity: 0.5; cursor: default; }
+.friends-secondary { font: inherit; cursor: pointer; padding: 12px; border-radius: var(--radius-md); background: none; color: var(--fg-dim); border: 1px solid var(--bg-tint-strong); }
 .sharing-list { list-style: none; margin: 0; padding: 0; }
 .sharing-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--bg-tint); }
 .sharing-row:last-child { border-bottom: none; }
@@ -3398,6 +3397,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .mf-remove { flex: 1; font: inherit; font-size: 0.78rem; cursor: pointer; color: var(--fg-mute); background: none; border: 1px solid var(--bg-tint-strong); border-radius: 99px; padding: 6px 12px; }
 .mf-remove:hover:not(:disabled) { color: #e0623c; border-color: #e0623c55; }
 .mf-remove:disabled { opacity: 0.5; cursor: default; }
+.mf-urlrow { display: flex; flex-direction: column; gap: 8px; padding-left: 50px; }
 .mf-test { font-size: 0.78rem; padding-left: 50px; line-height: 1.35; }
 .mf-test.ok { color: #4caf7d; }
 .mf-test.bad { color: #e0734c; }
