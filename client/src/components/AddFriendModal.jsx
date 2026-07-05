@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import UrlReveal from './UrlReveal';
 
 // Connecting is a URL swap: adding a friend mints your secret URL for them
 // (shown once — only its hash is kept), and you paste the one they send you.
@@ -8,7 +9,6 @@ export default function AddFriendModal({ onClose, onChanged }) {
   const [name, setName] = useState('');
   const [theirUrl, setTheirUrl] = useState('');
   const [myUrl, setMyUrl] = useState('');
-  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -27,14 +27,6 @@ export default function AddFriendModal({ onClose, onChanged }) {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(myUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
   }
 
   return (
@@ -76,13 +68,10 @@ export default function AddFriendModal({ onClose, onChanged }) {
           </div>
         ) : (
           <div className="friends-form">
-            <label className="friends-label">
-              Send this URL to {name.trim()}. It&rsquo;s shown only once — if it&rsquo;s lost, rotate it from Manage friends.
-            </label>
-            <textarea className="friends-textarea" rows={3} readOnly value={myUrl} />
-            <button className="friends-primary" onClick={copy}>
-              {copied ? 'Copied ✓' : 'Copy URL'}
-            </button>
+            <UrlReveal
+              url={myUrl}
+              label={`Send this URL to ${name.trim()} — or let them scan it. It’s shown only once; if it’s lost, rotate it from Manage friends.`}
+            />
             <button className="friends-secondary" onClick={onClose}>
               Done
             </button>

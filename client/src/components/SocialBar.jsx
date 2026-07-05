@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
 
 // Inline, collapsible comment thread under a feed card. Comments come from the
 // (live-polling) feed item; posting pushes to the owner instance and the thread
 // refreshes on the next sync.
-export default function SocialBar({ item, onChanged }) {
-  const [open, setOpen] = useState(false);
+export default function SocialBar({ item, onChanged, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // A deep-link can target an already-mounted card — follow the prop up.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);

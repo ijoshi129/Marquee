@@ -26,7 +26,8 @@ Prod lives on the user's Unraid box "Tank" at `/mnt/user/appdata/marquee/`. **No
 - **This override is the only line of defense protecting Tank's data.** If lost, the next `docker compose up -d` creates an empty `marquee_pgdata` volume and runs a blank database. Always preserve `.env` and `compose.override.yaml` alongside any backup.
 - Container names are pinned (`marquee`, `marquee-postgres`). Backup dir is host-mounted; daily Postgres dumps land there.
 - **NPM (Nginx Proxy Manager) fronts prod.** Express has no `trust proxy` set, so the rate-limiter and access logs see NPM's IP, not the client — pre-existing, not a regression; only matters if you want per-client limiting/real IPs.
-- **Planned migration (not done):** move prod off Tank to a **dedicated Proxmox LXC** with **Tailscale installed inside the LXC** (so the LXC is its own tailnet node — node-sharing exposes only Marquee, and `OWNER_PASSCODE` locks everything but the federation API). Needs `/dev/net/tun` passthrough for `tailscaled`. Migrate via `pg_dump` → restore; carry `.env`. Until then prod stays on Tank and is **still pre-v1.5** (v1.5 + v2.0 are `main`/branch only).
+- **Tank now runs v2.0** (deployed 2026-06-23). Tank is on tailnet **`tail4da5e4`**.
+- **LXC migration (in progress):** a **dedicated Proxmox LXC** with **Tailscale inside the LXC** (its own tailnet node — node-sharing exposes only Marquee; `OWNER_PASSCODE` locks everything but the federation API). Needs `/dev/net/tun` for `tailscaled`. The LXC is up, fronted by NPM at **`https://marquee.monklabs.org`**. Migrate via `pg_dump` → restore; carry `.env`. To share with a friend, share that *one* LXC node (it's also the tailnet node).
 
 ## Deploy / update flow
 
@@ -57,11 +58,11 @@ GHCR has stale tags (`:latest`, `:0.2.0`, `:0.2`, `:sha-2e2f103`) all pointing a
 
 ## Release state
 
-- Latest git tag: **`v1.5`** (2026-06-21), with a matching GitHub release. Tags are markers only — the image is built per-host from the tagged checkout. **No `v2.0` tag/WhatsNew yet** — the v2.0 feature work is unmerged on `federation-client` (see below).
-- `client/src/components/WhatsNew.jsx` holds the in-app changelog. Bump `WHATS_NEW_VERSION` and prepend a `v1.x` block whenever shipping user-facing changes. The `v1.5` entry now has six sections (A-List by month · Tap any stat · Showtimes · Screen Unseen · director-filter chip · clickable Five-Star Picks).
-- Merged to `main` since v1.5 (2026-06-22): **#39** director-filter chip in the filters panel, **#40** clickable Five-Star Picks posters, **#41** their WhatsNew entries.
+- Latest git tag: **`v2.0`** (2026-06-23, GitHub release published), the Friends/federation layer. `v1.5` (2026-06-21) before it. Tags are markers only — the image is built per-host from the tagged checkout.
+- `client/src/components/WhatsNew.jsx` holds the in-app changelog. Bump `WHATS_NEW_VERSION` and prepend a block whenever shipping user-facing changes. `WHATS_NEW_VERSION` is now `2.0` (Friends entry); `v1.5` and earlier blocks retained.
+- Pre-v2.0 merges to `main`: **#39** director-filter chip, **#40** clickable Five-Star Picks, **#41** their WhatsNew entries.
 
-## Friends / federation (v2.0 — WIP on branch `federation-client`, unmerged)
+## Friends / federation (v2.0 — shipped & merged to `main`)
 
 A federated social layer: independent Marquee instances pair and share over token-gated HTTP (Mastodon-style, no central server). Connectivity-agnostic — the code only stores a friend's `base_url` string. **Migrations 010–014.** Off unless `FEDERATION_ENABLED=1`; the friend-facing API fails closed otherwise.
 
@@ -69,32 +70,36 @@ A federated social layer: independent Marquee instances pair and share over toke
 - **Owner lock:** `OWNER_PASSCODE` gates **every** `/api` route except `/api/federation`, `/api/auth`, `/api/health`. Unset = no lock (legacy). One-time unlock per device (client sends `X-Owner-Passcode`). This is what makes Tailscale node-sharing safe — friends can reach the box but only the federation API.
 - **Notifications (`/api/notifications`):** generic model + in-app bell (mark-read/dismiss/clear) **and iOS Web Push** (`web-push` dep, VAPID env, `sw.js` push handler). Push gotchas: needs HTTPS + installed PWA + iOS 16.4+; notification `icon`/`badge` must be **PNG** (SVG silently fails on iOS); a stale/orphaned subscription causes silent pushes that trip iOS's display budget — client unsubscribes-before-subscribe to avoid accumulation.
 - **Social:** activity feed; **seeing-together** (matching upcoming reservations merge into one card; comments use a deterministic **canonical-host** so a mutually-connected group shares one thread — host can be a friend's copy or your own film); comments (`social_events`, owner-hub re-broadcast); recommendations (push a film → friend's watchlist + "Recommended by X" badge); taste-match (% agreement + films-in-common on a friend profile); presence ("Watching now" derived from showtime+runtime).
-- **Env:** `FEDERATION_ENABLED`, `FEDERATION_BASE_URL`, `INSTANCE_NAME`, `FEDERATION_SYNC_INTERVAL_MIN`, `OWNER_PASSCODE`, `VAPID_PUBLIC_KEY`/`PRIVATE_KEY`/`SUBJECT` (all documented in `.env.example`; instance handles were dropped — name only).
-- **Status / open items:** `federation-client` is **not merged or PR'd**; **#42** (early server-only branch) is now a strict subset of it — close it and open one clean PR. No v2.0 WhatsNew/tag/deploy yet. **Friends timeline layout is disliked** (upcoming reservations sort above Today's activity); a "Coming up" rail experiment was built then reverted — still unresolved.
+- **Env:** `FEDERATION_ENABLED`, `FEDERATION_BASE_URL`, `INSTANCE_NAME`, `FEDERATION_SYNC_INTERVAL_MIN`, `OWNER_PASSCODE`, `VAPID_PUBLIC_KEY`/`PRIVATE_KEY`/`SUBJECT` (all in `.env.example`; instance handles dropped — name only). Identity (`federation_identity.instance_id` + `display_name`) is seeded from `INSTANCE_NAME` **once on a fresh DB** (`ON CONFLICT DO NOTHING`) — **cloning a Marquee volume carries the old identity**, and changing `INSTANCE_NAME` later does nothing; fix with `UPDATE federation_identity SET display_name=…, instance_id=gen_random_uuid()`.
+- **Reachability:** federation needs **bidirectional** reach (each box hits the other's `FEDERATION_BASE_URL`). Pairing only tests the accepter→inviter direction; sync needs both. `safeBaseUrl` allows LAN/Tailscale/localhost, rejects bad schemes + link-local `169.254`. Tailscale **MagicDNS names are tailnet-scoped — they DON'T resolve across tailnets even when nodes are shared**; for a shared node use its `100.x` IP + app port (`http://100.x:port`; Tailscale encrypts transport). Cross-tailnet sharing is a 2-step handshake (share **and** accept) — `tailscale ping` `no matching peer` = not accepted. Public HTTPS via NPM (valid cert) is the lowest-friction `FEDERATION_BASE_URL` (works for any friend); `https://…ts.net` needs a real cert (Tailscale Serve) or it fails.
+- **Manage friends UI:** per-friend **Test Connection** (`POST /api/friends/:id/test-connection`, probes reach + token) and **Sync** (`/:id/sync`) buttons.
+- **Status / open items:** v2.0 **merged** (#44, superseding the closed #42; README #43; #45 test/sync buttons + sync-on-pair; #46 pairing-race fix; #47 own-film comment threads), **tagged + released**. `federation-server-core` branch deleted. **Still open:** Friends timeline layout disliked (upcoming reservations sort above Today's activity; a reverted "Coming up" rail experiment).
 
-## Session log — v2.0 WIP (2026-06-22)
+## Session log — v2.0 ship + prod federation (2026-06-23)
 
-Built the whole **Friends / federation + notifications + social layer** on `federation-client` (architecture + open items in the "Friends / federation" section above), ~9 commits, verified on a local 2–3 instance rig and real iOS Web Push via `mtest.monklabs.org`. Also merged **#39/#40/#41** (director-filter chip, clickable Five-Star Picks) to `main`.
+- **Shipped v2.0:** merged #44 (Friends, incl. ~27 reliability/validation fixes from a multi-agent whole-app review), #43 (README + `docs/screenshots/`), #45–#47 (federation UX); published `v2.0` tag/release; closed #42; deleted `federation-server-core`.
+- **Prod federation (Tank ↔ rugbytank):** `rugbytank` = second Unraid box, tailnet **`tail5011ba`**, Tailscale IP **`100.66.101.73`**, Marquee app **:3067**; also hosts the `mtest.monklabs.org` fedtest (a *separate* instance, identity "Mac"). Most debugging was reachability: cross-tailnet MagicDNS doesn't resolve (Tank `tail4da5e4` ≠ rugby `tail5011ba`) + a typo'd `100.x` IP. Fixes captured in the federation section.
+- **Two prod bugs fixed:** #46 — the sync-on-pair from #45 raced the accepter storing its token → spurious 401 → friend wrongly `revoked`; now the accepter pings the inviter *after* storing (unstick a pair with `UPDATE friends SET status='active', last_error=NULL WHERE status='revoked'`). #47 — comments on *your own* films were stored + notified but had no UI; the feed now surfaces own films with comment threads.
+- **Gotcha:** `web-push` is a v2.0 dep — a container missing it from `/app/server/node_modules` is running **pre-v2.0** code (deploy to fix). Generate VAPID in-container: `docker exec -w /app/server marquee node -e 'console.log(require("web-push").generateVAPIDKeys())'`. `OWNER_PASSCODE` was left as `changeme` on a public-facing box — harden before exposing.
 
-Process notes:
-- Long-lived dev servers must use the **managed background runner** — plain `&` backgrounding dies when the Bash tool call returns.
-- `compose.yaml` has `env_file: ./.env`, so the container's env comes from `./.env`; a `--env-file` flag only covers `${...}` **interpolation**, not container env. Inject federation/VAPID vars via the override's `environment:` block (or put everything in the test dir's `./.env`).
-- iOS PWA service-worker updates: reopening doesn't swap the worker — delete + re-add the home-screen icon (and clear Safari website data) to pick up a new `sw.js`.
+## Session log — v2.0 build (2026-06-22)
+
+Built the Friends/federation + notifications + social layer on `federation-client` (architecture in the section above), verified on a local rig + real iOS Web Push via `mtest.monklabs.org`. Process notes:
+- Long-lived dev servers need the **managed background runner** — plain `&` dies when the Bash call returns.
+- `compose.yaml` has `env_file: ./.env`; a `--env-file` flag only covers `${...}` interpolation, not container env. Inject vars via the override `environment:` block or the test dir's `./.env`.
+- iOS PWA SW updates: reopening doesn't swap the worker — delete + re-add the home-screen icon (clear Safari data) to pick up a new `sw.js`.
 
 ## Session log — v1.5 (2026-06-21)
 
-Shipped a batch of features as four squash-merged PRs (#33, #37, #34, #38) plus an earlier fix (#32). **Tank prod has NOT been updated yet** — owner updates it manually via the deploy flow above; v1.5 is on `main`/GitHub only.
+Four squash-merged PRs (#33/#37/#34/#38) + fix #32, where the code lives:
+- **#32 Cancelled ≠ Seen:** `watchlist.js` now-playing "seen" scoped to `status='watched'`.
+- **#33 Per-month A-List:** `alist_membership_month` table (mig `009`); resolve month override → year flag → default; year toggle clears that year's month overrides in one txn (`routes/alist.js`); math in `services/alist-value.js` (`computeAlistValue`, unit-tested); editor `AListMembershipModal.jsx`.
+- **#37 Stat detail sheets:** every In Review number opens a period-aware sheet (`AListValueModal.jsx`, `StatDetailModal.jsx`); stats payload gained `value.by_year`, `rating_breakdown`, `years`.
+- **#34 Showtimes on posters:** `tmdb.js shapeSearchResult` carries `release_date`; `format.js` `fmtShortDate`/`isUpcoming`/`fmtShowtime`; amber release chip + `🎟` badge (UTC).
+- **#38 Unseen reveal gate:** Unseen title hidden until **showtime+2h**; `tmdb-rechecker` skips pre-showtime Unseens; gate honors `APP_TIMEZONE` (default `America/New_York`); `UNSEEN_REVEAL_AFTER_MS=2h` in `tmdb-rechecker.js` + `format.js`.
 
-What shipped and where the code lives:
-
-- **Cancelled ≠ Seen (#32, noted under v1.4):** `server/routes/watchlist.js` now-playing "seen" set is scoped to `status = 'watched'`, so a cancelled reservation no longer shows as Seen in Now Playing.
-- **Per-month A-List membership (#33):** `alist_membership` (year) + new `alist_membership_month` (year, month) table (migration `009`). Membership resolves per month: month override → year flag → default member. A year toggle is authoritative — it clears that year's month overrides in the same transaction (`server/routes/alist.js`). Savings math lives in `server/services/alist-value.js` (`computeAlistValue`, pure, unit-tested). Editor UI: `AListMembershipModal.jsx`, opened from "Edit A-List membership" under the In Review header (replaced the old inline per-year toggle).
-- **Overview stat detail sheets (#37):** every In Review overview number is a clickable cell opening a period-aware sheet; each figure inside taps to reveal a plain-English note. `AListValueModal.jsx` (A-List Saved: paid vs ticket value, cost/film, value-per-dollar, break-even, per-year) and `StatDetailModal.jsx` (films / runtime / rating / genre). Server stats payload gained `value.by_year`, `rating_breakdown` (histogram + rated/unrated), and `years` (films + runtime per year).
-- **Showtimes on posters (#34):** `server/services/tmdb.js` `shapeSearchResult` carries full `release_date`; `format.js` adds `fmtShortDate`/`isUpcoming`/`fmtShowtime`. Now Playing shows an amber release-date chip on unreleased films; pending diary cards show `🎟 <date · time>` in the badge (formatted in UTC).
-- **Unseen reveal gate (#38):** an AMC Screen/Scream Unseen's title stays hidden until **showtime + 2h** (≈ when the film lets out) so the mystery isn't spoiled. `tmdb-rechecker` skips pre-showtime Unseens (no resolve, no retry burned); `WatchList.jsx` `needsIdentify` + the TMDB-review "?" flag + `Notifications.jsx` "identify" kind are all gated. Showtimes are stored as wall-clock labelled UTC, so the gate reinterprets them in the owner's timezone (`APP_TIMEZONE`, default `America/New_York`, server) / browser-local (client). Tunable constant `UNSEEN_REVEAL_AFTER_MS = 2h` lives in both `server/workers/tmdb-rechecker.js` and `client/src/format.js`.
-
-Process notes for next time:
-- **Stacked PRs auto-close when their base branch is deleted on merge.** When that happens: `git rebase --onto main <old-base-sha> <branch>`, force-push, open a *fresh* PR against `main` (you can't re-point a closed PR's base). Hit this with #36→#37 and #35→#38.
+Process notes:
+- **Stacked PRs auto-close when their base branch is deleted on merge.** Recover: `git rebase --onto main <old-base-sha> <branch>`, force-push, open a *fresh* PR (can't re-point a closed PR's base).
 - Multiple PRs editing `WhatsNew.jsx`'s `v1.5` block conflict on merge — resolve by keeping all section objects under the one `v1.5` entry.
 
 ## Local dev environment (Mac)

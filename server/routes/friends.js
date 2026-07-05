@@ -7,6 +7,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const { fetchWithTimeout } = require('../services/http');
 const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
@@ -219,11 +220,9 @@ router.post('/:id/test-connection', async (req, res) => {
       });
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
     const t0 = Date.now();
     try {
-      const resp = await fetch(`${f.friend_url}/feed`, { signal: controller.signal });
+      const resp = await fetchWithTimeout(`${f.friend_url}/feed`, {}, TEST_TIMEOUT_MS);
       const ms = Date.now() - t0;
       if (resp.ok) {
         return res.json({ ok: true, reachable: true, authorized: true, ms });
@@ -245,8 +244,6 @@ router.post('/:id/test-connection', async (req, res) => {
           ? "Timed out — their instance isn't reachable from here. Check the URL and the network between you."
           : `Couldn't connect: ${err.message}`;
       return res.json({ ok: false, reachable: false, authorized: false, ms, message });
-    } finally {
-      clearTimeout(timer);
     }
   } catch (err) {
     logger.error({ err }, 'test connection');
@@ -512,20 +509,15 @@ async function sendToFriend(friendId, payload) {
   );
   if (!rows.length) return { status: 404 };
   if (!rows[0].friend_url) return { status: 409 };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const resp = await fetch(`${rows[0].friend_url}/inbox`, {
+    const resp = await fetchWithTimeout(`${rows[0].friend_url}/inbox`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    }, 10_000);
     return { status: resp.ok ? 200 : 502 };
   } catch {
     return { status: 502 };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

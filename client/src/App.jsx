@@ -45,6 +45,8 @@ export default function App() {
   const [addFriend, setAddFriend] = useState(false);
   const [manageFriends, setManageFriends] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // Set by a bell tap: FriendsView scrolls to and opens the film's thread.
+  const [friendFocus, setFriendFocus] = useState(null);
 
   const [q, setQ] = useState('');
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
@@ -263,7 +265,14 @@ export default function App() {
           >
             Friends
           </button>
-          <NotificationsBell onOpen={() => setView('friends')} />
+          <NotificationsBell
+            onOpen={(n) => {
+              setView('friends');
+              if (n?.payload?.watch_id) {
+                setFriendFocus({ watchId: n.payload.watch_id, ts: Date.now() });
+              }
+            }}
+          />
           {view === 'friends' && (
             <button
               type="button"
@@ -292,7 +301,7 @@ export default function App() {
 
       <main>
         {view === 'friends' ? (
-          <FriendsView onAddFriend={() => setAddFriend(true)} />
+          <FriendsView onAddFriend={() => setAddFriend(true)} focus={friendFocus} />
         ) : view === 'watchlist' ? (
           <WatchlistView
             onWatched={() => {
