@@ -14,8 +14,27 @@ const RELEASES = [
       {
         title: 'Connecting is now just a URL swap',
         items: [
-          'Adding a friend gives you a secret URL to text them; paste the one they send back and you’re connected. No invite codes, no expiry windows, no VPN between you.',
-          'Each friend gets their own URL, so you can cut one off — or rotate a leaked link — without touching anyone else.',
+          'Adding a friend gives you a secret URL to text them — or show it as a QR code to scan; paste the one they send back and you’re connected. No invite codes, no expiry windows, no VPN between you.',
+          'Each friend gets their own URL, so you can cut one off — or rotate a leaked link — without touching anyone else. Tap a friend in Manage friends for their connection details and controls.',
+        ],
+      },
+      {
+        title: 'Coming up, up top',
+        items: [
+          'Friends’ upcoming reservations now live in their own rail at the top of the Friends tab — tap a poster for details and the shared comment thread. The feed below starts at today.',
+        ],
+      },
+      {
+        title: 'Friend bookings',
+        items: [
+          'Get a heads-up when a friend books a showing — and if it matches one of yours, it arrives as a “seeing it together” alert instead.',
+        ],
+      },
+      {
+        title: 'Alerts via ntfy',
+        items: [
+          'Notifications can now reach any device through ntfy — tap the gear in the bell panel, point it at ntfy.sh or your own server, and pick which alerts to send.',
+          'Tapping a comment alert now jumps straight to that film’s conversation.',
         ],
       },
       {
