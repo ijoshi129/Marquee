@@ -101,6 +101,9 @@ export const api = {
     request('/api/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
   unsubscribePush: (endpoint) =>
     request('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
+  ntfySettings: () => request('/api/ntfy'),
+  setNtfySettings: (body) => request('/api/ntfy', { method: 'PUT', body: JSON.stringify(body) }),
+  testNtfy: (body) => request('/api/ntfy/test', { method: 'POST', body: JSON.stringify(body) }),
   friends: () => request('/api/friends'),
   friendsFeed: () => request('/api/friends/feed'),
   inviteFriend: () => request('/api/friends/invite', { method: 'POST' }),

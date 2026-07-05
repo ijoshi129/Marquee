@@ -24,6 +24,7 @@ const friends = require('./routes/friends');
 const notificationsRoute = require('./routes/notifications');
 const recommendationsRoute = require('./routes/recommendations');
 const pushRoute = require('./routes/push');
+const ntfyRoute = require('./routes/ntfy');
 const authRoute = require('./routes/auth');
 const { requireOwner } = require('./middleware/owner-auth');
 const federation = require('./services/federation');
@@ -132,6 +133,7 @@ app.use('/api/friends', friends);
 app.use('/api/notifications', notificationsRoute);
 app.use('/api/recommendations', recommendationsRoute);
 app.use('/api/push', pushRoute);
+app.use('/api/ntfy', ntfyRoute);
 
 // Serve client build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
