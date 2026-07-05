@@ -1,9 +1,10 @@
 const { pool } = require('../db');
 const logger = require('../logger');
+const { sendNtfy } = require('./ntfy');
 
-// Create a notification (deduped by dedupe_key) and, if Web Push is configured,
-// fan it out to the owner's subscribed devices. Returns the new row, or null if
-// it was a duplicate.
+// Create a notification (deduped by dedupe_key) and fan it out to whatever
+// push channels are configured (Web Push, ntfy). Returns the new row, or null
+// if it was a duplicate.
 async function notify({ kind, title, body = null, payload = {}, dedupeKey = null }) {
   const { rows } = await pool.query(
     `INSERT INTO notifications (kind, title, body, payload, dedupe_key)
@@ -13,7 +14,10 @@ async function notify({ kind, title, body = null, payload = {}, dedupeKey = null
     [kind, title, body, payload, dedupeKey]
   );
   const row = rows[0] || null;
-  if (row) sendPush(row).catch((err) => logger.error({ err }, 'push: send failed'));
+  if (row) {
+    sendPush(row).catch((err) => logger.error({ err }, 'push: send failed'));
+    sendNtfy(row).catch((err) => logger.error({ err }, 'ntfy: send failed'));
+  }
   return row;
 }
 

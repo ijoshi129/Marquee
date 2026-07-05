@@ -102,4 +102,39 @@ async function notifyNewMatches() {
   for (const k of announced) if (!live.has(k)) announced.delete(k);
 }
 
-module.exports = { computeMatches, notifyNewMatches };
+// A friend's brand-new reservations, detected by diffing their cached
+// now_playing against the fresh pull. Skips the first-ever sync (everything
+// would look new) and any showing that matches one of YOUR pending
+// reservations — notifyNewMatches announces those as "seeing together".
+async function notifyNewBookings(friend, oldList, newList) {
+  if (!Array.isArray(oldList)) return;
+  const valid = (p) =>
+    p && p.showtime && p.theater_name && !Number.isNaN(Date.parse(p.showtime));
+  const oldKeys = new Set(oldList.filter(valid).map(matchKey));
+  const fresh = (Array.isArray(newList) ? newList : []).filter(valid).filter((p) => !oldKeys.has(matchKey(p)));
+  if (!fresh.length) return;
+
+  const mine = await pool.query(
+    `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
+       FROM watches w
+       LEFT JOIN theaters t ON t.id = w.theater_id
+       LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+      WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
+  );
+  const myKeys = new Set(mine.rows.filter(valid).map(matchKey));
+
+  const name = friend.display_name || 'A friend';
+  for (const p of fresh) {
+    const k = matchKey(p);
+    if (myKeys.has(k)) continue;
+    await notify({
+      kind: 'booked',
+      title: `${name} booked ${p.tmdb?.title || p.title}`,
+      body: `${fmtShow(p.showtime)} · ${p.theater_name}`,
+      payload: { friend_id: friend.id },
+      dedupeKey: `booked:${friend.id}:${k}`,
+    });
+  }
+}
+
+module.exports = { computeMatches, notifyNewMatches, notifyNewBookings };

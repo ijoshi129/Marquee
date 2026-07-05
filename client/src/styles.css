@@ -3408,6 +3408,11 @@ input[type='date'].input-naked { color-scheme: dark; }
 .fed-toggle::after { content: ""; position: absolute; top: 3px; left: 21px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left 0.18s; }
 .fed-toggle.off::after { left: 3px; background: #7a7a82; }
 
+/* ntfy settings */
+.friends-secondary:disabled { opacity: 0.5; cursor: default; }
+.ntfy-actions { display: flex; gap: 8px; }
+.ntfy-actions > * { flex: 1; }
+
 /* Per-film private toggle (edit sheet) */
 .private-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .private-toggle input { margin-top: 3px; }
