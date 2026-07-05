@@ -13,29 +13,34 @@ const KINDS = {
 };
 
 async function getSettings() {
-  await pool.query(`INSERT INTO ntfy_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING`);
+  // Row is seeded by migration 016; the ensure-insert is only a safety net.
   const { rows } = await pool.query(`SELECT * FROM ntfy_settings WHERE id = TRUE`);
-  return rows[0];
+  if (rows[0]) return rows[0];
+  await pool.query(`INSERT INTO ntfy_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING`);
+  return (await pool.query(`SELECT * FROM ntfy_settings WHERE id = TRUE`)).rows[0];
 }
 
 const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_recommend', 'notify_together', 'notify_booked'];
 
 async function updateSettings(body) {
-  await getSettings();
   const updates = [];
   const params = [];
   for (const f of FIELDS) {
     if (f in body) {
-      params.push(body[f] === '' ? null : body[f]);
+      // Blank strings clear a field — except server_url, which is NOT NULL;
+      // clearing it falls back to the default instead of erroring.
+      let v = body[f] === '' ? null : body[f];
+      if (f === 'server_url' && !v) v = 'https://ntfy.sh';
+      params.push(v);
       updates.push(`${f} = $${params.length}`);
     }
   }
   if (!updates.length) return getSettings();
-  await pool.query(
-    `UPDATE ntfy_settings SET ${updates.join(', ')}, updated_at = NOW() WHERE id = TRUE`,
+  const { rows } = await pool.query(
+    `UPDATE ntfy_settings SET ${updates.join(', ')}, updated_at = NOW() WHERE id = TRUE RETURNING *`,
     params
   );
-  return getSettings();
+  return rows[0] || getSettings();
 }
 
 // Publish one message. Uses ntfy's JSON endpoint (POST to the server root) so
@@ -73,7 +78,6 @@ async function sendNtfy(notif) {
   }
   if (!settings.enabled || !settings.server_url || !settings.topic) return;
   const kind = KINDS[notif.kind];
-  if (kind && settings[kind.column] === false) return;
   try {
     await publish(settings, {
       title: notif.title,
@@ -98,4 +102,18 @@ async function sendTest(settings) {
   });
 }
 
-module.exports = { getSettings, updateSettings, sendNtfy, sendTest };
+// Whether the owner wants alerts of this kind sent to their devices at all —
+// consulted by every outbound channel (ntfy here, Web Push in notifications.js).
+// The in-app bell always records regardless.
+async function shouldSend(kind) {
+  const k = KINDS[kind];
+  if (!k) return true;
+  try {
+    const settings = await getSettings();
+    return settings[k.column] !== false;
+  } catch {
+    return true;
+  }
+}
+
+module.exports = { getSettings, updateSettings, sendNtfy, sendTest, shouldSend };

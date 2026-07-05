@@ -7,6 +7,11 @@ const filmKey = (p) => (p.tmdb_id ? `t:${p.tmdb_id}` : `n:${norm(p.tmdb?.title |
 const matchKey = (p) =>
   `${filmKey(p)}|${norm(p.theater_name)}|${new Date(p.showtime).toISOString().slice(0, 16)}`;
 
+// matchKey throws on a truthy-but-unparseable showtime, and peer feeds are
+// arbitrary input — every consumer must gate on this first.
+const validShowing = (p) =>
+  p && p.showtime && p.theater_name && !Number.isNaN(Date.parse(p.showtime));
+
 function fmtShow(iso) {
   if (!iso) return '';
   // Showtimes are stored as wall-clock labelled UTC, so format in UTC to recover
@@ -41,7 +46,7 @@ async function computeMatches() {
 
   const groups = new Map();
   const add = (p, who) => {
-    if (!p.showtime || !p.theater_name) return;
+    if (!validShowing(p)) return;
     const k = matchKey(p);
     if (!groups.has(k)) groups.set(k, { key: k, p, people: [] });
     groups.get(k).people.push(who);
@@ -109,10 +114,8 @@ async function notifyNewMatches() {
 // reservations — notifyNewMatches announces those as "seeing together".
 async function notifyNewBookings(friend, oldList, newList) {
   if (!Array.isArray(oldList)) return;
-  const valid = (p) =>
-    p && p.showtime && p.theater_name && !Number.isNaN(Date.parse(p.showtime));
-  const oldKeys = new Set(oldList.filter(valid).map(matchKey));
-  const fresh = (Array.isArray(newList) ? newList : []).filter(valid).filter((p) => !oldKeys.has(matchKey(p)));
+  const oldKeys = new Set(oldList.filter(validShowing).map(matchKey));
+  const fresh = (Array.isArray(newList) ? newList : []).filter(validShowing).filter((p) => !oldKeys.has(matchKey(p)));
   if (!fresh.length) return;
 
   const mine = await pool.query(
@@ -122,7 +125,7 @@ async function notifyNewBookings(friend, oldList, newList) {
        LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
       WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
   );
-  const myKeys = new Set(mine.rows.filter(valid).map(matchKey));
+  const myKeys = new Set(mine.rows.filter(validShowing).map(matchKey));
 
   const name = friend.display_name || 'A friend';
   for (const p of fresh) {

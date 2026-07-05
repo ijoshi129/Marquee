@@ -1,6 +1,6 @@
 const { pool } = require('../db');
 const logger = require('../logger');
-const { sendNtfy } = require('./ntfy');
+const { sendNtfy, shouldSend } = require('./ntfy');
 
 // Create a notification (deduped by dedupe_key) and fan it out to whatever
 // push channels are configured (Web Push, ntfy). Returns the new row, or null
@@ -14,7 +14,7 @@ async function notify({ kind, title, body = null, payload = {}, dedupeKey = null
     [kind, title, body, payload, dedupeKey]
   );
   const row = rows[0] || null;
-  if (row) {
+  if (row && (await shouldSend(row.kind).catch(() => true))) {
     sendPush(row).catch((err) => logger.error({ err }, 'push: send failed'));
     sendNtfy(row).catch((err) => logger.error({ err }, 'ntfy: send failed'));
   }
