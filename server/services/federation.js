@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { pool } = require('../db');
+const { fetchWithTimeout } = require('./http');
 
 // 256-bit URL-safe secret — the token embedded in a capability URL.
 function generateSecret() {
@@ -103,19 +104,14 @@ const PING_TIMEOUT_MS = 5000;
 let pingTimer = null;
 
 async function pingFriend(friend) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
   try {
-    await fetch(`${friend.friend_url}/inbox`, {
+    await fetchWithTimeout(`${friend.friend_url}/inbox`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kind: 'ping' }),
-      signal: controller.signal,
-    });
+    }, PING_TIMEOUT_MS);
   } catch {
     // Best-effort liveness; the periodic poll is the backstop.
-  } finally {
-    clearTimeout(timer);
   }
 }
 

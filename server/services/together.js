@@ -26,6 +26,17 @@ function fmtShow(iso) {
   }).format(new Date(iso));
 }
 
+// The owner's upcoming reservations, in the same shape peer feed items use.
+function myPendingReservations() {
+  return pool.query(
+    `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
+       FROM watches w
+       LEFT JOIN theaters t ON t.id = w.theater_id
+       LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+      WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
+  );
+}
+
 // All current "seeing together" matches: a showing with 2+ people (friends, or
 // friends + you) sharing the same film/theatre/showtime.
 async function computeMatches() {
@@ -34,13 +45,7 @@ async function computeMatches() {
       `SELECT fp.friend_id, f.display_name AS friend_name, fp.now_playing
          FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id`
     ),
-    pool.query(
-      `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
-         FROM watches w
-         LEFT JOIN theaters t ON t.id = w.theater_id
-         LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
-        WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
-    ),
+    myPendingReservations(),
   ]);
 
   const groups = new Map();
@@ -117,13 +122,7 @@ async function notifyNewBookings(friend, oldList, newList) {
   const fresh = (Array.isArray(newList) ? newList : []).filter(validShowing).filter((p) => !oldKeys.has(matchKey(p)));
   if (!fresh.length) return;
 
-  const mine = await pool.query(
-    `SELECT w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb
-       FROM watches w
-       LEFT JOIN theaters t ON t.id = w.theater_id
-       LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
-      WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
-  );
+  const mine = await myPendingReservations();
   const myKeys = new Set(mine.rows.filter(validShowing).map(matchKey));
 
   const name = friend.display_name || 'A friend';

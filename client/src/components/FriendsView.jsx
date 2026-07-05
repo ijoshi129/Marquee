@@ -177,10 +177,12 @@ export default function FriendsView({ onAddFriend, focus }) {
     );
   }
 
-  const upcoming = feed.filter((it) => it.kind === 'upcoming');
+  const upcoming = feed
+    .filter((it) => it.kind === 'upcoming')
+    .sort((a, b) => new Date(a.showtime || 0) - new Date(b.showtime || 0));
   const past = feed.filter((it) => it.kind !== 'upcoming');
 
-  function renderCard(it, opts = {}) {
+  function renderCard(it) {
     const who = it.kind === 'upcoming' ? peopleLabel(it.people) : it.friend_name;
     const watchingNow = it.kind === 'upcoming' && isShowingNow(it.showtime, it.runtime_minutes);
     const verb =
@@ -242,7 +244,7 @@ export default function FriendsView({ onAddFriend, focus }) {
           </span>
         </button>
         {((it.host_friend_id && it.host_remote_id) || it.host_own_watch_id) && (
-          <SocialBar item={it} onChanged={load} defaultOpen={!!opts.openThread} />
+          <SocialBar item={it} onChanged={load} defaultOpen={highlight === it.id} />
         )}
       </div>
     );
@@ -337,7 +339,7 @@ export default function FriendsView({ onAddFriend, focus }) {
         return (
           <div key={it.id}>
             {head && <div className="feed-day">{head}</div>}
-            {renderCard(it, { openThread: highlight === it.id })}
+            {renderCard(it)}
           </div>
         );
       })}

@@ -1,4 +1,5 @@
 const { pool } = require('../db');
+const { fetchWithTimeout } = require('./http');
 const logger = require('../logger');
 
 const SEND_TIMEOUT_MS = 5000;
@@ -47,23 +48,16 @@ async function updateSettings(body) {
 // film titles with non-ASCII characters survive — the header style mangles them.
 async function publish(settings, { title, message, tags = [] }) {
   const server = (settings.server_url || '').replace(/\/+$/, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-  try {
-    const headers = { 'content-type': 'application/json' };
-    if (settings.token) headers.authorization = `Bearer ${settings.token}`;
-    const resp = await fetch(server, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ topic: settings.topic, title, message, tags }),
-      signal: controller.signal,
-    });
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      throw new Error(body.error || `ntfy returned HTTP ${resp.status}`);
-    }
-  } finally {
-    clearTimeout(timer);
+  const headers = { 'content-type': 'application/json' };
+  if (settings.token) headers.authorization = `Bearer ${settings.token}`;
+  const resp = await fetchWithTimeout(server, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ topic: settings.topic, title, message, tags }),
+  }, SEND_TIMEOUT_MS);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.error || `ntfy returned HTTP ${resp.status}`);
   }
 }
 

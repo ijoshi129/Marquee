@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
-import QrCode from './QrCode';
+import UrlReveal from './UrlReveal';
 
 // Friend list → per-friend detail sheet. The list stays scannable (name +
 // status); everything you can do to a friend lives on their detail page.
@@ -87,7 +87,6 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
   const [editing, setEditing] = useState(false);
   const [draftUrl, setDraftUrl] = useState(friend.friend_url || '');
   const [rotated, setRotated] = useState(null);
-  const [copied, setCopied] = useState(false);
 
   async function run(kind, fn) {
     setBusy(kind);
@@ -149,14 +148,6 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
     }
   }
 
-  async function copyRotated() {
-    try {
-      await navigator.clipboard.writeText(rotated);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  }
-
   return (
     <>
       <header className="friends-modal-head">
@@ -167,7 +158,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
 
       {err && <div className="error-banner">{err}</div>}
 
-      <div className="mf-actions" style={{ paddingLeft: 0 }}>
+      <div className="mf-actions">
         <button type="button" className="mf-btn" disabled={!!busy || !friend.friend_url} onClick={test}>
           {busy === 'test' ? 'Testing…' : 'Test connection'}
         </button>
@@ -176,7 +167,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
         </button>
       </div>
       {tested && (
-        <div className={`mf-test ${tested.ok ? 'ok' : 'bad'}`} style={{ paddingLeft: 0 }}>
+        <div className={`mf-test ${tested.ok ? 'ok' : 'bad'}`}>
           {tested.ok ? '✓ ' : '✕ '}{tested.message}
         </div>
       )}
@@ -184,7 +175,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
       <div className="mf-section">
         <div className="mf-section-title">Their URL</div>
         {editing ? (
-          <div className="mf-urlrow" style={{ paddingLeft: 0 }}>
+          <div className="mf-urlrow">
             <textarea
               className="friends-textarea"
               rows={2}
@@ -192,7 +183,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
               onChange={(e) => setDraftUrl(e.target.value)}
               placeholder="https://…/api/federation/…"
             />
-            <div className="mf-actions" style={{ paddingLeft: 0 }}>
+            <div className="mf-actions">
               <button type="button" className="mf-btn" disabled={!!busy || !draftUrl.trim()} onClick={saveUrl}>
                 {busy === 'save' ? 'Saving…' : 'Save'}
               </button>
@@ -214,16 +205,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
       <div className="mf-section">
         <div className="mf-section-title">Your URL for them</div>
         {rotated ? (
-          <div className="mf-urlrow" style={{ paddingLeft: 0 }}>
-            <span className="friends-label">
-              Send this to {friend.display_name} — shown only once.
-            </span>
-            <div className="qr-wrap"><QrCode value={rotated} /></div>
-            <textarea className="friends-textarea" rows={2} readOnly value={rotated} />
-            <button type="button" className="mf-btn" onClick={copyRotated}>
-              {copied ? 'Copied ✓' : 'Copy URL'}
-            </button>
-          </div>
+          <UrlReveal url={rotated} label={`Send this to ${friend.display_name} — shown only once.`} />
         ) : (
           <div className="mf-urlline">
             <span className="mf-url">Stored hashed — rotate to issue a fresh one.</span>

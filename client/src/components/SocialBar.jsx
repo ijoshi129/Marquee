@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
 
@@ -7,6 +7,10 @@ import { fmtAgo } from './FriendsView';
 // refreshes on the next sync.
 export default function SocialBar({ item, onChanged, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
+  // A deep-link can target an already-mounted card — follow the prop up.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);

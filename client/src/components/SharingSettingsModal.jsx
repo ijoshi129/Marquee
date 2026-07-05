@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import Switch from './Switch';
 
 const TOGGLES = [
   { key: 'share_activity', label: 'Recent watches', hint: 'The films you log, with posters and dates.' },
@@ -61,18 +62,5 @@ export default function SharingSettingsModal({ onClose }) {
         )}
       </div>
     </div>
-  );
-}
-
-function Switch({ on, onClick, label }) {
-  return (
-    <button
-      type="button"
-      className={`fed-toggle ${on ? '' : 'off'}`}
-      role="switch"
-      aria-checked={on}
-      onClick={onClick}
-      aria-label={label}
-    />
   );
 }

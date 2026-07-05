@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import Switch from './Switch';
 
 const KIND_TOGGLES = [
   { key: 'notify_comment', label: 'Comments', hint: 'A friend comments on one of your films.' },
@@ -217,7 +218,7 @@ export default function NotificationSettingsModal({ onClose }) {
                 </button>
               </div>
               {testResult && (
-                <div className={`mf-test ${testResult.ok ? 'ok' : 'bad'}`} style={{ paddingLeft: 0 }}>
+                <div className={`mf-test ${testResult.ok ? 'ok' : 'bad'}`}>
                   {testResult.ok ? '✓ ' : '✕ '}{testResult.message}
                 </div>
               )}
@@ -239,18 +240,5 @@ export default function NotificationSettingsModal({ onClose }) {
         )}
       </div>
     </div>
-  );
-}
-
-function Switch({ on, onClick, label }) {
-  return (
-    <button
-      type="button"
-      className={`fed-toggle ${on ? '' : 'off'}`}
-      role="switch"
-      aria-checked={on}
-      onClick={onClick}
-      aria-label={label}
-    />
   );
 }

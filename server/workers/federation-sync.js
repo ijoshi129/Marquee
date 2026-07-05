@@ -9,24 +9,19 @@ const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const { fetchWithTimeout } = require('../services/http');
 const { notifyNewMatches, notifyNewBookings } = require('../services/together');
 
 const SYNC_INTERVAL_MIN = parseInt(process.env.FEDERATION_SYNC_INTERVAL_MIN, 10) || 15;
 const REQUEST_TIMEOUT_MS = 10_000;
 
 async function fetchFeed(friend) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const resp = await fetch(`${friend.friend_url}/feed`, { signal: controller.signal });
-    if (resp.status === 401 || resp.status === 404) {
-      throw new Error('Access rejected — ask them for a fresh URL');
-    }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } finally {
-    clearTimeout(timer);
+  const resp = await fetchWithTimeout(`${friend.friend_url}/feed`, {}, REQUEST_TIMEOUT_MS);
+  if (resp.status === 401 || resp.status === 404) {
+    throw new Error('Access rejected — ask them for a fresh URL');
   }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return await resp.json();
 }
 
 async function syncFriend(friend) {
