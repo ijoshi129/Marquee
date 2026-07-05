@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
-import NtfySettingsModal from './NtfySettingsModal';
+import NotificationSettingsModal from './NotificationSettingsModal';
 
 function BellIcon() {
   return (
@@ -23,23 +23,33 @@ function BellIcon() {
   );
 }
 
-const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨', booked: '🎟️' };
-
-function urlB64ToUint8Array(base64) {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(b64);
-  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+function GearIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    </svg>
+  );
 }
 
-// Global header bell: unread badge, a panel of recent notifications, and the
-// per-device push toggle.
+const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨', booked: '🎟️' };
+
+// Global header bell: unread badge and a panel of recent notifications. Push
+// and ntfy configuration live behind the gear.
 export default function NotificationsBell({ onOpen }) {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [open, setOpen] = useState(false);
-  const [ntfyOpen, setNtfyOpen] = useState(false);
-  // 'unknown' | 'unsupported' | 'off' | 'on' | 'busy'
-  const [push, setPush] = useState('unknown');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(() => {
     api.alerts().then(setData).catch(() => {});
@@ -68,60 +78,6 @@ export default function NotificationsBell({ onOpen }) {
       window.removeEventListener('focus', load);
     };
   }, [load]);
-
-  // Push is only available on the installed PWA over HTTPS (so the service
-  // worker is registered). Hide the toggle otherwise.
-  useEffect(() => {
-    (async () => {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        return setPush('unsupported');
-      }
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) return setPush('unsupported');
-      const sub = await reg.pushManager.getSubscription();
-      setPush(sub ? 'on' : 'off');
-    })().catch(() => setPush('unsupported'));
-  }, []);
-
-  async function enablePush() {
-    setPush('busy');
-    try {
-      const { enabled, key } = await api.pushKey();
-      if (!enabled || !key) throw new Error('Push not configured on the server');
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') throw new Error('Permission denied');
-      const reg = await navigator.serviceWorker.ready;
-      // Replace any existing subscription so we never orphan a stale one on the
-      // server (orphaned subs get silent pushes, which trips iOS's display budget).
-      const existing = await reg.pushManager.getSubscription();
-      if (existing) {
-        await api.unsubscribePush(existing.endpoint).catch(() => {});
-        await existing.unsubscribe().catch(() => {});
-      }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlB64ToUint8Array(key),
-      });
-      await api.subscribePush(sub.toJSON());
-      setPush('on');
-    } catch (e) {
-      setPush('off');
-      alert(`Couldn't enable notifications: ${e.message}`);
-    }
-  }
-
-  async function disablePush() {
-    setPush('busy');
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) {
-        await api.unsubscribePush(sub.endpoint).catch(() => {});
-        await sub.unsubscribe().catch(() => {});
-      }
-    } catch {}
-    setPush('off');
-  }
 
   async function act(fn) {
     try {
@@ -155,23 +111,19 @@ export default function NotificationsBell({ onOpen }) {
                       Clear all
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="notif-gear"
+                    aria-label="Notification settings"
+                    onClick={() => {
+                      setOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                  >
+                    <GearIcon />
+                  </button>
                 </span>
               </div>
-              {push === 'off' && (
-                <button type="button" className="push-toggle" onClick={enablePush}>
-                  <span>Enable notifications on this device</span>
-                </button>
-              )}
-              {push === 'on' && (
-                <button type="button" className="push-toggle on" onClick={disablePush}>
-                  <span>Notifications on for this device ✓</span>
-                  <span className="push-off">Turn off</span>
-                </button>
-              )}
-              <button type="button" className="push-toggle" onClick={() => { setOpen(false); setNtfyOpen(true); }}>
-                <span>ntfy alerts</span>
-                <span className="push-off">Set up</span>
-              </button>
               {data.items.length === 0 ? (
                 <div className="friends-empty">Nothing yet.</div>
               ) : (
@@ -210,7 +162,7 @@ export default function NotificationsBell({ onOpen }) {
           document.body
         )}
 
-      {ntfyOpen && createPortal(<NtfySettingsModal onClose={() => setNtfyOpen(false)} />, document.body)}
+      {settingsOpen && createPortal(<NotificationSettingsModal onClose={() => setSettingsOpen(false)} />, document.body)}
     </>
   );
 }

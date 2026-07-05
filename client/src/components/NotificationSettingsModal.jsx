@@ -8,9 +8,18 @@ const KIND_TOGGLES = [
   { key: 'notify_booked', label: 'Friend bookings', hint: 'A friend books a showing you’re not part of.' },
 ];
 
-// Push notifications via ntfy — server, topic, and optional access token, plus
-// per-kind switches. Saved server-side so every device honors the same setup.
-export default function NtfySettingsModal({ onClose }) {
+function urlB64ToUint8Array(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+// Everything notification-related in one sheet: this device's Web Push
+// subscription, and the instance-wide ntfy channel with per-kind switches.
+export default function NotificationSettingsModal({ onClose }) {
+  // 'unknown' | 'unsupported' | 'off' | 'on' | 'busy'
+  const [push, setPush] = useState('unknown');
   const [settings, setSettings] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -20,17 +29,62 @@ export default function NtfySettingsModal({ onClose }) {
     api.ntfySettings().then(setSettings).catch((e) => setErr(e.message));
   }, []);
 
-  function set(key, value) {
-    setSettings((s) => ({ ...s, [key]: value }));
+  // Push is only available on the installed PWA over HTTPS (so the service
+  // worker is registered). Show why when it isn't.
+  useEffect(() => {
+    (async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        return setPush('unsupported');
+      }
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return setPush('unsupported');
+      const sub = await reg.pushManager.getSubscription();
+      setPush(sub ? 'on' : 'off');
+    })().catch(() => setPush('unsupported'));
+  }, []);
+
+  async function enablePush() {
+    setPush('busy');
+    try {
+      const { enabled, key } = await api.pushKey();
+      if (!enabled || !key) throw new Error('Push not configured on the server');
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') throw new Error('Permission denied');
+      const reg = await navigator.serviceWorker.ready;
+      // Replace any existing subscription so we never orphan a stale one on the
+      // server (orphaned subs get silent pushes, which trips iOS's display budget).
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await api.unsubscribePush(existing.endpoint).catch(() => {});
+        await existing.unsubscribe().catch(() => {});
+      }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(key),
+      });
+      await api.subscribePush(sub.toJSON());
+      setPush('on');
+    } catch (e) {
+      setPush('off');
+      setErr(`Couldn't enable notifications: ${e.message}`);
+    }
   }
 
-  async function save(patch) {
-    setErr(null);
+  async function disablePush() {
+    setPush('busy');
     try {
-      setSettings(await api.setNtfySettings(patch));
-    } catch (e) {
-      setErr(e.message);
-    }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await api.unsubscribePush(sub.endpoint).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+      }
+    } catch {}
+    setPush('off');
+  }
+
+  function set(key, value) {
+    setSettings((s) => ({ ...s, [key]: value }));
   }
 
   async function toggle(key) {
@@ -46,12 +100,20 @@ export default function NtfySettingsModal({ onClose }) {
 
   async function saveServer() {
     setBusy(true);
-    await save({
-      server_url: (settings.server_url || '').trim(),
-      topic: (settings.topic || '').trim(),
-      token: (settings.token || '').trim(),
-    });
-    setBusy(false);
+    setErr(null);
+    try {
+      setSettings(
+        await api.setNtfySettings({
+          server_url: (settings.server_url || '').trim(),
+          topic: (settings.topic || '').trim(),
+          token: (settings.token || '').trim(),
+        })
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function test() {
@@ -77,14 +139,36 @@ export default function NtfySettingsModal({ onClose }) {
         <button className="sheet-close" onClick={onClose} aria-label="Close">✕</button>
 
         <header className="friends-modal-head">
-          <h2 className="friends-modal-title">ntfy alerts</h2>
+          <h2 className="friends-modal-title">Notification settings</h2>
           <p className="friends-modal-sub">
-            Send notifications to any device with the ntfy app, through ntfy.sh or your own server.
+            How alerts reach you outside the app.
           </p>
         </header>
 
         {err && <div className="error-banner">{err}</div>}
 
+        <div className="mf-section-title">This device</div>
+        <ul className="sharing-list">
+          <li className="sharing-row">
+            <div className="sharing-text">
+              <div className="sharing-label">Push notifications</div>
+              <div className="sharing-hint">
+                {push === 'unsupported'
+                  ? 'Needs the installed app (Add to Home Screen) over HTTPS.'
+                  : 'Lock-screen alerts on this device.'}
+              </div>
+            </div>
+            {push === 'on' || push === 'off' || push === 'busy' ? (
+              <Switch
+                on={push === 'on'}
+                onClick={() => (push === 'on' ? disablePush() : push === 'off' ? enablePush() : null)}
+                label="Push notifications"
+              />
+            ) : null}
+          </li>
+        </ul>
+
+        <div className="mf-section-title" style={{ marginTop: 18 }}>ntfy</div>
         {!settings ? (
           <div className="friends-empty">Loading&hellip;</div>
         ) : (
@@ -92,10 +176,10 @@ export default function NtfySettingsModal({ onClose }) {
             <ul className="sharing-list">
               <li className="sharing-row">
                 <div className="sharing-text">
-                  <div className="sharing-label">Enabled</div>
-                  <div className="sharing-hint">Master switch for all ntfy alerts.</div>
+                  <div className="sharing-label">Send alerts via ntfy</div>
+                  <div className="sharing-hint">Any device with the ntfy app subscribed to your topic.</div>
                 </div>
-                <Switch on={!!settings.enabled} onClick={() => toggle('enabled')} label="Enabled" />
+                <Switch on={!!settings.enabled} onClick={() => toggle('enabled')} label="ntfy enabled" />
               </li>
             </ul>
 
@@ -139,7 +223,8 @@ export default function NtfySettingsModal({ onClose }) {
               )}
             </div>
 
-            <ul className="sharing-list" style={{ marginTop: 8 }}>
+            <div className="mf-section-title" style={{ marginTop: 18 }}>What to send</div>
+            <ul className="sharing-list">
               {KIND_TOGGLES.map((t) => (
                 <li key={t.key} className="sharing-row">
                   <div className="sharing-text">

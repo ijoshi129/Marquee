@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import QrCode from './QrCode';
 
 // Connecting is a URL swap: adding a friend mints your secret URL for them
 // (shown once — only its hash is kept), and you paste the one they send you.
@@ -77,8 +78,9 @@ export default function AddFriendModal({ onClose, onChanged }) {
         ) : (
           <div className="friends-form">
             <label className="friends-label">
-              Send this URL to {name.trim()}. It&rsquo;s shown only once — if it&rsquo;s lost, rotate it from Manage friends.
+              Send this URL to {name.trim()} — or let them scan it. It&rsquo;s shown only once; if it&rsquo;s lost, rotate it from Manage friends.
             </label>
+            <div className="qr-wrap"><QrCode value={myUrl} /></div>
             <textarea className="friends-textarea" rows={3} readOnly value={myUrl} />
             <button className="friends-primary" onClick={copy}>
               {copied ? 'Copied ✓' : 'Copy URL'}
