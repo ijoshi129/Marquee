@@ -6,6 +6,10 @@
 
 ALTER TABLE friends ADD COLUMN IF NOT EXISTS friend_url TEXT;
 
+-- Revoked rows must go before status disappears: the new auth matches any row
+-- with a token hash, so carrying them over would silently re-grant access.
+DELETE FROM friends WHERE status = 'revoked';
+
 -- The old outbound bearer token hashes identically as a path token on an
 -- upgraded peer, so existing pairs keep working once both sides deploy.
 UPDATE friends SET friend_url = base_url || '/api/federation/' || outbound_token
