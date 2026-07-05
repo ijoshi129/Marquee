@@ -122,7 +122,7 @@ async function syncFriend(friend) {
     client.release();
   }
 
-  await notifyNewBookings(friend, prevNowPlaying, profile.upcoming).catch((err) =>
+  await notifyNewBookings(friend, prevNowPlaying, feed.upcoming).catch((err) =>
     logger.error({ err, friend_id: friend.id }, 'booked notify')
   );
 
