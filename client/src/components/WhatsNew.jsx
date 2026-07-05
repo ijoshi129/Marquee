@@ -2,12 +2,30 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.0';
+const WHATS_NEW_VERSION = '2.1';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.1',
+    sections: [
+      {
+        title: 'Connecting is now just a URL swap',
+        items: [
+          'Adding a friend gives you a secret URL to text them; paste the one they send back and you’re connected. No invite codes, no expiry windows, no VPN between you.',
+          'Each friend gets their own URL, so you can cut one off — or rotate a leaked link — without touching anyone else.',
+        ],
+      },
+      {
+        title: 'Simpler under the hood',
+        items: [
+          'Connections no longer get stuck in a “disconnected” state — if a friend’s URL stops working, the app says so and keeps trying until you paste a fresh one.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.0',
     sections: [

@@ -1,13 +1,12 @@
-// Owner-facing friends API: pairing, friend management, sharing settings, and
-// reads from the local cache the sync worker populates. These routes are part
-// of the owner's own surface (same posture as /api/watches) — the per-friend
-// token boundary lives on /api/federation, not here.
+// Owner-facing friends API: friend management, sharing settings, and reads
+// from the local cache the sync worker populates. These routes are part of the
+// owner's own surface (same posture as /api/watches) — the capability-URL
+// boundary lives on /api/federation, not here.
 
 const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
-const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 
 const router = express.Router();
@@ -20,27 +19,23 @@ router.param('id', (req, res, next, id) => {
   next();
 });
 
-const INVITE_TTL_MS = 15 * 60 * 1000;
-const PAIR_TIMEOUT_MS = 10_000;
-
 function baseUrl() {
-  return process.env.FEDERATION_BASE_URL || null;
+  return (process.env.FEDERATION_BASE_URL || '').replace(/\/+$/, '') || null;
 }
 
-function encodeInvite(obj) {
-  return Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
-}
-function decodeInvite(str) {
-  return JSON.parse(Buffer.from(str, 'base64url').toString('utf8'));
+function myUrlFor(token) {
+  return `${baseUrl()}/api/federation/${token}`;
 }
 
-// GET /api/friends — list paired/pending friends (never returns tokens).
+const FRIEND_COLUMNS = `id, remote_instance_id, display_name, avatar_url,
+  friend_url, last_synced_at, last_error, created_at`;
+
+// GET /api/friends — list friends. friend_url is the value the owner pasted,
+// safe to show back; our own minted tokens are never returned (hash-only).
 router.get('/', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, remote_instance_id, display_name, avatar_url, base_url,
-              status, direction, last_synced_at, last_error, created_at
-         FROM friends ORDER BY created_at DESC`
+      `SELECT ${FRIEND_COLUMNS} FROM friends ORDER BY created_at DESC`
     );
     res.json(rows);
   } catch (err) {
@@ -84,121 +79,97 @@ router.put('/settings', async (req, res) => {
   }
 });
 
-// POST /api/friends/invite — mint a one-time invite string to hand a friend
-// out-of-band. Stores only the hash of the code.
-router.post('/invite', async (req, res) => {
+// POST /api/friends { display_name, friend_url? } — add a friend: mint their
+// capability URL to our instance and store their URL if they've already shared
+// it. my_url is shown exactly once — only its hash is kept.
+router.post('/', async (req, res) => {
   try {
     if (!baseUrl()) {
-      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to invite friends' });
+      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to add friends' });
     }
-    const code = fed.generateSecret();
-    await pool.query(
-      `INSERT INTO federation_invites (code_hash, expires_at)
-       VALUES ($1, NOW() + INTERVAL '${INVITE_TTL_MS} milliseconds')`,
-      [fed.sha256(code)]
+    const name = ((req.body || {}).display_name || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: 'display_name is required' });
+
+    let friendUrl = null;
+    if ((req.body || {}).friend_url) {
+      friendUrl = fed.parseFriendUrl(req.body.friend_url);
+      if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+    }
+
+    const token = fed.generateSecret();
+    const { rows } = await pool.query(
+      `INSERT INTO friends (display_name, friend_url, inbound_token_hash)
+       VALUES ($1, $2, $3)
+       RETURNING ${FRIEND_COLUMNS}`,
+      [name, friendUrl, fed.sha256(token)]
     );
-    res.json({ invite: encodeInvite({ base_url: baseUrl(), code }) });
+    if (friendUrl) federationSync.syncFriendById(rows[0].id).catch(() => {});
+    res.status(201).json({ ...rows[0], my_url: myUrlFor(token) });
   } catch (err) {
-    logger.error({ err }, 'create invite');
+    logger.error({ err }, 'add friend');
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/friends/accept { invite } — redeem an invite string: call the
-// inviter's /pair, exchange identities + per-direction tokens, store the friend.
-router.post('/accept', async (req, res) => {
+// PATCH /api/friends/:id { display_name?, friend_url? } — fix a name or paste
+// (or re-paste, e.g. after they rotated) their URL.
+router.patch('/:id', async (req, res) => {
+  try {
+    const updates = [];
+    const params = [];
+    const body = req.body || {};
+    if ('display_name' in body) {
+      const name = (body.display_name || '').trim().slice(0, 120);
+      if (!name) return res.status(400).json({ error: 'display_name cannot be empty' });
+      params.push(name);
+      updates.push(`display_name = $${params.length}`);
+    }
+    if ('friend_url' in body) {
+      let friendUrl = null;
+      if (body.friend_url) {
+        friendUrl = fed.parseFriendUrl(body.friend_url);
+        if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+      }
+      params.push(friendUrl);
+      updates.push(`friend_url = $${params.length}`);
+      // A fresh URL invalidates whatever error the old one earned.
+      updates.push(`last_error = NULL`);
+    }
+    if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
+    params.push(req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE friends SET ${updates.join(', ')}, updated_at = NOW()
+        WHERE id = $${params.length} RETURNING ${FRIEND_COLUMNS}`,
+      params
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Friend not found' });
+    if ('friend_url' in body && rows[0].friend_url) {
+      federationSync.syncFriendById(rows[0].id).catch(() => {});
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    logger.error({ err }, 'update friend');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/friends/:id/rotate — mint a fresh capability URL for this friend.
+// The old URL stops matching immediately; hand them the new one.
+router.post('/:id/rotate', async (req, res) => {
   try {
     if (!baseUrl()) {
-      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to accept invites' });
+      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to rotate URLs' });
     }
-    let decoded;
-    try {
-      decoded = decodeInvite((req.body || {}).invite || '');
-    } catch {
-      return res.status(400).json({ error: 'Invalid invite string' });
-    }
-    if (!decoded.base_url || !decoded.code) {
-      return res.status(400).json({ error: 'Invalid invite string' });
-    }
-    // The invite's base_url is fetched server-side with our token — vet it before
-    // we ever call it, and store the normalized form.
-    const inviterUrl = fed.safeBaseUrl(decoded.base_url);
-    if (!inviterUrl) {
-      return res.status(400).json({ error: 'Invite points at an unacceptable address' });
-    }
-
-    const me = await fed.getIdentity();
-    // The token the inviter will present to US on future calls.
-    const ourInboundToken = fed.generateSecret();
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PAIR_TIMEOUT_MS);
-    let pairRes;
-    try {
-      const resp = await fetch(`${inviterUrl}/api/federation/pair`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          code: decoded.code,
-          instance_id: me.instance_id,
-          display_name: me.display_name,
-          base_url: baseUrl(),
-          token: ourInboundToken,
-        }),
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        return res.status(resp.status === 401 ? 401 : 502).json({
-          error: body.error || `Pairing failed (${resp.status})`,
-        });
-      }
-      pairRes = await resp.json();
-    } catch (err) {
-      logger.error({ err }, 'pair request failed');
-      return res.status(502).json({ error: 'Could not reach the inviting instance' });
-    } finally {
-      clearTimeout(timer);
-    }
-
+    const token = fed.generateSecret();
     const { rows } = await pool.query(
-      `INSERT INTO friends
-         (remote_instance_id, display_name, avatar_url, base_url, status,
-          direction, inbound_token_hash, outbound_token)
-       VALUES ($1, $2, $3, $4, 'active', 'accepted', $5, $6)
-       ON CONFLICT (remote_instance_id) DO UPDATE SET
-         display_name = EXCLUDED.display_name,
-         avatar_url = EXCLUDED.avatar_url,
-         base_url = EXCLUDED.base_url,
-         status = 'active',
-         inbound_token_hash = EXCLUDED.inbound_token_hash,
-         outbound_token = EXCLUDED.outbound_token,
-         updated_at = NOW()
-       RETURNING id, remote_instance_id, display_name, base_url, status`,
-      [
-        pairRes.instance_id,
-        pairRes.display_name || null,
-        pairRes.avatar_url || null,
-        inviterUrl,
-        fed.sha256(ourInboundToken),
-        pairRes.token,
-      ]
+      `UPDATE friends SET inbound_token_hash = $2, updated_at = NOW()
+        WHERE id = $1 RETURNING id`,
+      [req.params.id, fed.sha256(token)]
     );
-
-    notify({
-      kind: 'friend_added',
-      title: `You're now connected with ${pairRes.display_name || 'a friend'}`,
-      payload: { friend_id: rows[0].id },
-      dedupeKey: `friend:${pairRes.instance_id}`,
-    }).catch(() => {});
-    federationSync.syncOnce().catch(() => {});
-    // Our token pair is now stored on both sides, so it's safe to tell the inviter
-    // to pull us — this is what populates the inviter's feed on pairing, without
-    // the race that an immediate pull from /pair would hit.
-    fed.notifyFriends();
-    res.status(201).json(rows[0]);
+    if (!rows.length) return res.status(404).json({ error: 'Friend not found' });
+    res.json({ my_url: myUrlFor(token) });
   } catch (err) {
-    logger.error({ err }, 'accept invite');
+    logger.error({ err }, 'rotate friend url');
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -219,7 +190,7 @@ router.post('/:id/sync', async (req, res) => {
   try {
     await federationSync.syncFriendById(req.params.id);
     const { rows } = await pool.query(
-      `SELECT id, display_name, status, last_synced_at, last_error FROM friends WHERE id = $1`,
+      `SELECT id, display_name, friend_url, last_synced_at, last_error FROM friends WHERE id = $1`,
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Friend not found' });
@@ -230,36 +201,37 @@ router.post('/:id/sync', async (req, res) => {
   }
 });
 
-// POST /api/friends/:id/test-connection — actively probe whether we can reach this
-// friend's instance and whether our token is still accepted. Diagnostic only; it
-// doesn't change any stored state.
+// POST /api/friends/:id/test-connection — actively probe whether this friend's
+// URL is reachable and still accepted. Diagnostic only; no stored state changes.
 const TEST_TIMEOUT_MS = 8000;
 router.post('/:id/test-connection', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT base_url, outbound_token FROM friends WHERE id = $1`,
+      `SELECT friend_url FROM friends WHERE id = $1`,
       [req.params.id]
     );
     const f = rows[0];
     if (!f) return res.status(404).json({ error: 'Friend not found' });
+    if (!f.friend_url) {
+      return res.json({
+        ok: false, reachable: false, authorized: false, ms: 0,
+        message: 'No URL saved for this friend yet — ask them for theirs and add it.',
+      });
+    }
 
-    const url = `${f.base_url.replace(/\/$/, '')}/api/federation/profile`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
     const t0 = Date.now();
     try {
-      const resp = await fetch(url, {
-        headers: { authorization: `Bearer ${f.outbound_token}` },
-        signal: controller.signal,
-      });
+      const resp = await fetch(`${f.friend_url}/feed`, { signal: controller.signal });
       const ms = Date.now() - t0;
       if (resp.ok) {
         return res.json({ ok: true, reachable: true, authorized: true, ms });
       }
-      if (resp.status === 401) {
+      if (resp.status === 401 || resp.status === 404) {
         return res.json({
           ok: false, reachable: true, authorized: false, ms,
-          message: 'Reached them, but our access was rejected — they may have removed you. Re-pair to fix.',
+          message: 'Reached them, but their URL rejected us — they may have rotated or removed it. Ask for a fresh URL.',
         });
       }
       return res.json({
@@ -270,7 +242,7 @@ router.post('/:id/test-connection', async (req, res) => {
       const ms = Date.now() - t0;
       const message =
         err.name === 'AbortError'
-          ? "Timed out — their instance isn't reachable from here. Check their FEDERATION_BASE_URL and the network between you."
+          ? "Timed out — their instance isn't reachable from here. Check the URL and the network between you."
           : `Couldn't connect: ${err.message}`;
       return res.json({ ok: false, reachable: false, authorized: false, ms, message });
     } finally {
@@ -292,14 +264,12 @@ router.get('/feed', async (req, res) => {
       pool.query(
         `SELECT fw.friend_id, f.display_name AS friend_name, fw.payload, fw.watched_at
            FROM friend_watches fw JOIN friends f ON f.id = fw.friend_id
-          WHERE f.status = 'active'
           ORDER BY fw.watched_at DESC NULLS LAST
           LIMIT 200`
       ),
       pool.query(
         `SELECT fp.friend_id, f.display_name AS friend_name, f.remote_instance_id, fp.now_playing
-           FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id
-          WHERE f.status = 'active'`
+           FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id`
       ),
       pool.query(
         `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb,
@@ -534,20 +504,20 @@ router.get('/:id/profile', async (req, res) => {
   }
 });
 
-// Push to a friend's federation endpoint, signed with our outbound token.
-async function sendToFriend(friendId, path, payload) {
+// Push to a friend's inbox. Their capability URL is the whole credential.
+async function sendToFriend(friendId, payload) {
   const { rows } = await pool.query(
-    `SELECT base_url, outbound_token FROM friends WHERE id = $1 AND status = 'active'`,
+    `SELECT friend_url FROM friends WHERE id = $1`,
     [friendId]
   );
   if (!rows.length) return { status: 404 };
-  const f = rows[0];
+  if (!rows[0].friend_url) return { status: 409 };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const resp = await fetch(`${f.base_url.replace(/\/$/, '')}${path}`, {
+    const resp = await fetch(`${rows[0].friend_url}/inbox`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${f.outbound_token}` },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -566,11 +536,12 @@ router.post('/:id/comment', async (req, res) => {
     if (!remote_watch_id || !(text || '').trim()) {
       return res.status(400).json({ error: 'remote_watch_id and text required' });
     }
-    const r = await sendToFriend(req.params.id, '/api/federation/inbox', {
+    const r = await sendToFriend(req.params.id, {
       kind: 'comment',
       target_watch_id: remote_watch_id,
       body: text,
     });
+    if (r.status === 409) return res.status(409).json({ error: 'Add their URL first' });
     if (r.status !== 200) return res.status(r.status).json({ error: 'Could not reach friend' });
     federationSync.syncFriendById(req.params.id).catch(() => {});
     res.json({ ok: true });
@@ -585,7 +556,8 @@ router.post('/:id/recommend', async (req, res) => {
   try {
     const { tmdb_id, title } = req.body || {};
     if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
-    const r = await sendToFriend(req.params.id, '/api/federation/recommend', { tmdb_id, title });
+    const r = await sendToFriend(req.params.id, { kind: 'recommend', tmdb_id, title });
+    if (r.status === 409) return res.status(409).json({ error: 'Add their URL first' });
     if (r.status !== 200) return res.status(r.status).json({ error: 'Could not reach friend' });
     res.json({ ok: true });
   } catch (err) {
@@ -645,7 +617,7 @@ router.get('/:id/common', async (req, res) => {
   }
 });
 
-// DELETE /api/friends/:id — remove a friend. Their inbound token stops matching
+// DELETE /api/friends/:id — remove a friend. Their URL to us stops matching
 // (row gone), we stop polling them, and cached data cascades away.
 router.delete('/:id', async (req, res) => {
   try {
