@@ -8,16 +8,19 @@ share what you're watching.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/overview.png" width="190"><br><sub><b>Year-in-Review</b></sub></td>
-    <td align="center"><img src="docs/screenshots/poster-grid.png" width="190"><br><sub><b>Poster grid</b></sub></td>
-    <td align="center"><img src="docs/screenshots/film-detail.png" width="190"><br><sub><b>Film detail</b></sub></td>
-    <td align="center"><img src="docs/screenshots/watchlist.png" width="190"><br><sub><b>Watchlist</b></sub></td>
+    <td align="center"><img src="docs/screenshots/overview.png" width="250"><br><sub><b>Year-in-Review</b></sub></td>
+    <td align="center"><img src="docs/screenshots/poster-grid.png" width="250"><br><sub><b>Poster grid</b></sub></td>
+    <td align="center"><img src="docs/screenshots/film-detail.png" width="250"><br><sub><b>Film detail</b></sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/friends-feed.png" width="190"><br><sub><b>Friends feed</b></sub></td>
-    <td align="center"><img src="docs/screenshots/friend-profile.png" width="190"><br><sub><b>Friend profile</b></sub></td>
-    <td align="center"><img src="docs/screenshots/notifications.png" width="190"><br><sub><b>Notifications</b></sub></td>
-    <td></td>
+    <td align="center"><img src="docs/screenshots/watchlist.png" width="250"><br><sub><b>Watchlist</b></sub></td>
+    <td align="center"><img src="docs/screenshots/friends-feed.png" width="250"><br><sub><b>Friends feed</b></sub></td>
+    <td align="center"><img src="docs/screenshots/friend-profile.png" width="250"><br><sub><b>Friend profile</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/notifications.png" width="250"><br><sub><b>Notifications</b></sub></td>
+    <td align="center"><img src="docs/screenshots/notification-settings.png" width="250"><br><sub><b>ntfy &amp; push settings</b></sub></td>
+    <td align="center"><img src="docs/screenshots/add-friend.png" width="250"><br><sub><b>Add a friend</b></sub></td>
   </tr>
 </table>
 
