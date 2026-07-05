@@ -13,3 +13,5 @@ CREATE TABLE IF NOT EXISTS ntfy_settings (
   notify_booked    BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+INSERT INTO ntfy_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
