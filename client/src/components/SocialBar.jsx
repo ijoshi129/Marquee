@@ -49,26 +49,38 @@ export default function SocialBar({ item, onChanged, defaultOpen = false }) {
 
       {open && (
         <div className="cmt-inline">
-          {comments.map((c, i) => (
-            <div key={c.id || `${c.at}-${i}`} className="cmt">
-              <span className="cmt-ava">{(c.name || '?').slice(0, 1).toUpperCase()}</span>
-              <span className="cmt-body">
-                <span className="cmt-name">{c.name}</span>
-                <span className="cmt-text">{c.body}</span>
-                <span className="cmt-time">{fmtAgo(c.at)}</span>
-              </span>
-            </div>
-          ))}
+          <div className="cmt-list">
+            {comments.map((c, i) => {
+              const last = i === comments.length - 1;
+              return (
+                <div key={c.id || `${c.at}-${i}`} className={`bubl ${c.mine ? 'you' : 'them'}`}>
+                  {!c.mine && (
+                    <span className="bubl-ava" title={c.name}>
+                      {(c.name || '?').slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="bubl-col">
+                    <span className="bubl-bubble">{c.body}</span>
+                    {last && (
+                      <span className="bubl-time">
+                        {c.mine ? '' : `${c.name} · `}{fmtAgo(c.at)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
           <form className="cmt-form" onSubmit={post}>
             <input
               className="cmt-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Add a comment…"
+              placeholder="Reply…"
               maxLength={1000}
             />
-            <button type="submit" className="cmt-send" disabled={busy || !text.trim()}>
-              {busy ? '…' : 'Post'}
+            <button type="submit" className="cmt-send" disabled={busy || !text.trim()} aria-label="Send">
+              {busy ? '…' : '↑'}
             </button>
           </form>
           {failed && <div className="cmt-error">Couldn’t post — try again.</div>}

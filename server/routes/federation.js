@@ -25,7 +25,7 @@ const SELECT_SHARED = `
     w.rating, w.tags, w.watched_at,
     t.name AS theater_name,
     tc.payload AS tmdb,
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                 FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
   FROM watches w
   LEFT JOIN theaters t ON t.id = w.theater_id
