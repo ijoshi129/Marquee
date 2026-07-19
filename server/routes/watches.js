@@ -186,38 +186,6 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
-// GET /api/watches/commented — your own films that have a comment thread, newest
-// conversation first. Powers the "On your films" strip on the friends page so the
-// film owner can see and reply to talk about their films without leaving it.
-// Must precede GET /:id — otherwise "commented" is read as an :id.
-router.get('/commented', async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT w.id AS watch_id, w.title, tc.payload AS tmdb,
-              (SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
-                 FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment') AS comments,
-              (SELECT MAX(se.created_at) FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment') AS last_comment_at
-         FROM watches w
-         LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
-        WHERE w.status = 'watched'
-          AND EXISTS (SELECT 1 FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment')
-        ORDER BY last_comment_at DESC
-        LIMIT 50`
-    );
-    res.json(
-      rows.map((r) => ({
-        watch_id: r.watch_id,
-        title: r.tmdb?.title || r.title,
-        poster_url: r.tmdb?.poster_url || null,
-        comments: Array.isArray(r.comments) ? r.comments : [],
-      }))
-    );
-  } catch (err) {
-    logger.error({ err }, 'commented watches');
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 router.get('/:id', async (req, res) => {
   try {
     const result = await pool.query(`${SELECT_WATCH} WHERE w.id = $1`, [req.params.id]);
