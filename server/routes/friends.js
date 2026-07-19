@@ -104,8 +104,14 @@ router.post('/', async (req, res) => {
        RETURNING ${FRIEND_COLUMNS}`,
       [name, friendUrl, fed.sha256(token)]
     );
-    if (friendUrl) federationSync.syncFriendById(rows[0].id).catch(() => {});
-    res.status(201).json({ ...rows[0], my_url: myUrlFor(token) });
+    const myUrl = myUrlFor(token);
+    if (friendUrl) {
+      federationSync.syncFriendById(rows[0].id).catch(() => {});
+      // Hand them our URL over the channel they just gave us, so they don't have
+      // to paste ours back — the connection goes two-way from a single add.
+      fed.sendConnect(friendUrl, myUrl).catch(() => {});
+    }
+    res.status(201).json({ ...rows[0], my_url: myUrl });
   } catch (err) {
     logger.error({ err }, 'add friend');
     res.status(500).json({ error: 'Server error' });
