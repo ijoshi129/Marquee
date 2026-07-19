@@ -286,7 +286,7 @@ router.post('/:id/test-connection', async (req, res) => {
 // "seeing together" card.
 router.get('/feed', async (req, res) => {
   try {
-    const [watched, profiles, mine, identity] = await Promise.all([
+    const [watched, profiles, mine, identity, mineWatched] = await Promise.all([
       pool.query(
         `SELECT fw.friend_id, f.display_name AS friend_name, fw.payload, fw.watched_at
            FROM friend_watches fw JOIN friends f ON f.id = fw.friend_id
@@ -307,8 +307,42 @@ router.get('/feed', async (req, res) => {
           WHERE w.status = 'pending' AND w.showtime IS NOT NULL`
       ),
       fed.getIdentity(),
+      // Your own watched films, folded into the same timeline as friends' — so
+      // the feed reads as one chronological "who saw what," and conversations on
+      // your films sit inline on the film's own entry.
+      pool.query(
+        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.watched_at, w.rating, tc.payload AS tmdb,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+                            FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
+           FROM watches w
+           LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
+          WHERE w.status = 'watched'
+          ORDER BY w.watched_at DESC NULLS LAST
+          LIMIT 200`
+      ),
     ]);
     const myInstanceId = identity?.instance_id || null;
+
+    const myWatchedItems = mineWatched.rows.map((r) => {
+      const t = r.tmdb || {};
+      return {
+        id: `me:${r.watch_id}`,
+        kind: 'watched',
+        you: true,
+        friend_id: null,
+        friend_name: 'You',
+        host_friend_id: null,
+        host_remote_id: null,
+        host_own_watch_id: r.watch_id,
+        title: t.title || r.title,
+        poster_url: t.poster_url || null,
+        release_year: t.release_year || null,
+        director: t.director || null,
+        rating: r.rating ?? null,
+        comments: Array.isArray(r.comments) ? r.comments : [],
+        at: r.watched_at || null,
+      };
+    });
 
     const watchedItems = watched.rows.map((r) => {
       const p = r.payload || {};
@@ -413,7 +447,7 @@ router.get('/feed', async (req, res) => {
       });
     }
 
-    const items = [...watchedItems, ...upcomingItems].sort((a, b) => {
+    const items = [...watchedItems, ...myWatchedItems, ...upcomingItems].sort((a, b) => {
       if (!a.at && !b.at) return 0;
       if (!a.at) return 1;
       if (!b.at) return -1;
