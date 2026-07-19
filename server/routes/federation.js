@@ -223,17 +223,17 @@ async function handleRecommend(req, res) {
 }
 
 // A friend we've already handed a URL to sends theirs back here, so the owner
-// never has to paste it. Fill only when our slot is empty: an already-linked row
-// is left alone, so a captured token can't silently redirect our pulls (re-linking
-// stays an owner action via PATCH/rotate).
+// never has to paste it. We accept it when our slot is empty OR the current link
+// is known-broken (last_error set) — the latter repairs a dead connection, e.g.
+// after either side rotated. A healthy link is never redirected, so a captured
+// token can't silently repoint our pulls.
 async function handleConnect(req, res) {
-  if (req.friend.friend_url) return res.json({ ok: true, linked: false });
   const friendUrl = fed.parseFriendUrl((req.body || {}).friend_url);
   if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
 
   const { rows } = await pool.query(
     `UPDATE friends SET friend_url = $1, last_error = NULL, updated_at = NOW()
-      WHERE id = $2 AND friend_url IS NULL RETURNING id`,
+      WHERE id = $2 AND (friend_url IS NULL OR last_error IS NOT NULL) RETURNING id`,
     [friendUrl, req.friend.id]
   );
   res.json({ ok: true, linked: rows.length > 0 });
