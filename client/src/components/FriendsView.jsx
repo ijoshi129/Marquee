@@ -69,6 +69,7 @@ export default function FriendsView({ onAddFriend, focus }) {
   const [feed, setFeed] = useState(null);
   const [friends, setFriends] = useState([]);
   const [recs, setRecs] = useState([]);
+  const [myThreads, setMyThreads] = useState([]);
   const [selected, setSelected] = useState(null);
   const [picker, setPicker] = useState(null);
   const [expanded, setExpanded] = useState(null); // strip card id whose detail is open
@@ -90,14 +91,16 @@ export default function FriendsView({ onAddFriend, focus }) {
 
   const load = useCallback(async () => {
     try {
-      const [f, fr, rc] = await Promise.all([
+      const [f, fr, rc, mt] = await Promise.all([
         api.friendsFeed(),
         api.friends(),
         api.recommendations().catch(() => []),
+        api.commentedWatches().catch(() => []),
       ]);
       setFeed(f);
       setFriends(fr);
       setRecs(rc);
+      setMyThreads(mt);
     } catch (e) {
       setErr(e.message);
     }
@@ -325,7 +328,32 @@ export default function FriendsView({ onAddFriend, focus }) {
         </div>
       )}
 
-      {feed.length === 0 && (
+      {myThreads.length > 0 && (
+        <div className="rec-strip">
+          <div className="rec-strip-title">💬 On your films</div>
+          {myThreads.map((t) => (
+            <div key={t.watch_id} className="myfilm">
+              <div className="rec-card">
+                {t.poster_url ? (
+                  <img className="rec-poster" src={t.poster_url} alt="" loading="lazy" />
+                ) : (
+                  <span className="rec-poster blank">{(t.title || '?').slice(0, 2).toUpperCase()}</span>
+                )}
+                <div className="rec-info">
+                  <div className="rec-from">People are talking about</div>
+                  <div className="rec-title">{t.title}</div>
+                </div>
+              </div>
+              <SocialBar
+                item={{ host_own_watch_id: t.watch_id, comments: t.comments }}
+                onChanged={load}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {feed.length === 0 && myThreads.length === 0 && (
         <div className="empty-state">
           <div className="empty-glyph">◌</div>
           <div className="empty-headline">Quiet so far.</div>
