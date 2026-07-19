@@ -406,6 +406,24 @@ router.post('/:id/recheck-unseen', async (req, res) => {
   }
 });
 
+// GET /api/watches/:id/comments — the comment thread on one of your films.
+// Conversations on your own films live on the film itself (not the friends feed).
+router.get('/:id/comments', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT author_name AS name, body, created_at AS at
+         FROM social_events
+        WHERE watch_id = $1 AND kind = 'comment'
+        ORDER BY created_at`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    logger.error({ err }, 'watch comments');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/watches/:id/comment — the owner commenting on their own film (used
 // when they're the canonical host of a shared thread). Stored locally and
 // re-broadcast to friends, who can then see and reply.

@@ -266,11 +266,16 @@ export default function App() {
             Friends
           </button>
           <NotificationsBell
-            onOpen={(n) => {
-              setView('friends');
+            onOpen={async (n) => {
+              // A comment alert points at one of your own films — open the film
+              // (its thread lives there now), not the friends feed.
               if (n?.payload?.watch_id) {
-                setFriendFocus({ watchId: n.payload.watch_id, ts: Date.now() });
+                const w =
+                  watches.find((x) => x.id === n.payload.watch_id) ||
+                  (await api.getWatch(n.payload.watch_id).catch(() => null));
+                if (w) return setEditing(w);
               }
+              setView('friends');
             }}
           />
           {view === 'friends' && (
