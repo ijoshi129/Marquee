@@ -190,7 +190,7 @@ export default function FriendsView({ onAddFriend, focus }) {
         ? watchingNow
           ? it.together ? 'are watching' : 'is watching'
           : it.together ? 'are seeing' : 'is seeing'
-        : it.rating ? 'rated' : 'logged';
+        : 'saw';
     const people = it.people || [];
     const avatarName =
       it.kind === 'upcoming'
