@@ -131,18 +131,29 @@ router.patch('/:id', async (req, res) => {
       params.push(name);
       updates.push(`display_name = $${params.length}`);
     }
+    let newFriendUrl = null;
     if ('friend_url' in body) {
-      let friendUrl = null;
       if (body.friend_url) {
-        friendUrl = fed.parseFriendUrl(body.friend_url);
-        if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+        newFriendUrl = fed.parseFriendUrl(body.friend_url);
+        if (!newFriendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
       }
-      params.push(friendUrl);
+      params.push(newFriendUrl);
       updates.push(`friend_url = $${params.length}`);
       // A fresh URL invalidates whatever error the old one earned.
       updates.push(`last_error = NULL`);
     }
     if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
+
+    // Reciprocate only when we're pasting into an empty slot (establishing a
+    // link), not when tracking a friend's rotation — so we don't needlessly
+    // cycle our own token on a healthy connection.
+    let wasEmpty = false;
+    if (newFriendUrl) {
+      const cur = await pool.query('SELECT friend_url FROM friends WHERE id = $1', [req.params.id]);
+      if (!cur.rows.length) return res.status(404).json({ error: 'Friend not found' });
+      wasEmpty = !cur.rows[0].friend_url;
+    }
+
     params.push(req.params.id);
     const { rows } = await pool.query(
       `UPDATE friends SET ${updates.join(', ')}, updated_at = NOW()
@@ -150,8 +161,20 @@ router.patch('/:id', async (req, res) => {
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Friend not found' });
-    if ('friend_url' in body && rows[0].friend_url) {
+    if (newFriendUrl) {
       federationSync.syncFriendById(rows[0].id).catch(() => {});
+      // Hand them a fresh URL for us over the channel they just gave us, so the
+      // link goes two-way from a single paste. We only hold the hash of our old
+      // token, so minting a new one is the only way to advertise ourselves; the
+      // fresh URL reaches them via their inbox and their broken/empty slot fills.
+      if (wasEmpty && baseUrl()) {
+        const token = fed.generateSecret();
+        await pool.query(
+          'UPDATE friends SET inbound_token_hash = $2, updated_at = NOW() WHERE id = $1',
+          [rows[0].id, fed.sha256(token)]
+        );
+        fed.sendConnect(newFriendUrl, myUrlFor(token)).catch(() => {});
+      }
     }
     res.json(rows[0]);
   } catch (err) {
