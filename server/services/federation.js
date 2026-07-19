@@ -115,6 +115,23 @@ async function pingFriend(friend) {
   }
 }
 
+// Push our own capability URL back to a friend whose URL we just accepted, so
+// the connection becomes two-way without them pasting anything. Sent over the
+// URL they gave us (which authenticates us to them); they fill their empty slot.
+// Best-effort — if it doesn't land, the manual paste path still works.
+const CONNECT_TIMEOUT_MS = 5000;
+async function sendConnect(friendUrl, myUrl) {
+  try {
+    await fetchWithTimeout(`${friendUrl}/inbox`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'connect', friend_url: myUrl }),
+    }, CONNECT_TIMEOUT_MS);
+  } catch {
+    // Reciprocation is a convenience; the owner can still paste our URL by hand.
+  }
+}
+
 // Tell every reachable friend "I changed — pull me now", debounced so a burst
 // of edits collapses into one round of pings. Fire-and-forget; safe to call often.
 function notifyFriends() {
@@ -145,4 +162,5 @@ module.exports = {
   safeBaseUrl,
   parseFriendUrl,
   notifyFriends,
+  sendConnect,
 };

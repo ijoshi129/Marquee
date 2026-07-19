@@ -222,8 +222,27 @@ async function handleRecommend(req, res) {
   res.json({ ok: true });
 }
 
+// A friend we've already handed a URL to sends theirs back here, so the owner
+// never has to paste it. Fill only when our slot is empty: an already-linked row
+// is left alone, so a captured token can't silently redirect our pulls (re-linking
+// stays an owner action via PATCH/rotate).
+async function handleConnect(req, res) {
+  if (req.friend.friend_url) return res.json({ ok: true, linked: false });
+  const friendUrl = fed.parseFriendUrl((req.body || {}).friend_url);
+  if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+
+  const { rows } = await pool.query(
+    `UPDATE friends SET friend_url = $1, last_error = NULL, updated_at = NOW()
+      WHERE id = $2 AND friend_url IS NULL RETURNING id`,
+    [friendUrl, req.friend.id]
+  );
+  res.json({ ok: true, linked: rows.length > 0 });
+  if (rows.length) federationSync.syncFriendById(req.friend.id).catch(() => {});
+}
+
 // POST /api/federation/:token/inbox — everything a friend pushes to us:
 //   { kind: 'ping' }                                — "I changed, pull me now"
+//   { kind: 'connect', friend_url }                 — their URL back, for two-way
 //   { kind: 'comment', target_watch_id, body }      — comment on one of our films
 //   { kind: 'recommend', tmdb_id, title }           — recommend us a film
 // We're the hub for events on our watches: a stored comment is re-broadcast to
@@ -236,6 +255,7 @@ router.post('/:token/inbox', async (req, res) => {
       federationSync.syncFriendById(req.friend.id).catch(() => {});
       return;
     }
+    if (kind === 'connect') return await handleConnect(req, res);
     if (kind === 'comment') return await handleComment(req, res);
     if (kind === 'recommend') return await handleRecommend(req, res);
     res.status(400).json({ error: 'Unknown kind' });
