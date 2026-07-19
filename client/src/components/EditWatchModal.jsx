@@ -6,6 +6,7 @@ import { watchDisplayTitle, rewatchLabel } from '../format';
 import Backdrop from './Backdrop';
 import InfoTip from './InfoTip';
 import TagEditor from './TagEditor';
+import SocialBar from './SocialBar';
 
 const STATUS_OPTIONS = [
   { value: 'watched', label: 'Watched' },
@@ -34,6 +35,17 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
   const [showOverride, setShowOverride] = useState(false);
   const [overrideQ, setOverrideQ] = useState(watch.title);
   const [overrideResults, setOverrideResults] = useState([]);
+
+  // Conversations on your own films live here on the film, not the friends feed.
+  const [comments, setComments] = useState([]);
+  async function loadComments() {
+    try {
+      setComments(await api.watchComments(watch.id));
+    } catch {}
+  }
+  useEffect(() => {
+    loadComments();
+  }, [watch.id]);
 
   const isUnseen = !!specialTag(watch);
 
@@ -316,6 +328,17 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
               />
             </div>
           </div>
+
+          {comments.length > 0 && (
+            <div className="sheet-field">
+              <label className="sheet-label">Comments</label>
+              <SocialBar
+                item={{ host_own_watch_id: watch.id, comments }}
+                onChanged={loadComments}
+                defaultOpen
+              />
+            </div>
+          )}
 
           {traktStatus && (
             <div className="sheet-field">
