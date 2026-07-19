@@ -12,6 +12,14 @@ export default function AddFriendModal({ onClose, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  // Don't let an accidental click outside discard what you've typed — or the
+  // minted URL, which is shown only once. Dismiss on backdrop only when there's
+  // nothing to lose; otherwise use the ✕ or Done.
+  function onBackdrop() {
+    if (myUrl || name.trim() || theirUrl.trim()) return;
+    onClose();
+  }
+
   async function add() {
     if (!name.trim()) return;
     setBusy(true);
@@ -30,7 +38,7 @@ export default function AddFriendModal({ onClose, onChanged }) {
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={onBackdrop}>
       <div className="sheet friends-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <button className="sheet-close" onClick={onClose} aria-label="Close">✕</button>
 
@@ -45,13 +53,13 @@ export default function AddFriendModal({ onClose, onChanged }) {
 
         {!myUrl ? (
           <div className="friends-form">
-            <label className="friends-label">Friend&rsquo;s name</label>
+            <label className="friends-label">Name for now (updates once they sync)</label>
             <input
               className="friends-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Kiran"
+              placeholder="Riley"
               maxLength={120}
             />
             <label className="friends-label">Their URL for you (optional — paste it later if you don&rsquo;t have it yet)</label>
