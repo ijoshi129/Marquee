@@ -3487,6 +3487,8 @@ input[type='date'].input-naked { color-scheme: dark; }
 .rec-strip-title { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-deep); margin: 0 2px 10px; }
 .rec-card { display: flex; align-items: center; gap: 12px; padding: 8px 2px; }
 .rec-card + .rec-card { border-top: 1px solid var(--bg-tint); }
+.myfilm + .myfilm { border-top: 1px solid var(--bg-tint); margin-top: 4px; padding-top: 4px; }
+.myfilm .social-bar { margin: 2px 2px 0; }
 .rec-poster { width: 40px; height: 60px; flex-shrink: 0; border-radius: 5px; object-fit: cover; background: var(--bg-elev-2); display: grid; place-items: center; font-family: var(--font-display); font-size: 0.8rem; color: var(--fg-mute); }
 .rec-info { flex: 1; min-width: 0; }
 .rec-from { font-family: var(--font-mono); font-size: 0.64rem; color: var(--fg-mute); letter-spacing: 0.03em; }

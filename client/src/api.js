@@ -120,6 +120,7 @@ export const api = {
   commentOnOwnWatch: (watchId, text) =>
     request(`/api/watches/${watchId}/comment`, { method: 'POST', body: JSON.stringify({ text }) }),
   watchComments: (watchId) => request(`/api/watches/${watchId}/comments`),
+  commentedWatches: () => request('/api/watches/commented'),
   recommendFilm: (friendId, tmdb_id, title) =>
     request(`/api/friends/${friendId}/recommend`, {
       method: 'POST',
