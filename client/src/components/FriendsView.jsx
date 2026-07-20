@@ -339,7 +339,12 @@ export default function FriendsView({ onAddFriend, focus }) {
         return (
           <div key={it.id}>
             {head && <div className="feed-day">{head}</div>}
-            {renderCard(it)}
+            <div className={`msg ${it.you ? 'you' : 'them'}`}>
+              {!it.you && (
+                <span className="msg-ava">{(it.friend_name || '?').slice(0, 1).toUpperCase()}</span>
+              )}
+              {renderCard(it)}
+            </div>
           </div>
         );
       })}
