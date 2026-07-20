@@ -3167,9 +3167,26 @@ input[type='date'].input-naked { color-scheme: dark; }
 /* Activity feed */
 .feed { max-width: 640px; margin: 0 auto; padding: 4px 0 90px; }
 .feed-day {
-  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.16em;
-  text-transform: uppercase; color: var(--fg-mute); margin: 22px 2px 12px;
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--fg-mute); margin: 20px 0 12px; text-align: center;
 }
+
+/* Chat-style timeline: your films right, friends' left with an avatar. */
+.msg { display: flex; align-items: flex-start; gap: 8px; }
+.msg.you { justify-content: flex-end; }
+.msg.them { justify-content: flex-start; }
+.msg-ava {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 0.7rem; background: #2a2112; color: var(--accent); margin-top: 10px;
+}
+.msg .feed-card { max-width: 92%; margin-bottom: 0; }
+.msg.them .feed-card { max-width: calc(100% - 34px); border-bottom-left-radius: 6px; }
+.msg.you .feed-card {
+  border-bottom-right-radius: 6px;
+  background: linear-gradient(180deg, #1c1509, #140f06); border-color: #4a3a15;
+}
+.msg.you .feed-card:hover { border-color: #6a5420; }
+.msg .feed-ava { display: none; } /* the outside avatar stands in for it */
 .feed-card {
   background: linear-gradient(180deg, var(--bg-elev), #0d0d11);
   border: 1px solid var(--bg-tint); border-radius: var(--radius-lg);
