@@ -299,7 +299,7 @@ router.get('/feed', async (req, res) => {
       ),
       pool.query(
         `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb,
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                             FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
            LEFT JOIN theaters t ON t.id = w.theater_id
@@ -312,7 +312,7 @@ router.get('/feed', async (req, res) => {
       // your films sit inline on the film's own entry.
       pool.query(
         `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.watched_at, w.rating, tc.payload AS tmdb,
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                             FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
            LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
@@ -322,6 +322,9 @@ router.get('/feed', async (req, res) => {
       ),
     ]);
     const myInstanceId = identity?.instance_id || null;
+    // Tag each comment as yours or not, so the thread can render it left/right.
+    const markMine = (arr) =>
+      Array.isArray(arr) ? arr.map(({ by, ...c }) => ({ ...c, mine: by === myInstanceId })) : [];
 
     const myWatchedItems = mineWatched.rows.map((r) => {
       const t = r.tmdb || {};
@@ -339,7 +342,7 @@ router.get('/feed', async (req, res) => {
         release_year: t.release_year || null,
         director: t.director || null,
         rating: r.rating ?? null,
-        comments: Array.isArray(r.comments) ? r.comments : [],
+        comments: markMine(r.comments),
         at: r.watched_at || null,
       };
     });
@@ -359,7 +362,7 @@ router.get('/feed', async (req, res) => {
         release_year: p.tmdb?.release_year || null,
         director: p.tmdb?.director || null,
         rating: p.rating ?? null,
-        comments: Array.isArray(p.comments) ? p.comments : [],
+        comments: markMine(p.comments),
         at: r.watched_at || null,
       };
     });
@@ -433,9 +436,7 @@ router.get('/feed', async (req, res) => {
         host_friend_id: friendHost ? friendHost.friend_id : null,
         host_remote_id: friendHost ? friendHost.p.remote_id : null,
         host_own_watch_id: youHost ? youHost.watch_id : null,
-        comments: friendHost
-          ? Array.isArray(friendHost.p.comments) ? friendHost.p.comments : []
-          : youHost && Array.isArray(youHost.comments) ? youHost.comments : [],
+        comments: markMine(friendHost ? friendHost.p.comments : youHost ? youHost.comments : []),
         title: p.tmdb?.title || p.title,
         poster_url: p.tmdb?.poster_url || null,
         release_year: p.tmdb?.release_year || null,

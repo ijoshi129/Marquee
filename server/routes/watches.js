@@ -411,13 +411,15 @@ router.post('/:id/recheck-unseen', async (req, res) => {
 router.get('/:id/comments', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT author_name AS name, body, created_at AS at
+      `SELECT author_name AS name, author_instance_id AS by, body, created_at AS at
          FROM social_events
         WHERE watch_id = $1 AND kind = 'comment'
         ORDER BY created_at`,
       [req.params.id]
     );
-    res.json(rows);
+    const me = await fed.getIdentity();
+    const mineId = me?.instance_id || null;
+    res.json(rows.map(({ by, ...c }) => ({ ...c, mine: by === mineId })));
   } catch (err) {
     logger.error({ err }, 'watch comments');
     res.status(500).json({ error: 'Server error' });
