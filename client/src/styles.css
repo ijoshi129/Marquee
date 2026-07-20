@@ -3187,6 +3187,9 @@ input[type='date'].input-naked { color-scheme: dark; }
 }
 .msg.you .feed-card:hover { border-color: #6a5420; }
 .msg .feed-ava { display: none; } /* the outside avatar stands in for it */
+/* Reserve room for the absolute top-right timestamp so it can't overlap the
+   "… saw" line on short/narrow cards. */
+.msg .feed-line1 { padding-right: 58px; }
 .feed-card {
   background: linear-gradient(180deg, var(--bg-elev), #0d0d11);
   border: 1px solid var(--bg-tint); border-radius: var(--radius-lg);
