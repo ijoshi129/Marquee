@@ -75,15 +75,33 @@ normal account password.
 
 ### 3. Launch
 
+Marquee is published as a multi-architecture image (`linux/amd64` and
+`linux/arm64`), so all you need are two files:
+
 ```bash
-git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
-cp .env.example .env
+mkdir marquee && cd marquee
+curl -O https://raw.githubusercontent.com/ijoshi129/Marquee/main/compose.yaml
+curl -o .env https://raw.githubusercontent.com/ijoshi129/Marquee/main/.env.example
 # Edit .env and fill in the Required variables (see Configuration below).
-docker compose up -d --build
+docker compose up -d
 ```
 
 Open **<http://localhost:3000>**. If port 3000 is taken, set `APP_HOST_PORT` in
 `.env` before launching.
+
+`compose.yaml` tracks `:latest` by default. To pin a release, set `MARQUEE_TAG=2.1`
+in `.env`.
+
+<details>
+<summary>Building from source instead</summary>
+
+```bash
+git clone https://github.com/ijoshi129/Marquee.git marquee && cd marquee
+cp .env.example .env
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+</details>
 
 ### What to expect on first launch
 
@@ -131,7 +149,7 @@ Either way, only `/api/federation/*` needs to be reachable by friends; it answer
 only to a valid secret URL and 404s everything else. `OWNER_PASSCODE` gates
 **every** screen except that friend-facing API, so exposing the instance never
 exposes your diary. You unlock once per device. Recreate the stack after editing
-`.env` (`docker compose up -d --build`).
+`.env` (`docker compose up -d`).
 
 ### 2. Connect
 
@@ -179,12 +197,19 @@ the topic is the only secret.
 
 ```bash
 cd marquee
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 Your data volume (`marquee_pgdata`) is preserved across updates and new schema
 migrations apply automatically on boot.
+
+If you build from source, pull the repo and rebuild instead:
+
+```bash
+git pull
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
 
 ## Configuration
 

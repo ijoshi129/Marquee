@@ -1,0 +1,12 @@
+# Build the app image from this checkout instead of pulling the published one.
+#
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+#
+# The build is tagged with the same reference compose.yaml pulls, so a later
+# `docker compose pull` replaces it with the published image.
+
+services:
+  marquee:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile

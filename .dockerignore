@@ -1,0 +1,33 @@
+# Patterns are anchored at the context root, so anything that can appear at
+# any depth needs a `**/` form as well as a bare one.
+
+.git
+.gitignore
+.dockerignore
+.DS_Store
+**/.DS_Store
+
+# Host node_modules would be copied over the pruned `npm ci --omit=dev`
+# install, shipping dev dependencies and host-platform native binaries.
+node_modules
+**/node_modules
+
+dist
+**/dist
+build
+**/build
+
+# Credentials are mounted at runtime, never built in.
+.env
+.env.*
+**/.env
+**/.env.*
+
+backups
+docker/backups
+fixtures
+docs
+compose*.yaml
+*.log
+**/*.log
+*.md

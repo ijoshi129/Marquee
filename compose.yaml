@@ -1,9 +1,11 @@
-# Marquee — builds the image from this checkout and runs it.
+# Marquee — pulls the published image and runs it alongside Postgres.
 #
-#   docker compose up -d --build   # start / apply updates
+#   docker compose up -d                          # start
+#   docker compose pull && docker compose up -d   # update
 #
-# Updating: `git pull && docker compose up -d --build`. No registry round-trip;
-# the image is built on the host from whatever's in the working tree.
+# This file plus a filled-in .env is a complete install; no checkout needed.
+# Pin a release with MARQUEE_TAG=2.1 in .env. To build from source instead,
+# add the compose.build.yaml override.
 
 # Pin the project + volume names so they don't depend on the install
 # directory. Moving the compose file between hosts/paths keeps the
@@ -31,10 +33,7 @@ services:
       retries: 5
 
   marquee:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    image: marquee:local
+    image: ghcr.io/ijoshi129/marquee:${MARQUEE_TAG:-latest}
     container_name: marquee
     restart: unless-stopped
     env_file: ./.env
