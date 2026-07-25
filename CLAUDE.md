@@ -49,7 +49,7 @@ pct exec 163 -- sh -c 'cd /opt/marquee && git pull && docker compose pull && doc
 
 ## Release state
 
-- Latest git tag: **`v2.2`** (2026-07-24) — GHCR publishing, chat feed, one-paste connect. `v2.1` (2026-07-05), `v2.0` (2026-06-23), `v1.5` (2026-06-21) before it. **Tags now trigger the image build** — pushing one is what publishes. **Open: no GitHub release for v2.2** (earlier tags have one).
+- Latest git tag: **`v2.2`** (2026-07-24, GitHub release published) — GHCR publishing, chat feed, one-paste connect. `v2.1` (2026-07-05), `v2.0` (2026-06-23), `v1.5` (2026-06-21) before it. **Tags now trigger the image build** — pushing one is what publishes.
 - `client/src/components/WhatsNew.jsx` holds the in-app changelog. Bump `WHATS_NEW_VERSION` and prepend a block whenever shipping user-facing changes. Now `2.2` (covers #52–#62); older blocks retained.
 
 ## Friends / federation (v2.1 — capability URLs)
