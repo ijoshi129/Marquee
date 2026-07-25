@@ -2,12 +2,44 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.1';
+const WHATS_NEW_VERSION = '2.2';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.2',
+    sections: [
+      {
+        title: 'The Friends feed reads like a conversation',
+        items: [
+          'Everything you and your friends have seen now shares one timeline, newest at the bottom, grouped by day. Your films sit on the right, theirs on the left with their avatar — so a week of moviegoing reads top to bottom like a thread.',
+          'Coming up stays pinned above it, so what’s booked never gets buried under what’s been seen.',
+        ],
+      },
+      {
+        title: 'Comments look like messages',
+        items: [
+          'Threads are chat bubbles now — your replies on the right, your friend’s on the left.',
+          'Conversations about your own films live on the film itself. Open any film you’ve seen to catch up on what people said, and comment alerts take you straight there.',
+        ],
+      },
+      {
+        title: 'One paste connects you both ways',
+        items: [
+          'Paste a friend’s secret URL and yours travels back to them automatically — no more sending links in both directions and hoping they both land.',
+          'If a connection breaks, pasting a fresh URL repairs both ends at once.',
+        ],
+      },
+      {
+        title: 'Easier updates',
+        items: [
+          'Marquee is now published as a ready-built image, so updating pulls it down instead of rebuilding from scratch — quicker, and much lighter on small home servers.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.1',
     sections: [
