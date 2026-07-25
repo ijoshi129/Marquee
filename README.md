@@ -89,7 +89,7 @@ docker compose up -d
 Open **<http://localhost:3000>**. If port 3000 is taken, set `APP_HOST_PORT` in
 `.env` before launching.
 
-`compose.yaml` tracks `:latest` by default. To pin a release, set `MARQUEE_TAG=2.1`
+`compose.yaml` tracks `:latest` by default. To pin a release, set `MARQUEE_TAG=2.2`
 in `.env`.
 
 <details>
