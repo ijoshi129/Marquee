@@ -4,7 +4,7 @@
 #   docker compose pull && docker compose up -d   # update
 #
 # This file plus a filled-in .env is a complete install; no checkout needed.
-# Pin a release with MARQUEE_TAG=2.1 in .env. To build from source instead,
+# Pin a release with MARQUEE_TAG=2.2 in .env. To build from source instead,
 # add the compose.build.yaml override.
 
 # Pin the project + volume names so they don't depend on the install
