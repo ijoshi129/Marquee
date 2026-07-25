@@ -8,108 +8,97 @@ A self-hosted, single-user AMC movie tracker PWA. Watches Gmail for AMC reservat
 - **Server:** Node 20 + Express + `pg` connection pool.
 - **Database:** Postgres 16. Schema auto-applies on boot via `CREATE TABLE IF NOT EXISTS` in `server/db.js` plus numbered SQL migrations in `server/migrations/`. Tracked in `_migrations`.
 - **Email ingest:** `imapflow` + `cheerio`. Polls Gmail every 5 minutes for `from:@amctheatres.com` in `[Gmail]/All Mail`.
-- **Container:** Single multi-stage Dockerfile (`docker/Dockerfile`) builds client and server into one image. Bundled with Postgres via `compose.yaml`.
+- **Container:** Multi-stage Dockerfile (`docker/Dockerfile`) builds client + server into one image, published multi-arch to GHCR. Bundled with Postgres via `compose.yaml`.
 
-## Production deployment — Tank (Unraid)
+## Production deployment — laputa LXC 163
 
-Prod lives on the user's Unraid box "Tank" at `/mnt/user/appdata/marquee/`. **Non-obvious specifics:**
+Prod lives in a **dedicated Proxmox LXC on laputa: CTID 163, hostname `marquee`** (2 cores / 2 GB), at `/opt/marquee/`. Tailscale runs inside (needs `/dev/net/tun`). **Non-obvious specifics:**
 
-- **Port:** `APP_HOST_PORT=3030` in `.env` (3000 was taken).
-- **Postgres volume:** the data volume on Tank is named **`docker_marquee_pgdata`**, not `marquee_pgdata`. Legacy from the original install which used `docker/docker-compose.yml` (project name "docker"). That compose file no longer exists in the repo.
-- **Override file:** Tank has `compose.override.yaml` (alongside `compose.yaml`) mapping the in-repo volume name to the existing one:
-  ```yaml
-  volumes:
-    marquee_pgdata:
-      external: true
-      name: docker_marquee_pgdata
-  ```
-- **This override is the only line of defense protecting Tank's data.** If lost, the next `docker compose up -d` creates an empty `marquee_pgdata` volume and runs a blank database. Always preserve `.env` and `compose.override.yaml` alongside any backup.
-- Container names are pinned (`marquee`, `marquee-postgres`). Backup dir is host-mounted; daily Postgres dumps land there.
-- **NPM (Nginx Proxy Manager) fronts prod.** Express has no `trust proxy` set, so the rate-limiter and access logs see NPM's IP, not the client — pre-existing, not a regression; only matters if you want per-client limiting/real IPs.
-- **Tank now runs v2.0** (deployed 2026-06-23). Tank is on tailnet **`tail4da5e4`**.
-- **LXC migration (in progress):** a **dedicated Proxmox LXC** with **Tailscale inside the LXC** (its own tailnet node — node-sharing exposes only Marquee; `OWNER_PASSCODE` locks everything but the federation API). Needs `/dev/net/tun` for `tailscaled`. The LXC is up, fronted by NPM at **`https://marquee.monklabs.org`**. Migrate via `pg_dump` → restore; carry `.env`. To share with a friend, share that *one* LXC node (it's also the tailnet node).
+- **Addressing:** LAN `10.0.0.63`, tailnet `100.99.174.120`. `APP_HOST_PORT=3007`, `POSTGRES_HOST_PORT=5433`.
+- **DB:** `POSTGRES_USER=marqueeadmin`, `POSTGRES_DB=marquee`, volume `marquee_pgdata`. No override file — the legacy `docker_marquee_pgdata` mapping is gone with Tank.
+- **Identity/federation:** `INSTANCE_NAME=LaterrKidd`, `FEDERATION_ENABLED=1`, `FEDERATION_BASE_URL=https://marquee-fed.monklabs.org` (see **Exposure** below). `OWNER_PASSCODE` hardened (no longer `changeme`).
+- **NPM (LXC 152 on laputa) fronts prod** at **`https://marquee.monklabs.org`**; app otherwise tailnet/LAN-private. Express has no `trust proxy` set, so the rate-limiter and access logs see NPM's IP, not the client — pre-existing, not a regression.
+- Container names pinned (`marquee`, `marquee-postgres`). `backups/` under `/opt/marquee`. Running **v2.2** from `ghcr.io/ijoshi129/marquee:latest` (migrations →016; no `MARQUEE_TAG` in `.env`, so it tracks `latest`).
+- **Tank (Unraid, tailnet `tail4da5e4`, LAN `10.0.0.58`) no longer runs Marquee** — fully torn down 2026-07-05. `rugbytank` = second Unraid box, tailnet `tail5011ba`, TS IP `100.66.101.73`.
 
 ## Deploy / update flow
 
-The image is built on the host from the checkout — no registry round-trip. To update Tank:
+Tagged releases publish a multi-arch image to GHCR; hosts pull it instead of building. To update prod:
 
 ```bash
-cd /mnt/user/appdata/marquee
-git pull
-docker compose up -d --build
+pct exec 163 -- sh -c 'cd /opt/marquee && git pull && docker compose pull && docker compose up -d'
 ```
 
-`compose.yaml` declares `build: { context: ., dockerfile: docker/Dockerfile }` so `--build` rebuilds whatever's in the working tree. Pinned `name: marquee` (project) and `name: marquee_pgdata` (volume) make fresh installs produce deterministic names regardless of install path.
-
-GHCR has stale tags (`:latest`, `:0.2.0`, `:0.2`, `:sha-2e2f103`) all pointing at the same pre-removal digest — intentionally left in place, cost nothing.
+- **Publishing:** `.github/workflows/publish.yml` fires on `v*` tags — builds `linux/amd64` + `linux/arm64` on native runners (free, public repo — no QEMU), pushes by digest, merges one manifest list. Tag-triggered, not per-push, so `:latest` = last release. Tags are `vMAJOR.MINOR`, **not valid semver**, so `metadata-action` matches the version by pattern, not `type=semver`; `v2.2` → `2.2`, `2`, `latest`.
+- **compose:** `compose.yaml` pulls `ghcr.io/ijoshi129/marquee:${MARQUEE_TAG:-latest}` — that file + a filled-in `.env` is a complete install, no checkout. `compose.build.yaml` is the override that builds from source. Pinned `name: marquee` (project) and `name: marquee_pgdata` (volume) keep installs deterministic.
+- **`.dockerignore` is load-bearing:** without it `COPY server ./server` layered the host's `node_modules` over the pruned prod install and baked `server/.env` into the image. Patterns are **anchored at the context root** — `.env` does *not* match `server/.env`; that needs `**/.env`.
+- Migrate hosts via `pg_dump` → restore; carry `.env` (identity gotcha under Friends/federation).
 
 ## Repo conventions
 
 - **Branch protection on `main`:** PRs required (0 required approvals → self-merge works). No direct pushes. No force pushes. No branch deletions. `enforce_admins: false` (owner can hotfix in an emergency).
 - **Workflow for every change:** feature branch → PR → squash-merge → delete branch. Even one-line doc fixes go through this.
-- **No Claude / Anthropic / AI / Opus / "assistant" mentions** anywhere user-facing — commits, PR titles, PR bodies, release notes, comments in code. Strict. Never add `Co-Authored-By` lines. Everything should read like a human authored it.
-- **Comments:** default to none. Add a comment only when the *why* is non-obvious. No what-comments, no recap-comments, no "added for X feature" trail.
-- **Migrations:** numbered SQL in `server/migrations/`. Idempotent (`IF NOT EXISTS`). One-shot data backfills go in `server/scripts/`.
+- **No Claude / Anthropic / AI / Opus / "assistant" mentions** anywhere user-facing — commits, PR titles, PR bodies, release notes, comments in code. Strict. Never add `Co-Authored-By` lines. Watch for the harness auto-appending a "Generated with" footer to PR bodies — strip it.
+- **Comments:** default to none. Add a comment only when the *why* is non-obvious. No what-comments, no recap-comments.
+- **Migrations:** numbered SQL in `server/migrations/`. Idempotent (`IF NOT EXISTS`). One-shot data backfills go in `server/scripts/` (exception: a backfill that must precede a column drop lives in the migration, e.g. 015).
 
 ## Contributors
 
 - `ijoshi129` — owner, admin.
-- `kiran` — write access. Pushed a database backup API directly to `main` once before branch protection was on; the same flow now goes through PRs.
+- `kiran` — write access. Pushed a DB backup API straight to `main` once pre-branch-protection; that flow goes through PRs now.
 
 ## Release state
 
-- Latest git tag: **`v2.0`** (2026-06-23, GitHub release published), the Friends/federation layer. `v1.5` (2026-06-21) before it. Tags are markers only — the image is built per-host from the tagged checkout.
-- `client/src/components/WhatsNew.jsx` holds the in-app changelog. Bump `WHATS_NEW_VERSION` and prepend a block whenever shipping user-facing changes. `WHATS_NEW_VERSION` is now `2.0` (Friends entry); `v1.5` and earlier blocks retained.
-- Pre-v2.0 merges to `main`: **#39** director-filter chip, **#40** clickable Five-Star Picks, **#41** their WhatsNew entries.
+- Latest git tag: **`v2.2`** (2026-07-24) — GHCR publishing, chat feed, one-paste connect. `v2.1` (2026-07-05), `v2.0` (2026-06-23), `v1.5` (2026-06-21) before it. **Tags now trigger the image build** — pushing one is what publishes. **Open: no GitHub release for v2.2** (earlier tags have one).
+- `client/src/components/WhatsNew.jsx` holds the in-app changelog. Bump `WHATS_NEW_VERSION` and prepend a block whenever shipping user-facing changes. Now `2.2` (covers #52–#62); older blocks retained.
 
-## Friends / federation (v2.0 — shipped & merged to `main`)
+## Friends / federation (v2.1 — capability URLs)
 
-A federated social layer: independent Marquee instances pair and share over token-gated HTTP (Mastodon-style, no central server). Connectivity-agnostic — the code only stores a friend's `base_url` string. **Migrations 010–014.** Off unless `FEDERATION_ENABLED=1`; the friend-facing API fails closed otherwise.
+Independent Marquee instances share over HTTP; the entire credential is a per-friend **capability URL**. Off unless `FEDERATION_ENABLED=1` (friend-facing API fails closed). **Migrations 010–016.**
 
-- **Core (`/api/federation`, `/api/friends`):** per-friend tokens minted at pairing, **one per direction** — `inbound_token_hash` (sha256 of the token they present) + `outbound_token` (plaintext we present). One-time-code invite/accept handshake. `federation-sync` worker polls active friends, full-replace caching into `friend_watches`/`friend_profiles`; offline-tolerant, 401 ⇒ revoked. Change-triggered push (`notifyFriends` ping → targeted sync) for ~2–3s live updates.
-- **Owner lock:** `OWNER_PASSCODE` gates **every** `/api` route except `/api/federation`, `/api/auth`, `/api/health`. Unset = no lock (legacy). One-time unlock per device (client sends `X-Owner-Passcode`). This is what makes Tailscale node-sharing safe — friends can reach the box but only the federation API.
-- **Notifications (`/api/notifications`):** generic model + in-app bell (mark-read/dismiss/clear) **and iOS Web Push** (`web-push` dep, VAPID env, `sw.js` push handler). Push gotchas: needs HTTPS + installed PWA + iOS 16.4+; notification `icon`/`badge` must be **PNG** (SVG silently fails on iOS); a stale/orphaned subscription causes silent pushes that trip iOS's display budget — client unsubscribes-before-subscribe to avoid accumulation.
-- **Social:** activity feed; **seeing-together** (matching upcoming reservations merge into one card; comments use a deterministic **canonical-host** so a mutually-connected group shares one thread — host can be a friend's copy or your own film); comments (`social_events`, owner-hub re-broadcast); recommendations (push a film → friend's watchlist + "Recommended by X" badge); taste-match (% agreement + films-in-common on a friend profile); presence ("Watching now" derived from showtime+runtime).
-- **Env:** `FEDERATION_ENABLED`, `FEDERATION_BASE_URL`, `INSTANCE_NAME`, `FEDERATION_SYNC_INTERVAL_MIN`, `OWNER_PASSCODE`, `VAPID_PUBLIC_KEY`/`PRIVATE_KEY`/`SUBJECT` (all in `.env.example`; instance handles dropped — name only). Identity (`federation_identity.instance_id` + `display_name`) is seeded from `INSTANCE_NAME` **once on a fresh DB** (`ON CONFLICT DO NOTHING`) — **cloning a Marquee volume carries the old identity**, and changing `INSTANCE_NAME` later does nothing; fix with `UPDATE federation_identity SET display_name=…, instance_id=gen_random_uuid()`.
-- **Reachability:** federation needs **bidirectional** reach (each box hits the other's `FEDERATION_BASE_URL`). Pairing only tests the accepter→inviter direction; sync needs both. `safeBaseUrl` allows LAN/Tailscale/localhost, rejects bad schemes + link-local `169.254`. Tailscale **MagicDNS names are tailnet-scoped — they DON'T resolve across tailnets even when nodes are shared**; for a shared node use its `100.x` IP + app port (`http://100.x:port`; Tailscale encrypts transport). Cross-tailnet sharing is a 2-step handshake (share **and** accept) — `tailscale ping` `no matching peer` = not accepted. Public HTTPS via NPM (valid cert) is the lowest-friction `FEDERATION_BASE_URL` (works for any friend); `https://…ts.net` needs a real cert (Tailscale Serve) or it fails.
-- **Manage friends UI:** per-friend **Test Connection** (`POST /api/friends/:id/test-connection`, probes reach + token) and **Sync** (`/:id/sync`) buttons.
-- **Status / open items:** v2.0 **merged** (#44, superseding the closed #42; README #43; #45 test/sync buttons + sync-on-pair; #46 pairing-race fix; #47 own-film comment threads), **tagged + released**. `federation-server-core` branch deleted. **Still open:** Friends timeline layout disliked (upcoming reservations sort above Today's activity; a reverted "Coming up" rail experiment).
+- **Connect = URL swap.** `POST /api/friends {display_name}` mints `FEDERATION_BASE_URL/api/federation/<token>` — shown **once** (QR + copy), only its sha256 kept in `friends.inbound_token_hash`. Paste theirs into `friends.friend_url` (`PATCH /:id`); `POST /:id/rotate` invalidates + reissues. No invite codes, no handshake, no status state machine — migration 015 dropped `status`/`direction`/`base_url`/`outbound_token`, **deleted revoked rows** (they'd otherwise regain access), and dropped `federation_invites`.
+- **Auto-reciprocate (single-sided connect).** Adding a friend *with* their URL, or pasting one via Edit URL into a **previously-empty** slot, pushes our URL back over the channel they gave us (`connect` inbox kind) — one paste links both ways. Receiver fills its slot when **empty or erroring** (`last_error` set) → repairs a dead link, never redirects a healthy one. PATCH reciprocation **rotates** our inbound token first (only its hash is stored, so minting is the only way to re-advertise) — done only when the slot was empty, so tracking a friend's rotation doesn't cycle our token needlessly.
+- **Friend-facing API:** `GET /api/federation/:token/feed` (identity + stats + upcoming + watches with comment threads — one fetch per sync) and `POST …/inbox` (`kind: ping|connect|comment|recommend`). Wrong/rotated token ⇒ 404. The matched row **is** the authenticated author; inbox writes made before our first pull are re-keyed once sync learns `remote_instance_id`.
+- **Sync worker:** full-replace caching into `friend_watches`/`friend_profiles`; every failure is transient (`last_error` + keep polling — nothing to unstick). Peer-input hardened: showtime-validity guard (`validShowing`), duplicate `remote_id` skip, 23505 remap only on the `remote_instance_id` constraint. `notifyFriends` debounced ping → targeted sync gives ~2–3s live updates.
+- **Owner lock:** `OWNER_PASSCODE` gates every `/api` route except `/api/federation`, `/api/auth`, `/api/health`. One-time unlock per device (`X-Owner-Passcode`).
+- **Notifications:** in-app bell (always records) + iOS Web Push + **ntfy** (`ntfy_settings`, mig 016; configured in-app: bell → gear → server/topic/token, Send test). Per-kind toggles (comment/recommend/together/**booked**) gate **both** push channels at `notify()`. `booked` fires when a friend's sync shows a new reservation; skipped when it matches one of yours (seeing-together announces instead). Push gotchas: HTTPS + installed PWA + iOS 16.4+; icons must be PNG; client unsubscribes-before-subscribe.
+- **Social:** the activity feed is one **chat-style timeline** — your watched films **right** ("You saw …", warm-tinted), friends' **left** with an avatar, interleaved by date under centered day dividers (a separate "On your films" strip was tried and removed). Comment threads render as **iMessage bubbles** (yours right/accent, theirs left; tagged `mine` server-side by `author_instance_id`). **Coming-up rail** pinned on top (soonest-first, tap-to-expand). Conversations on your **own** films live **on the film** (`EditWatchModal` + `GET /api/watches/:id/comments`); their bell alerts deep-link to the film, not a feed card. Watched-verb is always "saw". Plus: seeing-together canonical-host threads; comments (hub = film owner's instance, re-broadcast via feed); recommendations; taste-match; presence. Friend detail sheets in Manage friends (Test/Sync/Edit URL/Rotate).
+- **Exposure (live on laputa LXC 163):** app stays private (Tailscale + NPM); only `/api/federation/*` goes public via **Cloudflare Tunnel** with a path filter (`cloudflared` in the LXC: hostname `marquee-fed.monklabs.org`, path `api/federation/*` → app port; everything else 404s at the edge). `FEDERATION_BASE_URL=https://marquee-fed.monklabs.org` so minted URLs are public. Any mutually reachable URL also works (LAN/VPN).
+- **Env:** unchanged set + VAPID. Identity gotcha still applies: `federation_identity` seeds from `INSTANCE_NAME` once on a fresh DB — cloning a volume carries the old `instance_id`; fix by SQL update.
 
-## Session log — v2.0 ship + prod federation (2026-06-23)
+## Session log — 2026-07-24 (GHCR publishing)
 
-- **Shipped v2.0:** merged #44 (Friends, incl. ~27 reliability/validation fixes from a multi-agent whole-app review), #43 (README + `docs/screenshots/`), #45–#47 (federation UX); published `v2.0` tag/release; closed #42; deleted `federation-server-core`.
-- **Prod federation (Tank ↔ rugbytank):** `rugbytank` = second Unraid box, tailnet **`tail5011ba`**, Tailscale IP **`100.66.101.73`**, Marquee app **:3067**; also hosts the `mtest.monklabs.org` fedtest (a *separate* instance, identity "Mac"). Most debugging was reachability: cross-tailnet MagicDNS doesn't resolve (Tank `tail4da5e4` ≠ rugby `tail5011ba`) + a typo'd `100.x` IP. Fixes captured in the federation section.
-- **Two prod bugs fixed:** #46 — the sync-on-pair from #45 raced the accepter storing its token → spurious 401 → friend wrongly `revoked`; now the accepter pings the inviter *after* storing (unstick a pair with `UPDATE friends SET status='active', last_error=NULL WHERE status='revoked'`). #47 — comments on *your own* films were stored + notified but had no UI; the feed now surfaces own films with comment threads.
-- **Gotcha:** `web-push` is a v2.0 dep — a container missing it from `/app/server/node_modules` is running **pre-v2.0** code (deploy to fix). Generate VAPID in-container: `docker exec -w /app/server marquee node -e 'console.log(require("web-push").generateVAPIDKeys())'`. `OWNER_PASSCODE` was left as `changeme` on a public-facing box — harden before exposing.
+- **Published to GHCR** (#61) so others update by pulling rather than cloning + building — motive was ease of updates for friends, not discoverability. WhatsNew bumped to 2.2 (#62); tagged **v2.2**, all jobs green. Chose GHCR over Docker Hub: no second account, `GITHUB_TOKEN` auth, no anonymous pull rate limit.
+- **The `.dockerignore` was the real find** (details under Deploy flow) — surfaced by inspecting a *built* image, not by reading the Dockerfile, and the first fix missed `server/.env` because ignore patterns don't recurse.
+- **GHCR package was already public**, inherited from the May 2026 `ci/ghcr-publish` run — no visibility flip needed. Checked anonymous pull via an unauthenticated `ghcr.io/token` request instead of `docker logout`. `:latest` moved off the stale pre-removal digest, which now holds only `0.2`/`0.2.0`/`sha-2e2f103`.
+- **Prod cut over** to the published image: pre-upgrade dump at `backups/marquee-pre-v2.2.sql.gz`, Postgres never recreated (only the app service changed), health OK, 54 watches intact. Orphaned `marquee:local` (66 MB) left in place. Pull takes seconds vs. the old on-LXC Vite build.
 
-## Session log — v2.0 build (2026-06-22)
+## Session log — 2026-07-19 (federation reciprocity + chat feed)
 
-Built the Friends/federation + notifications + social layer on `federation-client` (architecture in the section above), verified on a local rig + real iOS Web Push via `mtest.monklabs.org`. Process notes:
-- Long-lived dev servers need the **managed background runner** — plain `&` dies when the Bash call returns.
-- `compose.yaml` has `env_file: ./.env`; a `--env-file` flag only covers `${...}` interpolation, not container env. Inject vars via the override `environment:` block or the test dir's `./.env`.
-- iOS PWA SW updates: reopening doesn't swap the worker — delete + re-add the home-screen icon (clear Safari data) to pick up a new `sw.js`.
+- **Shipped #52–#60** (no schema changes — migrations still →016). Auto-reciprocate (#52 add, #55 Edit-URL) and the feed rework (#53–#60): current state for both is under Friends/federation above. Auto-reciprocate verified on the two-instance rig incl. the broken-both-ways reconnect and the healthy-link-not-hijacked guards.
+- "On your films" strip (#56) tried then removed (#57). #60: right-padding on the "… saw" line so the top-right timestamp can't overlap on narrow cards.
+- **Owner's design taste:** iterated the feed model live three times via HTML mockups (published as **Artifacts** for phone review, not `client/public` this time) before landing "one chronological timeline of movies seen, you + friends."
 
-## Session log — v1.5 (2026-06-21)
+## Session log — v2.1 (2026-07-05)
 
-Four squash-merged PRs (#33/#37/#34/#38) + fix #32, where the code lives:
-- **#32 Cancelled ≠ Seen:** `watchlist.js` now-playing "seen" scoped to `status='watched'`.
-- **#33 Per-month A-List:** `alist_membership_month` table (mig `009`); resolve month override → year flag → default; year toggle clears that year's month overrides in one txn (`routes/alist.js`); math in `services/alist-value.js` (`computeAlistValue`, unit-tested); editor `AListMembershipModal.jsx`.
-- **#37 Stat detail sheets:** every In Review number opens a period-aware sheet (`AListValueModal.jsx`, `StatDetailModal.jsx`); stats payload gained `value.by_year`, `rating_breakdown`, `years`.
-- **#34 Showtimes on posters:** `tmdb.js shapeSearchResult` carries `release_date`; `format.js` `fmtShortDate`/`isUpcoming`/`fmtShowtime`; amber release chip + `🎟` badge (UTC).
-- **#38 Unseen reveal gate:** Unseen title hidden until **showtime+2h**; `tmdb-rechecker` skips pre-showtime Unseens; gate honors `APP_TIMEZONE` (default `America/New_York`); `UNSEEN_REVEAL_AFTER_MS=2h` in `tmdb-rechecker.js` + `format.js`.
+- **Shipped v2.1** (#48 capability URLs, #49 ntfy, #50 Friends UI, #51 screenshots), cut prod over to laputa LXC 163, tore Tank down after a verified dump. Stacked merges #48→#49→#50 needed manual conflict resolution between each.
+- **Pre-merge self-review caught 8 confirmed bugs** — worst was migration 015's revoked-friend regression (see **Connect = URL swap** above); it was unfixable after the fact, since `status` is dropped.
+- **Gotchas:** a `node_modules` symlink committed from a worktree clobbers the real directory on merge (`npm install` to recover). README screenshots shot headless via Playwright (390×844, `deviceScaleFactor` only — `isMobile` inflates the viewport to ~507px and crops); diary grid needs 507px. Playwright is installed in `client/` but not committed.
+- **Open:** rugbytank rollout (now just a `docker compose pull`); reconnect the pre-v2.1 **"Rugby"** friend — broken both ways (owner's row has no URL + fresh token; Rugby's points at the owner's old dead URL). Fix: get Rugby's current URL, paste via **Edit URL** — auto-reciprocate repairs both ends.
 
-Process notes:
-- **Stacked PRs auto-close when their base branch is deleted on merge.** Recover: `git rebase --onto main <old-base-sha> <branch>`, force-push, open a *fresh* PR (can't re-point a closed PR's base).
-- Multiple PRs editing `WhatsNew.jsx`'s `v1.5` block conflict on merge — resolve by keeping all section objects under the one `v1.5` entry.
+## Session log — earlier
+
+- **v2.0 (2026-06-23, #43–#47):** cross-tailnet MagicDNS doesn't resolve even for shared nodes (use the `100.x` IP). `compose.yaml` uses `env_file: ./.env` — `--env-file` only covers `${...}` interpolation, not container env; inject via an override `environment:` block. VAPID in-container: `docker exec -w /app/server marquee node -e 'console.log(require("web-push").generateVAPIDKeys())'`.
+- **v1.5 (2026-06-21, #32–#38):** stacked PRs auto-close when their base branch is deleted on merge — rebase onto main + open a fresh PR to recover.
 
 ## Local dev environment (Mac)
 
-- Postgres for dev runs in the `marquee-postgres` container (`docker compose up -d postgres`), host port **5433**, volume `marquee_pgdata`, seeded with ~40 watched films (incl. a future pending "AMC Screen Unseen: June 22" used to exercise the Unseen gate). The server reads the root `.env` (`server/server.js` line 1).
-- **Port 3000 on this Mac is taken by an unrelated `server.mjs`** — run the marquee dev server with `PORT=3001 node server.js`. `client/vite.config.js` proxies `/api` to `:3000` by default; for local dev temporarily point it at `:3001`, and **always revert that proxy edit before committing**.
-- Phone testing: `npx vite --host 0.0.0.0`, then open `http://10.0.0.55:5173` (LAN) or `http://100.76.29.29:5173` (Tailscale). The full Docker app (`docker compose up -d --build`) serves on `:3030`.
-- UI mockups: write throwaway `.html` into `client/public/` (Vite serves it at root, reachable on the phone), then **delete before committing**. The owner reviews UI on their phone before merging and often wants a mockup before a real build.
-- **Federation rig:** run multiple instances on one Mac by overriding env — extra logical DBs (`marquee_b`, `marquee_c`) in the same `marquee-postgres` container, each its own `node server.js` with `PORT=` / `POSTGRES_DB=` / `FEDERATION_ENABLED=1` / `FEDERATION_BASE_URL=http://localhost:<port>` / `INSTANCE_NAME=` (and `OWNER_PASSCODE=marqueetest` for the lock). They pair over `localhost` URLs. Plain `&` backgrounding doesn't survive a Bash tool call — use the managed background runner.
-- **Push test container:** `marquee-fedtest` (Docker, host port **3033**, project `marquee-fedmac`, volume `marquee_fedtest_pgdata`) serves the prod build (SW registered, needed for push). Behind NPM at **`https://mtest.monklabs.org`** for iOS Web Push testing. Config in gitignored `.env.fedtest-mac` + `compose.fedtest.yaml` (run: `docker compose -p marquee-fedmac -f compose.yaml -f compose.fedtest.yaml --env-file .env.fedtest-mac up -d --build`). Rebuild it to pick up SW/client changes; iOS won't swap the worker on reopen — delete + re-add the home-screen PWA.
+- Postgres for dev runs in the `marquee-postgres` container (`docker compose up -d postgres`), host port **5433**, volume `marquee_pgdata`, seeded with ~40 watched films. The server reads the root `.env` (`server/server.js` line 1).
+- **Port 3000 on this Mac is taken by an unrelated `server.mjs`** — run the dev server with `PORT=3001 node server.js`; point `client/vite.config.js`'s `/api` proxy at `:3001` temporarily and **revert before committing**.
+- Phone testing: `npx vite --host 0.0.0.0` → `http://10.0.0.55:5173` (LAN) or `http://100.76.29.29:5173` (Tailscale). Full Docker app serves on `:3030`.
+- UI mockups: throwaway `.html` in `client/public/` (delete before committing). The owner reviews UI on their phone before merging and often wants a mockup first.
+- **Federation rig:** multiple instances on one Mac — extra logical DBs (`marquee_b`, `marquee_c`, create/drop as needed) in `marquee-postgres`, each its own `node server.js` with `PORT=`/`DATABASE_URL=`/`FEDERATION_ENABLED=1`/`FEDERATION_BASE_URL=http://localhost:<port>`/`INSTANCE_NAME=` (+ `OWNER_PASSCODE=marqueetest`). **Pass `GMAIL_USER= GMAIL_APP_PASSWORD=` (empty) or the poller ingests real AMC emails into test DBs.** Plain `&` doesn't survive a Bash call — use `nohup … & disown` or the managed background runner. **zsh won't word-split an unquoted var**, so `env $common …` passes the whole string as one arg and the vars silently don't apply (also how empty `GMAIL_*` fails to take); list each `VAR=val` explicitly.
+- **Push test container:** `marquee-fedtest` (host port **3033**, project `marquee-fedmac`, volume `marquee_fedtest_pgdata`), prod build behind NPM at **`https://mtest.monklabs.org`** for iOS Web Push. Config in gitignored `.env.fedtest-mac` + `compose.fedtest.yaml`. iOS won't swap the SW on reopen — delete + re-add the home-screen PWA.
 
 ## User context
 
