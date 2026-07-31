@@ -80,6 +80,34 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// GET /api/friends/identity — this instance's own identity, as friends see it.
+router.get('/identity', async (req, res) => {
+  try {
+    res.json(await fed.getIdentity());
+  } catch (err) {
+    logger.error({ err }, 'get federation identity');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/friends/identity { display_name } — rename this instance. INSTANCE_NAME
+// only seeds the row on a fresh DB, so this is the only way to change it later.
+router.put('/identity', async (req, res) => {
+  try {
+    const name = ((req.body || {}).display_name || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: 'display_name cannot be empty' });
+    await pool.query(
+      `UPDATE federation_identity SET display_name = $1 WHERE id = TRUE`,
+      [name]
+    );
+    fed.notifyFriends();
+    res.json(await fed.getIdentity());
+  } catch (err) {
+    logger.error({ err }, 'update federation identity');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/friends { display_name, friend_url? } — add a friend: mint their
 // capability URL to our instance and store their URL if they've already shared
 // it. my_url is shown exactly once — only its hash is kept.
@@ -288,7 +316,8 @@ router.get('/feed', async (req, res) => {
   try {
     const [watched, profiles, mine, identity, mineWatched] = await Promise.all([
       pool.query(
-        `SELECT fw.friend_id, f.display_name AS friend_name, fw.payload, fw.watched_at
+        `SELECT fw.friend_id, f.display_name AS friend_name, f.remote_instance_id,
+                fw.payload, fw.watched_at
            FROM friend_watches fw JOIN friends f ON f.id = fw.friend_id
           ORDER BY fw.watched_at DESC NULLS LAST
           LIMIT 200`
@@ -311,10 +340,12 @@ router.get('/feed', async (req, res) => {
       // the feed reads as one chronological "who saw what," and conversations on
       // your films sit inline on the film's own entry.
       pool.query(
-        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.watched_at, w.rating, tc.payload AS tmdb,
+        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.tags, w.watched_at, w.rating,
+                w.showtime, t.name AS theater_name, tc.payload AS tmdb,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                             FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
+           LEFT JOIN theaters t ON t.id = w.theater_id
            LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
           WHERE w.status = 'watched'
           ORDER BY w.watched_at DESC NULLS LAST
@@ -326,52 +357,130 @@ router.get('/feed', async (req, res) => {
     const markMine = (arr) =>
       Array.isArray(arr) ? arr.map(({ by, ...c }) => ({ ...c, mine: by === myInstanceId })) : [];
 
-    const myWatchedItems = mineWatched.rows.map((r) => {
-      const t = r.tmdb || {};
-      return {
-        id: `me:${r.watch_id}`,
-        kind: 'watched',
-        you: true,
-        friend_id: null,
-        friend_name: 'You',
-        host_friend_id: null,
-        host_remote_id: null,
-        host_own_watch_id: r.watch_id,
-        title: t.title || r.title,
-        poster_url: t.poster_url || null,
-        release_year: t.release_year || null,
-        director: t.director || null,
-        rating: r.rating ?? null,
-        comments: markMine(r.comments),
-        at: r.watched_at || null,
-      };
-    });
-
-    const watchedItems = watched.rows.map((r) => {
-      const p = r.payload || {};
-      return {
-        id: `${r.friend_id}:${p.remote_id}`,
-        kind: 'watched',
-        friend_id: r.friend_id,
-        friend_name: r.friend_name,
-        host_friend_id: r.friend_id,
-        host_remote_id: p.remote_id,
-        host_own_watch_id: null,
-        title: p.tmdb?.title || p.title,
-        poster_url: p.tmdb?.poster_url || null,
-        release_year: p.tmdb?.release_year || null,
-        director: p.tmdb?.director || null,
-        rating: p.rating ?? null,
-        comments: markMine(p.comments),
-        at: r.watched_at || null,
-      };
-    });
-
     // Strict match key: film (tmdb id, else normalized title) + theatre + minute.
     const norm = (s) => (s || '').trim().toLowerCase();
     const filmKey = (p) => (p.tmdb_id ? `t:${p.tmdb_id}` : `n:${norm(p.tmdb?.title || p.title)}`);
     const matchKey = (p) =>
       `${filmKey(p)}|${norm(p.theater_name)}|${new Date(p.showtime).toISOString().slice(0, 16)}`;
+
+    // A film several of you attended is one screening, so it reads as one card.
+    // Same key as upcoming, except an Unseen matches on theatre + minute alone:
+    // until TMDB resolves it there's no id, and its raw AMC title differs between
+    // instances, so the film half of the key is the one part that can't be trusted.
+    const UNSEEN_RX = /AMC\s+(?:Screen|Scream)\s+Unseen/i;
+    const isUnseen = (p) =>
+      (p.tags || []).some((t) => t === 'Screen Unseen' || t === 'Scream Unseen') ||
+      UNSEEN_RX.test(p.title || '');
+    const seenKey = (p) =>
+      isUnseen(p)
+        ? `unseen|${norm(p.theater_name)}|${new Date(p.showtime).toISOString().slice(0, 16)}`
+        : matchKey(p);
+
+    const seenGroups = new Map();
+    let soloSeq = 0;
+    const addSeen = (w) => {
+      const p = w.p;
+      // Without both a theatre and a showtime there's no evidence two people were
+      // in the same room, only that they saw the same film — so it stands alone.
+      const matchable =
+        p.showtime && p.theater_name && !Number.isNaN(Date.parse(p.showtime));
+      const k = matchable ? seenKey(p) : `solo:${soloSeq++}`;
+      if (!seenGroups.has(k)) seenGroups.set(k, []);
+      seenGroups.get(k).push(w);
+    };
+    for (const r of watched.rows) {
+      const p = r.payload || {};
+      addSeen({
+        you: false,
+        friend_id: r.friend_id,
+        name: r.friend_name,
+        instance_id: r.remote_instance_id,
+        remote_id: p.remote_id,
+        comments: p.comments,
+        rating: p.rating ?? null,
+        watched_at: r.watched_at,
+        p,
+      });
+    }
+    for (const r of mineWatched.rows) {
+      addSeen({
+        you: true,
+        friend_id: null,
+        name: 'You',
+        instance_id: myInstanceId,
+        watch_id: r.watch_id,
+        comments: r.comments,
+        rating: r.rating ?? null,
+        watched_at: r.watched_at,
+        p: r,
+      });
+    }
+
+    const watchedItems = [];
+    for (const [k, entries] of seenGroups) {
+      // One entry per person — a duplicate row on either side shouldn't add a name.
+      const seen = new Set();
+      const people = entries.filter((w) => {
+        const id = w.you ? 'you' : w.friend_id;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      const together = people.length > 1;
+      const friends = people.filter((w) => !w.you);
+      const you = people.find((w) => w.you);
+      // Prefer a copy TMDB has resolved for the title, poster and credits — one
+      // side may have identified an Unseen before the other.
+      const lead = people.find((w) => w.p.tmdb) || people[0];
+      const p = lead.p;
+      const t = p.tmdb || {};
+      // Canonical host for the shared thread, same rule as upcoming: lowest
+      // instance id, so every participant converges on one conversation.
+      const host = together
+        ? people.filter((w) => w.instance_id).sort((a, b) => (a.instance_id < b.instance_id ? -1 : 1))[0]
+        : people[0];
+      const friendHost = host && !host.you ? host : null;
+      const youHost = host && host.you ? host : null;
+      // Tapping through opens a profile only when there's exactly one friend.
+      const profileFriend = friends.length === 1 ? friends[0] : null;
+
+      watchedItems.push({
+        id: together ? `tg:${k}` : you ? `me:${you.watch_id}` : `${friends[0].friend_id}:${friends[0].remote_id}`,
+        kind: 'watched',
+        together,
+        you: !!you,
+        // Only merged cards carry a cast; a solo card keeps reading off friend_name.
+        people: together
+          ? people.map((w) => (w.you ? { name: 'You', you: true } : { name: w.name, friend_id: w.friend_id }))
+          : null,
+        friend_id: profileFriend ? profileFriend.friend_id : null,
+        friend_name: you && !together ? 'You' : profileFriend ? profileFriend.name : friends[0]?.name || null,
+        host_friend_id: friendHost ? friendHost.friend_id : null,
+        host_remote_id: friendHost ? friendHost.remote_id : null,
+        host_own_watch_id: youHost ? youHost.watch_id : null,
+        // Your copy regardless of who hosts the thread, so a notification about
+        // your film still finds its card once the card is a shared one.
+        your_watch_id: you ? you.watch_id : null,
+        title: t.title || p.title,
+        // Both carried so the client can spot an Unseen: the tag if it's there,
+        // else the original AMC title, which is all older rows have.
+        tags: p.tags || [],
+        source_title: p.title,
+        poster_url: t.poster_url || null,
+        release_year: t.release_year || null,
+        director: t.director || null,
+        // On a merged card only your own rating is unambiguous — showing one
+        // person's stars for a group would misattribute it.
+        rating: together ? you?.rating ?? null : people[0].rating,
+        comments: markMine(host ? host.comments : []),
+        // Earliest logged time, so a group lands on one day however the two
+        // instances happened to record it.
+        at: people.reduce(
+          (acc, w) => (w.watched_at && (!acc || new Date(w.watched_at) < new Date(acc)) ? w.watched_at : acc),
+          null
+        ),
+      });
+    }
 
     // Gather every upcoming reservation (friends' shared + your own) that has a
     // showtime and theatre, so it can participate in a match.
@@ -448,7 +557,7 @@ router.get('/feed', async (req, res) => {
       });
     }
 
-    const items = [...watchedItems, ...myWatchedItems, ...upcomingItems].sort((a, b) => {
+    const items = [...watchedItems, ...upcomingItems].sort((a, b) => {
       if (!a.at && !b.at) return 0;
       if (!a.at) return 1;
       if (!b.at) return -1;

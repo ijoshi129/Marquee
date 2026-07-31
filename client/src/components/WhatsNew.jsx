@@ -2,12 +2,43 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.2';
+const WHATS_NEW_VERSION = '2.3';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.3',
+    sections: [
+      {
+        title: 'One card when you went together',
+        items: [
+          'A film several of you saw at the same showing is now a single entry — "You, Alice & Bob saw" — instead of the same poster three times down the feed. Shared screenings span the full width, since they don’t belong to any one person.',
+          'The conversation merges too: one thread per screening rather than a separate one on each person’s copy.',
+        ],
+      },
+      {
+        title: 'Unseens stand out in the feed',
+        items: [
+          'A film that came from a Screen Unseen now carries its tag in the Friends feed, so you can tell at a glance who went in blind — on your films and your friends’ alike. Scream Unseen keeps its red.',
+        ],
+      },
+      {
+        title: 'A tidier feed',
+        items: [
+          'Coming up now shows a date for anything more than a week out, instead of a weekday that could mean any of three weeks.',
+          'Films nobody has rated yet no longer say so — the line just isn’t there.',
+        ],
+      },
+      {
+        title: 'Change the name friends see',
+        items: [
+          'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took — now you can just type a new one and friends pick it up on their next sync.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.2',
     sections: [

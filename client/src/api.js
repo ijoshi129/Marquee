@@ -137,6 +137,9 @@ export const api = {
   federationSettings: () => request('/api/friends/settings'),
   setFederationSettings: (body) =>
     request('/api/friends/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  federationIdentity: () => request('/api/friends/identity'),
+  setFederationIdentity: (display_name) =>
+    request('/api/friends/identity', { method: 'PUT', body: JSON.stringify({ display_name }) }),
   authStatus: () => request('/api/auth/status'),
   unlock: (passcode) =>
     request('/api/auth/unlock', { method: 'POST', body: JSON.stringify({ passcode }) }),
