@@ -3,6 +3,7 @@ import { api } from '../api';
 import { fmtShowtime, isShowingNow } from '../format';
 import FriendProfile from './FriendProfile';
 import SocialBar from './SocialBar';
+import { specialTag } from './WatchList';
 
 // Short relative time, shared with FriendProfile.
 export function fmtAgo(iso) {
@@ -192,6 +193,11 @@ export default function FriendsView({ onAddFriend, focus }) {
           : it.together ? 'are seeing' : 'is seeing'
         : 'saw';
     const people = it.people || [];
+    // An Unseen is worth calling out — the title alone doesn't say they went in
+    // blind. Only on watched films; an upcoming one has nothing to reveal yet.
+    const unseen = it.kind === 'watched'
+      ? specialTag({ tags: it.tags, title: it.source_title })
+      : null;
     const avatarName =
       it.kind === 'upcoming'
         ? (people.find((p) => !p.you) || people[0] || {}).name
@@ -236,11 +242,23 @@ export default function FriendsView({ onAddFriend, focus }) {
             ) : (
               <span className="feed-meta">Not yet rated</span>
             )}
-            {it.kind !== 'upcoming' && (it.director || it.release_year) && (
-              <span className="feed-meta">
-                {[it.director, it.release_year].filter(Boolean).join(' · ')}
-              </span>
-            )}
+            {it.kind !== 'upcoming' &&
+              (unseen ? (
+                // The chip takes the credits line; the director gives way so the
+                // card keeps its height.
+                <span className="feed-metarow">
+                  <span className={`feed-unseen ${/scream/i.test(unseen) ? 'scream' : ''}`}>
+                    {unseen}
+                  </span>
+                  {it.release_year && <span className="feed-meta">{it.release_year}</span>}
+                </span>
+              ) : (
+                (it.director || it.release_year) && (
+                  <span className="feed-meta">
+                    {[it.director, it.release_year].filter(Boolean).join(' · ')}
+                  </span>
+                )
+              ))}
           </span>
         </button>
         {((it.host_friend_id && it.host_remote_id) || it.host_own_watch_id) && (

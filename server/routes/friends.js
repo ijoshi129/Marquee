@@ -339,7 +339,7 @@ router.get('/feed', async (req, res) => {
       // the feed reads as one chronological "who saw what," and conversations on
       // your films sit inline on the film's own entry.
       pool.query(
-        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.watched_at, w.rating, tc.payload AS tmdb,
+        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.tags, w.watched_at, w.rating, tc.payload AS tmdb,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                             FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
@@ -366,6 +366,10 @@ router.get('/feed', async (req, res) => {
         host_remote_id: null,
         host_own_watch_id: r.watch_id,
         title: t.title || r.title,
+        // Both carried so the client can spot an Unseen: the tag if it's there,
+        // else the original AMC title, which is all older rows have.
+        tags: r.tags || [],
+        source_title: r.title,
         poster_url: t.poster_url || null,
         release_year: t.release_year || null,
         director: t.director || null,
@@ -386,6 +390,8 @@ router.get('/feed', async (req, res) => {
         host_remote_id: p.remote_id,
         host_own_watch_id: null,
         title: p.tmdb?.title || p.title,
+        tags: p.tags || [],
+        source_title: p.title,
         poster_url: p.tmdb?.poster_url || null,
         release_year: p.tmdb?.release_year || null,
         director: p.tmdb?.director || null,

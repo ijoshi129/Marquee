@@ -3306,6 +3306,13 @@ input[type='date'].input-naked { color-scheme: dark; }
   margin: 1px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .feed-meta { font-size: 0.72rem; color: var(--fg-mute); }
+.feed-metarow { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.feed-unseen {
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--tag); border: 1px solid var(--tag);
+  border-radius: 99px; padding: 2px 7px; line-height: 1.4;
+}
+.feed-unseen.scream { color: #e0797e; border-color: #8d2429; }
 .feed-stars { color: var(--accent); letter-spacing: 1px; font-size: 0.82rem; }
 .feed-stars .off { color: var(--fg-faint); }
 .feed-tix {

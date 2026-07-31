@@ -12,6 +12,12 @@ const RELEASES = [
     version: '2.3',
     sections: [
       {
+        title: 'Unseens stand out in the feed',
+        items: [
+          'A film that came from a Screen Unseen now carries its tag in the Friends feed, so you can tell at a glance who went in blind — on your films and your friends’ alike. Scream Unseen keeps its red.',
+        ],
+      },
+      {
         title: 'Change the name friends see',
         items: [
           'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took — now you can just type a new one and friends pick it up on their next sync.',
