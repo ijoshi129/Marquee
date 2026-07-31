@@ -3307,6 +3307,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 }
 .feed-meta { font-size: 0.72rem; color: var(--fg-mute); }
 .feed-metarow { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.feed-metarow .feed-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed-unseen {
   flex-shrink: 0; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--tag); border: 1px solid var(--tag);
@@ -3457,6 +3458,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .up-poster .feed-poster-blank { width: 100%; height: 100%; display: grid; place-items: center; font-weight: 700; color: var(--fg-mute); }
 .up-chip { position: absolute; left: 5px; right: 5px; bottom: 5px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.04em; text-align: center; padding: 3px 4px; border-radius: 6px; background: rgba(10, 10, 12, 0.82); color: var(--amber, #e8b45a); backdrop-filter: blur(4px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .up-chip.now { color: #4caf7d; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.up-chip.stack { display: flex; flex-direction: column; align-items: center; line-height: 1.3; }
 .up-title { font-size: 0.76rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .up-people { font-family: var(--font-mono); font-size: 0.62rem; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .up-detail { margin-top: 10px; }

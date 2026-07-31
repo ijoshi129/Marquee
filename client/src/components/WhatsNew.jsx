@@ -18,6 +18,13 @@ const RELEASES = [
         ],
       },
       {
+        title: 'A tidier feed',
+        items: [
+          'Coming up now shows a date for anything more than a week out, instead of a weekday that could mean any of three weeks.',
+          'Films nobody has rated yet no longer say so — the line just isn’t there.',
+        ],
+      },
+      {
         title: 'Change the name friends see',
         items: [
           'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took — now you can just type a new one and friends pick it up on their next sync.',

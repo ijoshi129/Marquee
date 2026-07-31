@@ -30,9 +30,13 @@ function dayLabel(at) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// Compact chip for the strip: "Tue 7:30 PM" (showtimes are wall-clock in UTC).
+// Compact chip for the strip (showtimes are wall-clock in UTC). A weekday only
+// reads as a date within the coming week — "Tue" for something three weeks out
+// is ambiguous — so beyond that it's the calendar date. Date + time won't fit on
+// one line inside a 96px poster, hence `date`/`time` for the caller to stack;
+// the shorter in-week forms come back as a single `label`.
 function fmtChip(iso) {
-  if (!iso) return '';
+  if (!iso) return null;
   const d = new Date(iso);
   const diff = Math.round(
     (Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) -
@@ -43,9 +47,18 @@ function fmtChip(iso) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(d);
-  if (diff === 0) return `Today ${time}`;
-  if (diff === 1) return `Tmrw ${time}`;
-  return `${new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(d)} ${time}`;
+  if (diff === 0) return { label: `Today ${time}` };
+  if (diff === 1) return { label: `Tmrw ${time}` };
+  if (diff > 1 && diff <= 6) {
+    const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(d);
+    return { label: `${wd} ${time}` };
+  }
+  const date = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  }).format(d);
+  return { date, time };
 }
 
 // "You & Alice" / "Alice & Bob" / "You, Alice & Bob" — You first.
@@ -239,26 +252,20 @@ export default function FriendsView({ onAddFriend, focus }) {
               )
             ) : it.rating ? (
               <Stars value={it.rating} />
-            ) : (
-              <span className="feed-meta">Not yet rated</span>
-            )}
+            ) : null}
             {it.kind !== 'upcoming' &&
-              (unseen ? (
-                // The chip takes the credits line; the director gives way so the
-                // card keeps its height.
+              (unseen || it.director || it.release_year ? (
                 <span className="feed-metarow">
-                  <span className={`feed-unseen ${/scream/i.test(unseen) ? 'scream' : ''}`}>
-                    {unseen}
-                  </span>
-                  {it.release_year && <span className="feed-meta">{it.release_year}</span>}
-                </span>
-              ) : (
-                (it.director || it.release_year) && (
+                  {unseen && (
+                    <span className={`feed-unseen ${/scream/i.test(unseen) ? 'scream' : ''}`}>
+                      {unseen}
+                    </span>
+                  )}
                   <span className="feed-meta">
                     {[it.director, it.release_year].filter(Boolean).join(' · ')}
                   </span>
-                )
-              ))}
+                </span>
+              ) : null)}
           </span>
         </button>
         {((it.host_friend_id && it.host_remote_id) || it.host_own_watch_id) && (
@@ -282,6 +289,7 @@ export default function FriendsView({ onAddFriend, focus }) {
             {upcoming.map((it) => {
               const watchingNow = isShowingNow(it.showtime, it.runtime_minutes);
               const on = expanded === it.id;
+              const chip = fmtChip(it.showtime);
               return (
                 <button
                   key={it.id}
@@ -302,9 +310,14 @@ export default function FriendsView({ onAddFriend, focus }) {
                       <span className="up-chip now">
                         <span className="feed-now-dot" aria-hidden="true" />Now
                       </span>
-                    ) : (
-                      <span className="up-chip">{fmtChip(it.showtime)}</span>
-                    )}
+                    ) : chip?.label ? (
+                      <span className="up-chip">{chip.label}</span>
+                    ) : chip ? (
+                      <span className="up-chip stack">
+                        <span>{chip.date}</span>
+                        <span>{chip.time}</span>
+                      </span>
+                    ) : null}
                   </span>
                   <span className="up-title">{it.title}</span>
                   <span className="up-people">{peopleLabel(it.people)}</span>
