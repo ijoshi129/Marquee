@@ -12,6 +12,13 @@ const RELEASES = [
     version: '2.3',
     sections: [
       {
+        title: 'One card when you went together',
+        items: [
+          'A film several of you saw at the same showing is now a single entry — "You, Alice & Bob saw" — instead of the same poster three times down the feed. Shared screenings span the full width, since they don’t belong to any one person.',
+          'The conversation merges too: one thread per screening rather than a separate one on each person’s copy.',
+        ],
+      },
+      {
         title: 'Unseens stand out in the feed',
         items: [
           'A film that came from a Screen Unseen now carries its tag in the Friends feed, so you can tell at a glance who went in blind — on your films and your friends’ alike. Scream Unseen keeps its red.',

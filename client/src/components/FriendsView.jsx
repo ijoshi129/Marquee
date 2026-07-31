@@ -90,16 +90,13 @@ export default function FriendsView({ onAddFriend, focus }) {
   const [err, setErr] = useState(null);
   const handledFocus = useRef(null);
 
-  // Open a feed item: watched → that friend; upcoming with one friend → that
-  // friend; upcoming with several → a "who's going" picker.
+  // Open a feed item: one friend on it → that friend; several → a "who was
+  // there" picker. Cards with no cast fall back to their single friend.
   function openItem(it) {
-    if (it.kind === 'watched') {
-      if (it.friend_id) setSelected({ id: it.friend_id, display_name: it.friend_name });
-      return;
-    }
     const fr = (it.people || []).filter((p) => !p.you && p.friend_id);
     if (fr.length === 1) setSelected({ id: fr[0].friend_id, display_name: fr[0].name });
     else if (fr.length > 1) setPicker(fr);
+    else if (it.friend_id) setSelected({ id: it.friend_id, display_name: it.friend_name });
   }
 
   const load = useCallback(async () => {
@@ -136,7 +133,10 @@ export default function FriendsView({ onAddFriend, focus }) {
   useEffect(() => {
     if (!focus || !feed || handledFocus.current === focus.ts) return;
     const target = feed.find(
-      (it) => it.host_own_watch_id === focus.watchId || it.id === `me:${focus.watchId}`
+      (it) =>
+        it.host_own_watch_id === focus.watchId ||
+        it.your_watch_id === focus.watchId ||
+        it.id === `me:${focus.watchId}`
     );
     if (!target) return;
     handledFocus.current = focus.ts;
@@ -197,7 +197,7 @@ export default function FriendsView({ onAddFriend, focus }) {
   const past = feed.filter((it) => it.kind !== 'upcoming');
 
   function renderCard(it) {
-    const who = it.kind === 'upcoming' ? peopleLabel(it.people) : it.friend_name;
+    const who = it.people?.length ? peopleLabel(it.people) : it.friend_name;
     const watchingNow = it.kind === 'upcoming' && isShowingNow(it.showtime, it.runtime_minutes);
     const verb =
       it.kind === 'upcoming'
@@ -211,10 +211,9 @@ export default function FriendsView({ onAddFriend, focus }) {
     const unseen = it.kind === 'watched'
       ? specialTag({ tags: it.tags, title: it.source_title })
       : null;
-    const avatarName =
-      it.kind === 'upcoming'
-        ? (people.find((p) => !p.you) || people[0] || {}).name
-        : it.friend_name;
+    const avatarName = people.length
+      ? (people.find((p) => !p.you) || people[0] || {}).name
+      : it.friend_name;
     return (
       <div
         id={`feed-item-${it.id}`}
@@ -235,7 +234,11 @@ export default function FriendsView({ onAddFriend, focus }) {
             <span className="feed-line1">
               <span className="feed-ava">{(avatarName || '?').slice(0, 1).toUpperCase()}</span>
               <span className="feed-who">{who}</span>
-              <span className="feed-verb">{verb}{it.together ? ' together' : ''}</span>
+              {/* "saw" needs no "together" — naming the group already says it. */}
+              <span className="feed-verb">
+                {verb}
+                {it.kind === 'upcoming' && it.together ? ' together' : ''}
+              </span>
             </span>
             <span className="feed-title">{it.title}</span>
             {it.kind === 'upcoming' ? (
@@ -370,8 +373,10 @@ export default function FriendsView({ onAddFriend, focus }) {
         return (
           <div key={it.id}>
             {head && <div className="feed-day">{head}</div>}
-            <div className={`msg ${it.you ? 'you' : 'them'}`}>
-              {!it.you && (
+            {/* A screening several of you attended belongs to no one side, so it
+                spans the full width instead of picking left or right. */}
+            <div className={`msg ${it.together ? 'both' : it.you ? 'you' : 'them'}`}>
+              {!it.together && !it.you && (
                 <span className="msg-ava">{(it.friend_name || '?').slice(0, 1).toUpperCase()}</span>
               )}
               {renderCard(it)}

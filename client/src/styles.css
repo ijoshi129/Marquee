@@ -3185,6 +3185,11 @@ input[type='date'].input-naked { color-scheme: dark; }
   border-bottom-right-radius: 6px;
   background: linear-gradient(180deg, #1c1509, #140f06); border-color: #4a3a15;
 }
+.msg.both { justify-content: center; }
+.msg.both .feed-card {
+  max-width: 100%; width: 100%;
+  background: linear-gradient(180deg, #16130c, #0f0d09); border-color: #3a2f14;
+}
 .msg.you .feed-card:hover { border-color: #6a5420; }
 .msg .feed-ava { display: none; } /* the outside avatar stands in for it */
 /* Reserve room for the absolute top-right timestamp so it can't overlap the
@@ -3299,8 +3304,10 @@ input[type='date'].input-naked { color-scheme: dark; }
   width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center;
   font-size: 0.62rem; font-weight: 700; background: var(--accent-soft); color: var(--accent); flex-shrink: 0;
 }
-.feed-who { color: var(--fg); font-weight: 600; }
-.feed-verb { color: var(--fg-mute); }
+/* A group card's name list can outrun the line; the verb after it must not be
+   what gets pushed off. */
+.feed-who { color: var(--fg); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-verb { color: var(--fg-mute); flex-shrink: 0; }
 .feed-title {
   font-family: var(--font-display); font-size: 1.05rem; line-height: 1.15; letter-spacing: -0.01em;
   margin: 1px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
