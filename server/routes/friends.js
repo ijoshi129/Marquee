@@ -80,6 +80,34 @@ router.put('/settings', async (req, res) => {
   }
 });
 
+// GET /api/friends/identity — this instance's own identity, as friends see it.
+router.get('/identity', async (req, res) => {
+  try {
+    res.json(await fed.getIdentity());
+  } catch (err) {
+    logger.error({ err }, 'get federation identity');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/friends/identity { display_name } — rename this instance. INSTANCE_NAME
+// only seeds the row on a fresh DB, so this is the only way to change it later.
+router.put('/identity', async (req, res) => {
+  try {
+    const name = ((req.body || {}).display_name || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: 'display_name cannot be empty' });
+    await pool.query(
+      `UPDATE federation_identity SET display_name = $1 WHERE id = TRUE`,
+      [name]
+    );
+    fed.notifyFriends();
+    res.json(await fed.getIdentity());
+  } catch (err) {
+    logger.error({ err }, 'update federation identity');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // POST /api/friends { display_name, friend_url? } — add a friend: mint their
 // capability URL to our instance and store their URL if they've already shared
 // it. my_url is shown exactly once — only its hash is kept.

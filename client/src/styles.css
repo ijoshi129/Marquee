@@ -3397,6 +3397,15 @@ input[type='date'].input-naked { color-scheme: dark; }
 .sharing-row:last-child { border-bottom: none; }
 .sharing-label { font-weight: 600; font-size: 0.92rem; }
 .sharing-hint { color: var(--fg-dim); font-size: 0.78rem; margin-top: 3px; }
+.sharing-sec { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-mute); margin: 0 2px 10px; }
+.sharing-identity { display: flex; flex-direction: column; gap: 8px; }
+.sharing-identity-row { display: flex; align-items: center; gap: 10px; }
+.sharing-avatar { width: 42px; height: 42px; flex: none; border-radius: 50%; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); font-family: var(--font-display); font-size: 1.05rem; display: flex; align-items: center; justify-content: center; }
+.sharing-name { flex: 1; min-width: 0; font: inherit; background: #0b0b0e; border: 1px solid var(--bg-tint-strong); border-radius: var(--radius-md); color: var(--fg); padding: 12px; }
+.sharing-name:focus { outline: none; border-color: var(--accent); }
+.sharing-identity .sharing-hint { margin: 0 2px; }
+.sharing-identity .sharing-hint.is-saved { color: var(--success); }
+.sharing-divider { height: 1px; background: var(--rule); margin: 20px 0 18px; }
 
 /* Manage-friends list */
 .mf-list { list-style: none; margin: 0; padding: 0; }

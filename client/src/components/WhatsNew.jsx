@@ -2,12 +2,23 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.2';
+const WHATS_NEW_VERSION = '2.3';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.3',
+    sections: [
+      {
+        title: 'Change the name friends see',
+        items: [
+          'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took — now you can just type a new one and friends pick it up on their next sync.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.2',
     sections: [

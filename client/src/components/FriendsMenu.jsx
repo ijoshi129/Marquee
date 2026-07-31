@@ -64,8 +64,8 @@ export default function FriendsMenu({ onClose, onAdd, onManage, onSharing }) {
         <button type="button" className="fmenu-row" onClick={onSharing}>
           <span className="fmenu-ico"><EyeIcon /></span>
           <span className="fmenu-text">
-            <span className="fmenu-t">What friends see</span>
-            <span className="fmenu-h">Choose what you share</span>
+            <span className="fmenu-t">Sharing</span>
+            <span className="fmenu-h">Your name and what friends see</span>
           </span>
           <span className="fmenu-chev">›</span>
         </button>
