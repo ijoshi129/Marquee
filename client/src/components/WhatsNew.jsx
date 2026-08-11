@@ -14,8 +14,8 @@ const RELEASES = [
       {
         title: 'Screen Unseen reveals work again',
         items: [
-          'Reddit stopped serving its pages to logged-out visitors, which quietly broke the lookup that names your Screen and Scream Unseens — they were staying blank with no explanation. Marquee now reads the megathread a different way and fills them in as before.',
-          'Still nothing to set up, and still no account needed. Reveals land once the subreddit posts them, which is usually a day or two after the screening.',
+          'Reddit stopped serving its pages to logged-out visitors, which quietly broke the lookup that names your Screen and Scream Unseens. They were staying blank with no explanation. Marquee now reads the megathread a different way and fills them in as before.',
+          'A separate slip meant reveals posted from August onward weren’t being read at all, so a couple of recent Unseens stayed blank longer than they should have. Both are fixed.',
         ],
       },
     ],
