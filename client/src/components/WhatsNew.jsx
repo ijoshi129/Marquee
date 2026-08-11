@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.3';
+const WHATS_NEW_VERSION = '2.4';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.4',
+    sections: [
+      {
+        title: 'Screen Unseen reveals work again',
+        items: [
+          'Reddit stopped serving its pages to logged-out visitors, which quietly broke the lookup that names your Screen and Scream Unseens — they were staying blank with no explanation. Marquee now reads the megathread a different way and fills them in as before.',
+          'Still nothing to set up, and still no account needed. Reveals land once the subreddit posts them, which is usually a day or two after the screening.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.3',
     sections: [

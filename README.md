@@ -264,6 +264,20 @@ curl -fsS -X POST http://127.0.0.1:3000/api/admin/database/import \
   -H 'Content-Type: application/gzip' --data-binary @marquee-db.sql.gz
 ```
 
+## Screen Unseen reveals
+
+AMC sells Screen Unseen and Scream Unseen screenings without saying what the film
+is, and the reservation email is no more forthcoming — so those watches arrive with
+no poster and no TMDB match. The community posts the answers in a megathread on
+[r/AMCsAList](https://www.reddit.com/r/AMCsAList/), which Marquee reads to fill them
+in once the reveal is up. Nothing to configure: it reads the subreddit's public Atom
+feed, no Reddit account or API key involved.
+
+The reveal usually isn't posted until after the screening, so a fresh Unseen stays
+unidentified for a while — that's expected. The film sheet has a **Re-check** button
+to force a fresh lookup when the megathread has been updated but the app hasn't
+noticed yet, and **Assign movie** to set it yourself. You were there, after all.
+
 ## Trakt sync (optional)
 
 To mirror watches to Trakt, create an app at

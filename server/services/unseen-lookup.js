@@ -2,9 +2,11 @@
 // r/AMCsAList megathreads. The current sticky megathread lists recent reveals;
 // older megathreads cover ranges (1-22, 21-32, ...) and are linked from the body.
 //
-// Reddit now 403s its unauthenticated JSON API, so we read the rendered HTML
-// from old.reddit.com (still public) and parse it with cheerio. One fetch per
-// ~12h per megathread — negligible traffic.
+// Reddit gates logged-out HTML (old.reddit.com redirects to /login) and 403s
+// its JSON API, but still serves Atom feeds to readers — and a feed entry's
+// <content> is the same rendered post body the old scraper read off the page,
+// so the parsing below is unchanged. One fetch per ~12h per megathread —
+// negligible traffic, no account or API key involved.
 
 const cheerio = require('cheerio');
 const { pool } = require('../db');
@@ -12,12 +14,18 @@ const logger = require('../logger');
 const tmdb = require('./tmdb');
 const trakt = require('./trakt');
 
-const REDDIT_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-const SEARCH_URL =
-  'https://old.reddit.com/r/AMCsAList/search?q=screen%20unseen%20megathread&restrict_sr=1&sort=new&t=year';
+const FEED_UA = 'marquee/1.0 (self-hosted AMC tracker; +https://github.com/ijoshi129/marquee)';
+const SUBREDDIT = 'AMCsAList';
+const SEARCH_FEED_URL =
+  `https://www.reddit.com/r/${SUBREDDIT}/search.rss` +
+  '?q=screen+unseen+megathread&restrict_sr=1&sort=new&t=year';
+const postFeedUrl = (postId) =>
+  `https://www.reddit.com/r/${SUBREDDIT}/comments/${postId}.rss?limit=1`;
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const FETCH_GAP_MS = 3000;
+const THROTTLED_BACKOFF_MS = 20000;
+const FETCH_ATTEMPTS = 3;
 const LOOKUP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/New_York';
 // postId → { entries, predecessorUrls, fetchedAt }
 const threadCache = new Map();
@@ -42,15 +50,49 @@ const REVEAL_RE = /Revealed\s+As\s*:\s*>!\s*(.+?)\s*!</i;
 const ENTRY_TEXT_RE =
   /^(\d+)\.(.+?)\s*-\s*([A-Z][a-z]+\s+\d{1,2}(?:\s*&\s*\d{1,2})?\s+\d{4})\s*$/;
 
-async function fetchHtml(url) {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': REDDIT_UA, Accept: 'text/html' },
-    redirect: 'follow',
-  });
-  if (!res.ok) {
-    throw new Error(`Reddit ${res.status} ${res.statusText} for ${url}`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Reddit 429s a burst of feed requests, which the walk back through predecessor
+// megathreads would otherwise trigger. Space them out, and back off further
+// when throttled anyway before giving up on that thread.
+let lastFetchAt = 0;
+async function fetchFeed(url) {
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+    const gap = FETCH_GAP_MS - (Date.now() - lastFetchAt);
+    if (gap > 0) await sleep(gap);
+    lastFetchAt = Date.now();
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': FEED_UA, Accept: 'application/atom+xml' },
+      redirect: 'follow',
+    });
+    if (res.ok) return res.text();
+    if (res.status !== 429 || attempt === FETCH_ATTEMPTS - 1) {
+      throw new Error(`Reddit ${res.status} ${res.statusText} for ${url}`);
+    }
+    await sleep(THROTTLED_BACKOFF_MS * (attempt + 1));
   }
-  return { $: cheerio.load(await res.text()), finalUrl: res.url };
+}
+
+// Atom entries carry the post id in their link and the rendered body in
+// <content type="html">. Comment entries link one path segment deeper than the
+// post itself, which is how the post is told apart from replies to it.
+function parseFeedEntries(xml) {
+  const $ = cheerio.load(xml, { xmlMode: true });
+  const out = [];
+  $('entry').each((i, el) => {
+    const entry = $(el);
+    const link = entry.find('link').first().attr('href') || '';
+    const m = /\/comments\/([a-z0-9]+)\/([^/?#]*)\/?([^?#]*)/i.exec(link);
+    if (!m) return;
+    out.push({
+      postId: m[1],
+      isPost: !m[3],
+      title: entry.find('title').first().text().trim(),
+      bodyHtml: entry.find('content').first().text(),
+    });
+  });
+  return out;
 }
 
 function parseDateString(s) {
@@ -190,32 +232,25 @@ function extractPredecessorUrls($, md) {
   return out;
 }
 
-// Resolve a Reddit share link (or any reddit URL) to a post ID by following redirects.
+// Resolve a Reddit link to a post ID. Predecessor megathreads are linked as
+// share URLs (/s/<token>) that carry no id, so those need the redirect chased.
 async function resolveToPostId(url) {
-  // Already a /comments/<id>/ form?
   let m = /\/comments\/([a-z0-9]+)/i.exec(url);
   if (m) return m[1];
-  // Otherwise follow the redirect (share links use /s/<token>).
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': REDDIT_UA },
-      redirect: 'follow',
-    });
+    const res = await fetch(url, { headers: { 'User-Agent': FEED_UA }, redirect: 'follow' });
     m = /\/comments\/([a-z0-9]+)/i.exec(res.url);
     return m ? m[1] : null;
   } catch (err) {
-    logger.error('resolveToPostId failed:', url, err.message);
+    logger.error(`unseen-lookup: could not resolve ${url}: ${err.message}`);
     return null;
   }
 }
 
-async function loadThread(postId) {
-  const cached = threadCache.get(postId);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
-  const { $ } = await fetchHtml(`https://old.reddit.com/comments/${postId}/`);
-  const md = $('#siteTable .usertext-body .md').first();
+function cacheThread(postId, title, bodyHtml) {
+  const $ = cheerio.load(bodyHtml);
+  const md = $('.md').first();
   if (!md.length) throw new Error(`no post body for ${postId}`);
-  const title = $('#siteTable a.title').first().text().trim();
   const result = {
     entries: parseMegathread($, md),
     predecessorUrls: extractPredecessorUrls($, md),
@@ -229,6 +264,17 @@ async function loadThread(postId) {
   return result;
 }
 
+async function loadThread(postId) {
+  const cached = threadCache.get(postId);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
+
+  // limit=1 because only the post body matters — the comment tree is dead weight.
+  const entries = parseFeedEntries(await fetchFeed(postFeedUrl(postId)));
+  const post = entries.find((e) => e.isPost && e.bodyHtml);
+  if (!post) throw new Error(`no post body for ${postId}`);
+  return cacheThread(postId, post.title, post.bodyHtml);
+}
+
 async function findCurrentMegathreadId() {
   if (
     currentMegathreadCache &&
@@ -236,19 +282,33 @@ async function findCurrentMegathreadId() {
   ) {
     return currentMegathreadCache.id;
   }
-  const { $ } = await fetchHtml(SEARCH_URL);
-  let id = null;
-  $('a.search-title').each((i, el) => {
-    if (id) return;
-    const t = $(el).text();
-    const href = $(el).attr('href') || '';
-    if (/megathread/i.test(t) && /screen\s*unseen/i.test(t)) {
-      const m = /\/comments\/([a-z0-9]+)/i.exec(href);
-      if (m) id = m[1];
+  let entries;
+  try {
+    entries = parseFeedEntries(await fetchFeed(SEARCH_FEED_URL));
+  } catch (err) {
+    logger.error(`unseen-lookup: megathread search failed: ${err.message}`);
+    return null;
+  }
+
+  // Screen and Scream megathreads carry the same shared history list, so the
+  // newest of either is the freshest source.
+  const hit = entries.find(
+    (e) => /megathread/i.test(e.title) && /(screen|scream)\s*unseen/i.test(e.title)
+  );
+  if (!hit) return null;
+
+  // The search feed already includes the body, so there's no reason to fetch
+  // the thread again on the way back out.
+  if (hit.bodyHtml && !threadCache.has(hit.postId)) {
+    try {
+      cacheThread(hit.postId, hit.title, hit.bodyHtml);
+    } catch (err) {
+      logger.error(`unseen-lookup: search feed body unusable: ${err.message}`);
     }
-  });
-  if (id) currentMegathreadCache = { id, fetchedAt: Date.now() };
-  return id;
+  }
+
+  currentMegathreadCache = { id: hit.postId, fetchedAt: Date.now() };
+  return hit.postId;
 }
 
 // Walk current megathread, then its predecessors, until we find an entry matching date+type
@@ -282,6 +342,16 @@ async function lookupByDate(date, type) {
       (e) => e.date === date && (!targetType || e.type === targetType)
     );
     if (hit) return hit;
+
+    // Predecessors only cover earlier ranges, so a date at or after this
+    // thread's oldest entry is already inside the range we just searched —
+    // it simply hasn't been revealed yet. Walking back would be five more
+    // requests for a guaranteed miss, every retry, for every fresh Unseen.
+    const oldest = thread.entries.reduce(
+      (min, e) => (min === null || e.date < min ? e.date : min),
+      null
+    );
+    if (oldest && date >= oldest) continue;
 
     // Queue predecessors for backwards walk.
     for (const url of thread.predecessorUrls) {
@@ -391,6 +461,7 @@ module.exports = {
   _internal: {
     loadThread,
     findCurrentMegathreadId,
+    parseFeedEntries,
     threadCache,
     formatDateInTimeZone,
     lookupDatesForWatch,
