@@ -31,10 +31,15 @@ const LOOKUP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/
 const threadCache = new Map();
 let currentMegathreadCache = null; // { id, fetchedAt }
 
+// Keyed on the first three letters: the megathread mixes full month names with
+// abbreviations ("July 27 2026" and "Aug 10 2026" sit in the same list), and
+// September shows up as both "Sep" and "Sept".
 const MONTHS = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
+
+const monthIndex = (name) => MONTHS[String(name).slice(0, 3).toLowerCase()];
 
 // Each entry is an AMC link in the post body. Two formats observed:
 //   OLD: "66.Primate -R  - Paramount - January 05 2026"  → title inline
@@ -96,10 +101,10 @@ function parseFeedEntries(xml) {
 }
 
 function parseDateString(s) {
-  // "January 05 2026" or "May 3 & 4 2026"
+  // "January 05 2026", "Aug 10 2026", or "May 3 & 4 2026"
   const m = /^([A-Z][a-z]+)\s+(\d{1,2})(?:\s*&\s*(\d{1,2}))?\s+(\d{4})$/i.exec(s.trim());
   if (!m) return [];
-  const month = MONTHS[m[1].toLowerCase()];
+  const month = monthIndex(m[1]);
   if (month === undefined) return [];
   const year = parseInt(m[4], 10);
   const d1 = parseInt(m[2], 10);

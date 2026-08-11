@@ -89,3 +89,12 @@ test('parseDateString handles single and two-day screenings', () => {
   assert.deepEqual(parseDateString('May 3 & 4 2026'), ['2026-05-03', '2026-05-04']);
   assert.deepEqual(parseDateString('not a date'), []);
 });
+
+// The megathread mixes both forms in one list — full names through July 2026,
+// abbreviations from August on.
+test('parseDateString accepts abbreviated month names', () => {
+  assert.deepEqual(parseDateString('Aug 10 2026'), ['2026-08-10']);
+  assert.deepEqual(parseDateString('Sept 7 2026'), ['2026-09-07']);
+  assert.deepEqual(parseDateString('Dec 25 2026'), ['2026-12-25']);
+  assert.deepEqual(parseDateString('Foo 10 2026'), []);
+});
