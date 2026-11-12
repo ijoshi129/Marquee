@@ -98,3 +98,110 @@ test('parseDateString accepts abbreviated month names', () => {
   assert.deepEqual(parseDateString('Dec 25 2026'), ['2026-12-25']);
   assert.deepEqual(parseDateString('Foo 10 2026'), []);
 });
+
+// Megathread discovery. Reddit lets logged-out readers through about once a
+// minute and has closed feeds outright before, so discovery has three sources.
+const { pool } = require('../db');
+const unseenLookup = require('../services/unseen-lookup');
+const { afterEach } = require('./harness');
+
+const OTHER_POST = `<entry>
+    <title>Weekly discussion</title>
+    <link href="https://www.reddit.com/r/AMCsAList/comments/1aaaaaa/weekly_discussion/" />
+    <content type="html">&lt;div class="md"&gt;&lt;p&gt;hi&lt;/p&gt;&lt;/div&gt;</content>
+  </entry>`;
+
+// A listing or search feed by default; `{ alone: true }` gives the thread's own
+// feed, which holds just the post.
+const megathreadFeed = (id, { alone = false } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  ${alone ? '' : OTHER_POST}
+  <entry>
+    <title>AMC Screen Unseen Megathread - November 9 2026</title>
+    <link href="https://www.reddit.com/r/AMCsAList/comments/${id}/amc_screen_unseen_megathread_november_9_2026/" />
+    <content type="html">${MEGATHREAD_HTML.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</content>
+  </entry>
+</feed>`;
+
+unseenLookup._internal.setFetchGapMs(0);
+
+const realFetch = global.fetch;
+const realQuery = pool.query;
+afterEach(() => {
+  global.fetch = realFetch;
+  pool.query = realQuery;
+  unseenLookup.clearCaches();
+});
+
+function stubReddit(respond) {
+  const urls = [];
+  global.fetch = async (url) => {
+    urls.push(url);
+    const r = respond(url);
+    return typeof r === 'string'
+      ? { ok: true, status: 200, text: async () => r }
+      : { ok: false, status: r, statusText: 'Forbidden' };
+  };
+  return urls;
+}
+
+function stubState(initial) {
+  const state = { value: initial, writes: 0 };
+  pool.query = async (sql, params) => {
+    if (/^\s*INSERT INTO app_state/.test(sql)) {
+      state.value = params[1];
+      state.writes += 1;
+      return { rows: [] };
+    }
+    if (/FROM app_state/.test(sql)) {
+      return { rows: state.value ? [{ value: state.value }] : [] };
+    }
+    throw new Error(`unexpected query: ${sql}`);
+  };
+  return state;
+}
+
+test('megathread discovery reads the pinned post off the subreddit listing', async () => {
+  const urls = stubReddit(() => megathreadFeed('1xpdvmb'));
+  const state = stubState(null);
+
+  const id = await unseenLookup._internal.findCurrentMegathreadId();
+
+  assert.equal(id, '1xpdvmb');
+  assert.equal(urls.length, 1);
+  assert.match(urls[0], /\/hot\.rss/);
+  assert.equal(state.value, '1xpdvmb');
+  // The body came with the listing, so the thread needs no request of its own.
+  const hit = await unseenLookup.lookupByDate('2026-06-01', 'screen');
+  assert.equal(hit.title, 'The Long Walk');
+  assert.equal(urls.length, 1);
+  assert.equal(state.writes, 1);
+});
+
+test('megathread discovery falls back to search when the listing has no megathread', async () => {
+  const urls = stubReddit((url) =>
+    /search\.rss/.test(url) ? megathreadFeed('1search') : megathreadFeed('1other').replace(/Megathread/g, 'chat')
+  );
+  stubState(null);
+
+  assert.equal(await unseenLookup._internal.findCurrentMegathreadId(), '1search');
+  assert.equal(urls.length, 2);
+});
+
+test('megathread discovery reuses the last known thread when Reddit refuses both feeds', async () => {
+  const urls = stubReddit((url) => (/comments\/1xold/.test(url) ? megathreadFeed('1xold', { alone: true }) : 403));
+  const state = stubState('1xold');
+
+  assert.equal(await unseenLookup._internal.findCurrentMegathreadId(), '1xold');
+  assert.equal(state.writes, 0);
+
+  const hit = await unseenLookup.lookupByDate('2026-06-01', 'screen');
+  assert.equal(hit.title, 'The Long Walk');
+  assert.match(urls[urls.length - 1], /comments\/1xold\.rss/);
+});
+
+test('megathread discovery reports nothing when Reddit is closed and no thread is remembered', async () => {
+  stubReddit(() => 403);
+  stubState(null);
+  assert.equal(await unseenLookup._internal.findCurrentMegathreadId(), null);
+});
