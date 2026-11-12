@@ -40,6 +40,15 @@ test('cleanTitle strips anniversary and re-release decorations', () => {
   assert.equal(cleanTitle('Happy Anniversary'), 'Happy Anniversary');
 });
 
+test('cleanTitle strips the label AMC adds to early event screenings', () => {
+  assert.equal(cleanTitle('Dune: Part Three Insider Screenings'), 'Dune: Part Three');
+  assert.equal(cleanTitle('Dune: Part Three - Insider Screening'), 'Dune: Part Three');
+  assert.equal(cleanTitle('Dune: Part Three Insider Screenings IMAX 70mm'), 'Dune: Part Three');
+  // A film that is itself called this keeps its name.
+  assert.equal(cleanTitle('Insider Screenings'), 'Insider Screenings');
+  assert.equal(cleanTitle('The Insider'), 'The Insider');
+});
+
 test('rankResults biases toward the watch year, excludes the far future, skips re-releases', () => {
   const deepWater = [
     { tmdb_id: 1, title: 'Deep Water', release_year: 2022, popularity: 50 },

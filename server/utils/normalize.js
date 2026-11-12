@@ -25,6 +25,11 @@ const LANGUAGE_SUFFIX = /\s+(?:[A-Z][a-z]+\s+Spoken\s+with\s+English\s+Subtitles
 //   "Spirited Away: 20th Anniversary"         → "Spirited Away"
 const RERELEASE_SUFFIX = /[\s:–—-]+(?:\d{1,3}(?:st|nd|rd|th)\s+anniversary|anniversary\s+edition|re-?release|re-?issue)(?:\s+(?:edition|re-?release|presentation|event|in\s+cinemas))?\s*$/i;
 
+// AMC sells early showings under the film's title plus an event label, which
+// TMDB has no entry for. Only labels actually seen in a reservation are listed.
+//   "Dune: Part Three Insider Screenings" → "Dune: Part Three"
+const EVENT_SUFFIX = /[\s:\u2013\u2014-]+insider\s+screenings?\s*$/i;
+
 // True when a title carries a re-release marker. The matcher strips it for
 // the TMDB lookup, but we keep showing it — "Top Gun 40th Anniversary"
 // shouldn't be flattened to "Top Gun" on screen.
@@ -49,6 +54,7 @@ function cleanTitle(s) {
       .replace(FORMAT_SUFFIX, '')
       .replace(LANGUAGE_SUFFIX, '')
       .replace(RERELEASE_SUFFIX, '')
+      .replace(EVENT_SUFFIX, '')
       .trim();
     if (t === before) break;
   }
