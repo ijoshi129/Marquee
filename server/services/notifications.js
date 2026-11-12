@@ -23,13 +23,18 @@ async function notify({ kind, title, body = null, payload = {}, dedupeKey = null
 }
 
 // Best-effort Web Push to every stored subscription. No-ops until VAPID keys are
-// set and the `web-push` package is installed (added with the push feature).
+// set.
 async function sendPush(notif) {
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
   let webpush;
   try {
+    // web-push 4 is ESM-only, and require() of an ES module needs Node 20.19,
+    // 22.12 or later. On anything older this throws: say so rather than drop
+    // every push without a word.
     webpush = require('web-push');
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'push: could not load web-push');
+    await jobStatus.failed('push', `Could not load web-push (${err.code || err.message})`);
     return;
   }
   webpush.setVapidDetails(
