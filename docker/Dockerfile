@@ -1,6 +1,6 @@
 # Base images pinned to digests so rebuilds are reproducible. Bump these
 # manually when you want to pick up upstream security patches.
-ARG NODE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+ARG NODE_IMAGE=node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 
 FROM ${NODE_IMAGE} AS client-build
 WORKDIR /app/client

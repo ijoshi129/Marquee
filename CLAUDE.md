@@ -5,7 +5,7 @@ A self-hosted, single-user AMC movie tracker PWA. Watches Gmail for AMC reservat
 ## Stack
 
 - **Client:** React 18 + Vite. Plain JS (no TypeScript). Plain CSS (no Tailwind). Font stack: Fraunces (display) + Geist Mono (UI caps).
-- **Server:** Node 20 + Express + `pg` connection pool.
+- **Server:** Node 24 + Express + `pg` connection pool.
 - **Database:** Postgres 16. Schema auto-applies on boot via `CREATE TABLE IF NOT EXISTS` in `server/db.js` plus numbered SQL migrations in `server/migrations/`. Tracked in `_migrations`.
 - **Email ingest:** `imapflow` + `cheerio`. Polls Gmail every 5 minutes for `from:@amctheatres.com` in `[Gmail]/All Mail`.
 - **Container:** Multi-stage Dockerfile (`docker/Dockerfile`) builds client + server into one image, published multi-arch to GHCR. Bundled with Postgres via `compose.yaml`.
