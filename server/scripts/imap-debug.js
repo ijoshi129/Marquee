@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Lists all available Gmail labels/folders and their message counts.
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ quiet: true, path: require('path').join(__dirname, '..', '..', '.env') });
 const { ImapFlow } = require('imapflow');
 
 (async () => {

@@ -2,7 +2,7 @@
 // One-shot backfill: resolve every existing AMC Screen/Scream Unseen watch
 // against the r/AMCsAList megathreads.
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ quiet: true, path: require('path').join(__dirname, '..', '..', '.env') });
 
 const { pool } = require('../db');
 const unseenLookup = require('../services/unseen-lookup');

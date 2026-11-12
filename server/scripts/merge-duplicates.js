@@ -2,7 +2,7 @@
 // One-shot: find pending watches whose Thank-You created a walk-up duplicate
 // (because format/language suffixes broke the title match), and merge them.
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ quiet: true, path: require('path').join(__dirname, '..', '..', '.env') });
 
 const { pool } = require('../db');
 const { normalizeText, cleanTitle } = require('../utils/normalize');
