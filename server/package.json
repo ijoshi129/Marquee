@@ -17,7 +17,7 @@
     "helmet": "^8.1.0",
     "imapflow": "^1.0.164",
     "mailparser": "^3.7.1",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "pg": "^8.11.5",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
