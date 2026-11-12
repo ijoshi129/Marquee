@@ -85,6 +85,13 @@ app.use(
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 app.use(express.json({ limit: '1mb' }));
+// Express 5 leaves req.body undefined when a request carries no body, where 4
+// gave {}. The handlers were written against {} (`field in req.body`), so keep
+// it: an empty PATCH stays a 400 rather than becoming a 500.
+app.use((req, res, next) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
 
 async function healthHandler(req, res) {
   try {
@@ -170,9 +177,15 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     logger.info('Schema ready');
     await federation.ensureIdentity();
     await federation.ensureSettings();
-    const server = app.listen(PORT, () =>
-      logger.info({ port: PORT }, `Marquee server on http://localhost:${PORT}`)
-    );
+    // Express 5 passes a listen failure (port in use) to this callback instead
+    // of throwing, so it has to be checked here or startup looks successful.
+    const server = app.listen(PORT, (err) => {
+      if (err) {
+        logger.error({ err }, 'Startup failed');
+        process.exit(1);
+      }
+      logger.info({ port: PORT }, `Marquee server on http://localhost:${PORT}`);
+    });
 
     emailPoller.start();
     pendingExpirer.start();
