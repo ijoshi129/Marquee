@@ -80,7 +80,7 @@ async function askOwnerToIdentify(row) {
   await notifications.notify({
     kind: 'identify',
     title: day ? `What was your ${kind} Unseen on ${day}?` : `What was your ${kind} Unseen?`,
-    body: "The reveal hasn't turned up yet. Tap to pick the film — Marquee will keep checking.",
+    body: "The reveal hasn't turned up yet. Tap to pick the film. Marquee will keep checking.",
     payload: { watch_id: row.id },
     dedupeKey: `identify:${row.id}`,
   });

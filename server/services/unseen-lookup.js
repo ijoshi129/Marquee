@@ -355,7 +355,7 @@ async function findCurrentMegathreadId() {
   }
 
   // Both feeds carry the post body, so cache it here rather than spend a
-  // second request on the thread — Reddit allows logged-out readers about one
+  // second request on the thread: Reddit allows logged-out readers about one
   // a minute.
   if (hit.bodyHtml) {
     try {

@@ -2,12 +2,30 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.4';
+const WHATS_NEW_VERSION = '2.5';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.5',
+    sections: [
+      {
+        title: 'Screen Unseens stop slipping through',
+        items: [
+          'Reddit closed off the search Marquee used to find each week’s reveal thread, so new Unseens had stopped being named. It now finds the thread a sturdier way, with two fallbacks behind it.',
+          'Some reveals are posted days after the screening, and Marquee used to give up looking after two. It now keeps checking for about three weeks.',
+        ],
+      },
+      {
+        title: 'A nudge when a title can’t be found',
+        items: [
+          'If an Unseen is still unnamed after a couple of days, you’ll get a notification asking what you saw. Tap it to open the film and pick the title yourself. Marquee keeps checking in the background either way.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.4',
     sections: [
