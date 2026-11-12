@@ -1,6 +1,7 @@
 const { pool } = require('../db');
 const logger = require('../logger');
 const { sendNtfy, shouldSend } = require('./ntfy');
+const jobStatus = require('./job-status');
 
 // Create a notification (deduped by dedupe_key) and fan it out to whatever
 // push channels are configured (Web Push, ntfy). Returns the new row, or null
@@ -43,6 +44,8 @@ async function sendPush(notif) {
     kind: notif.kind,
     url: '/',
   });
+  let delivered = 0;
+  let lastError = null;
   await Promise.all(
     rows.map(async (s) => {
       try {
@@ -50,16 +53,22 @@ async function sendPush(notif) {
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body
         );
+        delivered++;
       } catch (err) {
         // 404/410 mean the subscription is dead — prune it.
         if (err.statusCode === 404 || err.statusCode === 410) {
           await pool.query('DELETE FROM push_subscriptions WHERE id = $1', [s.id]);
         } else {
           logger.error({ status: err.statusCode }, 'push: delivery error');
+          lastError = err;
         }
       }
     })
   );
+  // A dead subscription being pruned is housekeeping, not a failure; only a
+  // send where nothing got through and something errored counts as one.
+  if (delivered) await jobStatus.succeeded('push', { devices: rows.length, delivered });
+  else if (lastError) await jobStatus.failed('push', `Push service refused (HTTP ${lastError.statusCode || '?'})`);
 }
 
 module.exports = { notify, sendPush };

@@ -17,6 +17,7 @@ const { pool } = require('../db');
 const logger = require('../logger');
 const tmdb = require('./tmdb');
 const trakt = require('./trakt');
+const jobStatus = require('./job-status');
 
 const FEED_UA = 'marquee/1.0 (self-hosted AMC tracker; +https://github.com/ijoshi129/marquee)';
 const SUBREDDIT = 'AMCsAList';
@@ -300,7 +301,7 @@ async function discoverMegathread() {
   for (const [name, url] of [['listing', LISTING_FEED_URL], ['search', SEARCH_FEED_URL]]) {
     try {
       const hit = parseFeedEntries(await fetchFeed(url)).find(isMegathread);
-      if (hit) return hit;
+      if (hit) return { ...hit, source: name };
     } catch (err) {
       logger.error(`unseen-lookup: megathread ${name} failed: ${err.message}`);
     }
@@ -345,6 +346,12 @@ async function findCurrentMegathreadId() {
   const hit = await discoverMegathread();
   if (!hit) {
     const remembered = await recallMegathread();
+    await jobStatus.failed(
+      'unseen',
+      remembered
+        ? 'Reddit refused the megathread feeds, so an older thread is being used'
+        : 'Reddit refused the megathread feeds'
+    );
     if (!remembered) return null;
     logger.warn(`unseen-lookup: megathread not found, reusing last known ${remembered}`);
     currentMegathreadCache = {
@@ -367,6 +374,7 @@ async function findCurrentMegathreadId() {
 
   currentMegathreadCache = { id: hit.postId, fetchedAt: Date.now() };
   await rememberMegathread(hit.postId);
+  await jobStatus.succeeded('unseen', { source: hit.source, thread: hit.title });
   return hit.postId;
 }
 

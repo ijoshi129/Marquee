@@ -38,6 +38,7 @@ function unseen(over = {}) {
 async function cycle(rows) {
   const seen = { select: null, bumped: [], looked: [], notified: [] };
   pool.query = async (sql, params) => {
+    if (/app_state/.test(sql)) return { rows: [] };
     if (/^\s*SELECT/.test(sql)) {
       seen.select = { sql, params };
       return { rows };

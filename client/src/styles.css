@@ -3489,6 +3489,58 @@ input[type='date'].input-naked { color-scheme: dark; }
 .qr-wrap { display: flex; justify-content: center; padding: 4px 0; }
 .qr-canvas { border-radius: var(--radius-md); background: #fff; display: block; }
 
+/* Status sheet: one row per background job, plus its entry at the foot of the bell */
+.status-card { max-height: 88vh; overflow-y: auto; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--fg-faint); }
+.ok > .status-dot, .ok > .status-main .status-dot { background: var(--success); }
+.warn > .status-dot, .warn > .status-main .status-dot { background: var(--warn); }
+.fail > .status-dot, .fail > .status-main .status-dot { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.status-banner {
+  display: flex; align-items: center; gap: 12px; margin: 0 0 8px; padding: 14px 12px;
+  border-radius: var(--radius-md); background: var(--bg-tint);
+}
+.status-banner.fail { background: var(--danger-soft); }
+.status-banner-text { font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; }
+.status-item { border-radius: var(--radius-md); }
+.status-item + .status-item { border-top: 1px solid var(--bg-tint); }
+.status-main {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px;
+  background: none; border: none; color: var(--fg); cursor: pointer; text-align: left; border-radius: var(--radius-md);
+}
+.status-main:hover { background: var(--bg-tint); }
+.status-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.status-name { font-weight: 600; font-size: 0.9rem; }
+.status-sub { font-size: 0.78rem; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere; }
+.status-item.warn .status-sub { color: var(--warn); }
+.status-item.fail .status-sub { color: var(--danger); }
+.status-item.off .status-main { padding-top: 9px; padding-bottom: 9px; }
+.status-item.off .status-name { color: var(--fg-dim); font-weight: 500; font-size: 0.84rem; }
+.status-item.off .status-sub { color: var(--fg-mute); }
+.status-aside {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.04em; color: var(--fg-mute);
+  white-space: nowrap; flex-shrink: 0;
+}
+.status-detail { margin: 0 12px 12px 33px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-tint); }
+.status-detail > div { display: flex; gap: 12px; align-items: baseline; }
+.status-detail > div + div { margin-top: 6px; }
+.status-detail dt {
+  width: 92px; flex-shrink: 0; font-family: var(--font-mono); font-size: 0.6rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-mute);
+}
+.status-detail dd { margin: 0; font-size: 0.78rem; color: var(--fg-dim); min-width: 0; overflow-wrap: anywhere; }
+.status-detail-when { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 0.62rem; color: var(--fg-mute); }
+.status-foot {
+  width: 100%; display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 13px 12px;
+  background: none; border: none; border-top: 1px solid var(--bg-tint-strong); color: var(--fg); cursor: pointer; text-align: left;
+}
+.status-foot:hover { background: var(--bg-tint); }
+.status-foot-label {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-mute);
+}
+.status-foot-text { font-size: 0.82rem; color: var(--fg-dim); }
+.status-foot.warn .status-foot-text { color: var(--warn); }
+.status-foot.fail .status-foot-text { color: var(--danger); }
+
 /* Bell gear */
 .notif-gear { display: grid; place-items: center; width: 28px; height: 28px; cursor: pointer; background: none; border: none; color: var(--fg-mute); border-radius: 50%; }
 .notif-gear:hover { color: var(--fg); }

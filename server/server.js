@@ -25,6 +25,7 @@ const notificationsRoute = require('./routes/notifications');
 const recommendationsRoute = require('./routes/recommendations');
 const pushRoute = require('./routes/push');
 const ntfyRoute = require('./routes/ntfy');
+const statusRoute = require('./routes/status');
 const authRoute = require('./routes/auth');
 const { requireOwner } = require('./middleware/owner-auth');
 const federation = require('./services/federation');
@@ -34,6 +35,7 @@ const backup = require('./workers/backup');
 const tmdbRechecker = require('./workers/tmdb-rechecker');
 const traktSync = require('./workers/trakt-sync');
 const federationSync = require('./workers/federation-sync');
+const statusMonitor = require('./workers/status-monitor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -134,6 +136,7 @@ app.use('/api/notifications', notificationsRoute);
 app.use('/api/recommendations', recommendationsRoute);
 app.use('/api/push', pushRoute);
 app.use('/api/ntfy', ntfyRoute);
+app.use('/api/status', statusRoute);
 
 // Serve client build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -177,6 +180,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     tmdbRechecker.start();
     traktSync.start();
     federationSync.start();
+    statusMonitor.start();
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -186,6 +190,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       tmdbRechecker.stop();
       traktSync.stop();
       federationSync.stop();
+      statusMonitor.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };

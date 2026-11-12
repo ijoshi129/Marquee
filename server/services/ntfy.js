@@ -1,6 +1,7 @@
 const { pool } = require('../db');
 const { fetchWithTimeout } = require('./http');
 const logger = require('../logger');
+const jobStatus = require('./job-status');
 
 const SEND_TIMEOUT_MS = 5000;
 
@@ -78,8 +79,10 @@ async function sendNtfy(notif) {
       message: notif.body || '',
       tags: kind ? kind.tags : ['clapper'],
     });
+    await jobStatus.succeeded('ntfy');
   } catch (err) {
     logger.error({ err }, 'ntfy: send failed');
+    await jobStatus.failed('ntfy', err);
   }
 }
 

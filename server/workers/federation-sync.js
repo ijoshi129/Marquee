@@ -11,6 +11,7 @@ const { pool } = require('../db');
 const fed = require('../services/federation');
 const { fetchWithTimeout } = require('../services/http');
 const { notifyNewMatches, notifyNewBookings } = require('../services/together');
+const jobStatus = require('../services/job-status');
 
 const SYNC_INTERVAL_MIN = parseInt(process.env.FEDERATION_SYNC_INTERVAL_MIN, 10) || 15;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -170,8 +171,10 @@ async function syncOnce() {
     }
     await notifyNewMatches().catch((err) => logger.error({ err }, 'together notify'));
     logger.info({ synced, failed, ms: Date.now() - t0 }, 'federation-sync: cycle done');
+    await jobStatus.succeeded('friends', { synced, failed });
   } catch (err) {
     logger.error({ err }, 'federation-sync cycle failed');
+    await jobStatus.failed('friends', err);
   } finally {
     running = false;
   }

@@ -148,15 +148,15 @@ function stubReddit(respond) {
 function stubState(initial) {
   const state = { value: initial, writes: 0 };
   pool.query = async (sql, params) => {
-    if (/^\s*INSERT INTO app_state/.test(sql)) {
+    if (!/app_state/.test(sql)) throw new Error(`unexpected query: ${sql}`);
+    // app_state also holds each job's run record; only the megathread id matters here.
+    if (params[0] !== 'unseen_megathread_id') return { rows: [] };
+    if (/^\s*INSERT/.test(sql)) {
       state.value = params[1];
       state.writes += 1;
       return { rows: [] };
     }
-    if (/FROM app_state/.test(sql)) {
-      return { rows: state.value ? [{ value: state.value }] : [] };
-    }
-    throw new Error(`unexpected query: ${sql}`);
+    return { rows: state.value ? [{ value: state.value }] : [] };
   };
   return state;
 }
