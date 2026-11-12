@@ -2,7 +2,7 @@
 // One-shot backfill: run TMDB enrichment on any watch (any status) that doesn't
 // have a tmdb_id yet. Useful after parser changes or when adding TMDB to a code path.
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ quiet: true, path: require('path').join(__dirname, '..', '..', '.env') });
 
 const { pool } = require('../db');
 const tmdb = require('../services/tmdb');

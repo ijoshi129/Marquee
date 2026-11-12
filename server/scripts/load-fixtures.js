@@ -2,7 +2,7 @@
 // End-to-end test: load all fixture .eml files into email_log, then run processPhase
 // and dump the resulting watch rows.
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ quiet: true, path: require('path').join(__dirname, '..', '..', '.env') });
 
 const fs = require('fs');
 const path = require('path');
