@@ -7,14 +7,22 @@
 // drops out of the candidate pool so we don't pound TMDB/Reddit forever on a
 // permanently unresolvable title. Manual "Re-check" from the edit modal
 // resets the counter so the auto-loop can resume.
+//
+// Unseens outlast that: a reveal can reach the megathread days after the
+// screening, so once the 6-hourly attempts run out they drop to one a day for
+// about three more weeks, and the owner is asked to identify the film meanwhile.
 
 const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 const unseenLookup = require('../services/unseen-lookup');
 const tmdb = require('../services/tmdb');
+const notifications = require('../services/notifications');
 
 const MAX_RETRIES = 8;
+const UNSEEN_MAX_RETRIES = MAX_RETRIES + 19;
+// Just under a day, so the daily attempt lands on the same cron slot each time.
+const UNSEEN_SLOW_GAP_MS = 23 * 60 * 60 * 1000;
 const BATCH_LIMIT = 50;
 const UNSEEN_RX = /AMC\s+(?:Screen|Scream)\s+Unseen/i;
 
@@ -52,6 +60,32 @@ function isUnseen(row) {
   return UNSEEN_RX.test(row.title || '');
 }
 
+function inSlowPhase(row) {
+  return isUnseen(row) && (row.tmdb_retry_count || 0) >= MAX_RETRIES;
+}
+
+function triedRecently(row) {
+  if (!row.tmdb_last_retry_at) return false;
+  return Date.now() - new Date(row.tmdb_last_retry_at).getTime() < UNSEEN_SLOW_GAP_MS;
+}
+
+async function askOwnerToIdentify(row) {
+  if (row.status === 'cancelled' || row.status === 'no_show') return;
+  const kind = /Scream/i.test(`${(row.tags || []).join(' ')} ${row.title || ''}`) ? 'Scream' : 'Screen';
+  const when = row.showtime || row.watched_at;
+  // Showtimes are wall-clock labelled UTC, so UTC recovers the printed date.
+  const day = when
+    ? new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(when))
+    : null;
+  await notifications.notify({
+    kind: 'identify',
+    title: day ? `What was your ${kind} Unseen on ${day}?` : `What was your ${kind} Unseen?`,
+    body: "The reveal hasn't turned up yet. Tap to pick the film — Marquee will keep checking.",
+    payload: { watch_id: row.id },
+    dedupeKey: `identify:${row.id}`,
+  });
+}
+
 async function recheckOne(row) {
   if (isUnseen(row)) {
     const result = await unseenLookup.resolveAndAssign(row.id);
@@ -80,13 +114,18 @@ async function recheckOnce() {
   const t0 = Date.now();
   try {
     const candidates = await pool.query(
-      `SELECT id, title, tags, showtime, watched_at, tmdb_retry_count
+      `SELECT id, title, tags, status, showtime, watched_at,
+              tmdb_retry_count, tmdb_last_retry_at
        FROM watches
        WHERE tmdb_id IS NULL
-         AND tmdb_retry_count < $1
+         AND tmdb_retry_count < CASE
+               WHEN tags && ARRAY['Screen Unseen', 'Scream Unseen'] OR title ~* $3
+                 THEN $2::int
+               ELSE $1::int
+             END
        ORDER BY COALESCE(tmdb_last_retry_at, created_at) ASC
-       LIMIT $2`,
-      [MAX_RETRIES, BATCH_LIMIT]
+       LIMIT $4`,
+      [MAX_RETRIES, UNSEEN_MAX_RETRIES, UNSEEN_RX.source, BATCH_LIMIT]
     );
 
     let checked = 0;
@@ -97,6 +136,7 @@ async function recheckOnce() {
       // Leave pre-showtime Unseens untouched — don't resolve (anti-spoiler) and
       // don't burn a retry, so they're still eligible once the showtime passes.
       if (isUnseen(row) && !unseenRevealed(row.showtime)) continue;
+      if (inSlowPhase(row) && triedRecently(row)) continue;
       checked++;
       let hit = false;
       let errored = false;
@@ -115,7 +155,7 @@ async function recheckOnce() {
       }
       if (errored) continue;
       const next = (row.tmdb_retry_count || 0) + 1;
-      if (next >= MAX_RETRIES) abandoned++;
+      if (next >= (isUnseen(row) ? UNSEEN_MAX_RETRIES : MAX_RETRIES)) abandoned++;
       await pool.query(
         `UPDATE watches
          SET tmdb_retry_count = tmdb_retry_count + 1,
@@ -123,6 +163,11 @@ async function recheckOnce() {
          WHERE id = $1`,
         [row.id]
       );
+      if (isUnseen(row) && next === MAX_RETRIES) {
+        await askOwnerToIdentify(row).catch((err) =>
+          logger.error({ err, watch_id: row.id }, 'tmdb-rechecker: identify nudge failed')
+        );
+      }
     }
 
     logger.info(

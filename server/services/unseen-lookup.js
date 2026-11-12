@@ -7,6 +7,10 @@
 // <content> is the same rendered post body the old scraper read off the page,
 // so the parsing below is unchanged. One fetch per ~12h per megathread —
 // negligible traffic, no account or API key involved.
+//
+// Which feeds stay open to logged-out readers shifts (search started 403ing in
+// Nov 2026), so the megathread is found three ways, in order: the subreddit
+// listing, search, then the last id that worked, kept in app_state.
 
 const cheerio = require('cheerio');
 const { pool } = require('../db');
@@ -16,6 +20,7 @@ const trakt = require('./trakt');
 
 const FEED_UA = 'marquee/1.0 (self-hosted AMC tracker; +https://github.com/ijoshi129/marquee)';
 const SUBREDDIT = 'AMCsAList';
+const LISTING_FEED_URL = `https://www.reddit.com/r/${SUBREDDIT}/hot.rss?limit=25`;
 const SEARCH_FEED_URL =
   `https://www.reddit.com/r/${SUBREDDIT}/search.rss` +
   '?q=screen+unseen+megathread&restrict_sr=1&sort=new&t=year';
@@ -23,13 +28,18 @@ const postFeedUrl = (postId) =>
   `https://www.reddit.com/r/${SUBREDDIT}/comments/${postId}.rss?limit=1`;
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const FETCH_GAP_MS = 3000;
+// A remembered megathread stops gaining reveals once its successor is posted,
+// so go back to looking for the current one much sooner than a real hit.
+const REMEMBERED_TTL_MS = 60 * 60 * 1000;
+const MEGATHREAD_STATE_KEY = 'unseen_megathread_id';
+let fetchGapMs = 3000;
 const THROTTLED_BACKOFF_MS = 20000;
 const FETCH_ATTEMPTS = 3;
 const LOOKUP_TIME_ZONE = process.env.APP_TIMEZONE || process.env.TZ || 'America/New_York';
 // postId → { entries, predecessorUrls, fetchedAt }
 const threadCache = new Map();
 let currentMegathreadCache = null; // { id, fetchedAt }
+let rememberedId = null;
 
 // Keyed on the first three letters: the megathread mixes full month names with
 // abbreviations ("July 27 2026" and "Aug 10 2026" sit in the same list), and
@@ -63,7 +73,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let lastFetchAt = 0;
 async function fetchFeed(url) {
   for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
-    const gap = FETCH_GAP_MS - (Date.now() - lastFetchAt);
+    const gap = fetchGapMs - (Date.now() - lastFetchAt);
     if (gap > 0) await sleep(gap);
     lastFetchAt = Date.now();
 
@@ -280,6 +290,50 @@ async function loadThread(postId) {
   return cacheThread(postId, post.title, post.bodyHtml);
 }
 
+const isMegathread = (e) =>
+  e.isPost && /megathread/i.test(e.title) && /(screen|scream)\s*unseen/i.test(e.title);
+
+// The megathread is pinned, so it leads the subreddit listing; search covers a
+// week where it isn't. Screen and Scream megathreads carry the same shared
+// history list, so the first of either is the freshest source.
+async function discoverMegathread() {
+  for (const [name, url] of [['listing', LISTING_FEED_URL], ['search', SEARCH_FEED_URL]]) {
+    try {
+      const hit = parseFeedEntries(await fetchFeed(url)).find(isMegathread);
+      if (hit) return hit;
+    } catch (err) {
+      logger.error(`unseen-lookup: megathread ${name} failed: ${err.message}`);
+    }
+  }
+  return null;
+}
+
+async function rememberMegathread(id) {
+  if (id === rememberedId) return;
+  try {
+    await pool.query(
+      `INSERT INTO app_state (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [MEGATHREAD_STATE_KEY, id]
+    );
+    rememberedId = id;
+  } catch (err) {
+    logger.error(`unseen-lookup: could not remember megathread ${id}: ${err.message}`);
+  }
+}
+
+async function recallMegathread() {
+  try {
+    const { rows } = await pool.query('SELECT value FROM app_state WHERE key = $1', [
+      MEGATHREAD_STATE_KEY,
+    ]);
+    return rows[0] ? rows[0].value : null;
+  } catch (err) {
+    logger.error(`unseen-lookup: could not recall megathread: ${err.message}`);
+    return null;
+  }
+}
+
 async function findCurrentMegathreadId() {
   if (
     currentMegathreadCache &&
@@ -287,32 +341,32 @@ async function findCurrentMegathreadId() {
   ) {
     return currentMegathreadCache.id;
   }
-  let entries;
-  try {
-    entries = parseFeedEntries(await fetchFeed(SEARCH_FEED_URL));
-  } catch (err) {
-    logger.error(`unseen-lookup: megathread search failed: ${err.message}`);
-    return null;
+
+  const hit = await discoverMegathread();
+  if (!hit) {
+    const remembered = await recallMegathread();
+    if (!remembered) return null;
+    logger.warn(`unseen-lookup: megathread not found, reusing last known ${remembered}`);
+    currentMegathreadCache = {
+      id: remembered,
+      fetchedAt: Date.now() - CACHE_TTL_MS + REMEMBERED_TTL_MS,
+    };
+    return remembered;
   }
 
-  // Screen and Scream megathreads carry the same shared history list, so the
-  // newest of either is the freshest source.
-  const hit = entries.find(
-    (e) => /megathread/i.test(e.title) && /(screen|scream)\s*unseen/i.test(e.title)
-  );
-  if (!hit) return null;
-
-  // The search feed already includes the body, so there's no reason to fetch
-  // the thread again on the way back out.
-  if (hit.bodyHtml && !threadCache.has(hit.postId)) {
+  // Both feeds carry the post body, so cache it here rather than spend a
+  // second request on the thread — Reddit allows logged-out readers about one
+  // a minute.
+  if (hit.bodyHtml) {
     try {
       cacheThread(hit.postId, hit.title, hit.bodyHtml);
     } catch (err) {
-      logger.error(`unseen-lookup: search feed body unusable: ${err.message}`);
+      logger.error(`unseen-lookup: feed body unusable: ${err.message}`);
     }
   }
 
   currentMegathreadCache = { id: hit.postId, fetchedAt: Date.now() };
+  await rememberMegathread(hit.postId);
   return hit.postId;
 }
 
@@ -454,6 +508,7 @@ async function resolveAndAssign(watchId, opts = {}) {
 function clearCaches() {
   threadCache.clear();
   currentMegathreadCache = null;
+  rememberedId = null;
 }
 
 module.exports = {
@@ -466,6 +521,9 @@ module.exports = {
   _internal: {
     loadThread,
     findCurrentMegathreadId,
+    setFetchGapMs: (ms) => {
+      fetchGapMs = ms;
+    },
     parseFeedEntries,
     threadCache,
     formatDateInTimeZone,
