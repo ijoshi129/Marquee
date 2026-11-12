@@ -9,6 +9,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const cron = require('node-cron');
 const logger = require('../logger');
+const jobStatus = require('../services/job-status');
 
 const BACKUP_DIR = process.env.BACKUP_DIR || '';
 const RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10);
@@ -23,6 +24,20 @@ function ensureDir() {
 
 async function runBackup() {
   if (!BACKUP_DIR) return null;
+  try {
+    const outPath = await writeDump();
+    await jobStatus.succeeded('backup', {
+      file: path.basename(outPath),
+      size_bytes: fs.statSync(outPath).size,
+    });
+    return outPath;
+  } catch (err) {
+    await jobStatus.failed('backup', err);
+    throw err;
+  }
+}
+
+async function writeDump() {
   ensureDir();
 
   const today = new Date().toISOString().slice(0, 10);

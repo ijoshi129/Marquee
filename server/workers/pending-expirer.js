@@ -26,6 +26,7 @@
 const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
+const jobStatus = require('../services/job-status');
 
 const AUTO_WATCHED_AFTER_HOURS = 24;
 const NEEDS_CONFIRM_DAYS = 4;
@@ -95,8 +96,14 @@ async function pruneEmailLog() {
 }
 
 async function dailyMaintenance() {
-  await expireOnce();
-  await pruneEmailLog();
+  try {
+    const expired = await expireOnce();
+    const pruned = await pruneEmailLog();
+    await jobStatus.succeeded('cleanup', { ...expired, pruned });
+  } catch (err) {
+    await jobStatus.failed('cleanup', err);
+    throw err;
+  }
 }
 
 let task = null;

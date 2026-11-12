@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const logger = require('../logger');
 const { pool } = require('../db');
 const trakt = require('../services/trakt');
+const jobStatus = require('../services/job-status');
 
 const MAX_ATTEMPTS = 8;
 
@@ -54,7 +55,11 @@ async function runOnce(opts = {}) {
         `trakt-sync: posted ${posted}, already on Trakt ${alreadySynced}, failed ${failed}, synced ${synced}/${pending.rowCount} queued watch(es)`
       );
     }
+    await jobStatus.succeeded('trakt', { queued: pending.rowCount, posted, failed });
     return { total: pending.rowCount, synced, posted, alreadySynced, failed };
+  } catch (err) {
+    await jobStatus.failed('trakt', err);
+    throw err;
   } finally {
     running = false;
   }

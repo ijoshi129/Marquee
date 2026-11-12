@@ -18,6 +18,7 @@ const thankyouParser = require('../parsers/amc-thankyou');
 const cancellationParser = require('../parsers/amc-cancellation');
 const matcher = require('../services/matcher');
 const pendingExpirer = require('./pending-expirer');
+const jobStatus = require('../services/job-status');
 
 async function ingestPhase() {
   // For backfill / catch-up, look back 90 days the first time, then since the latest
@@ -196,8 +197,15 @@ async function pollOnce() {
         `processed ${processed.ok} ok / ${processed.failed} failed / ${processed.skipped} skipped ` +
         `(${Date.now() - t0}ms)`
     );
+    await jobStatus.succeeded('email', {
+      fetched: ingested.fetched,
+      added: ingested.newCount,
+      parsed: processed.ok,
+      unreadable: processed.failed,
+    });
   } catch (err) {
     logger.error({ err: err }, 'email-poller cycle failed');
+    await jobStatus.failed('email', err);
   } finally {
     running = false;
   }

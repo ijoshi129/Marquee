@@ -2,12 +2,41 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.5';
+const WHATS_NEW_VERSION = '2.7';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.7',
+    sections: [
+      {
+        title: 'A Status page',
+        items: [
+          'Marquee does a lot in the background: reading your AMC emails, naming Screen Unseens, matching films, syncing friends, taking backups. Until now there was no way to tell whether any of it had stopped. Open the bell and tap Status at the bottom to see each job, when it last ran, and whether it worked.',
+          'Green is fine, amber needs a look (a film with no match, a friend who can’t be reached), red is failing. Tap any row for its schedule and the last error.',
+        ],
+      },
+      {
+        title: 'It tells you when something breaks',
+        items: [
+          'If a job has been failing or silent for over a day, you get a notification that opens straight to it. One per outage, so a long one doesn’t nag.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '2.6',
+    sections: [
+      {
+        title: 'Insider Screenings get their poster',
+        items: [
+          'AMC sells early showings as the film’s title plus “Insider Screenings”, which found nothing when Marquee looked the film up. It now searches on the film’s own title. A reservation that had already given up needs Assign movie in the film sheet.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.5',
     sections: [

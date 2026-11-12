@@ -18,6 +18,7 @@ const { pool } = require('../db');
 const unseenLookup = require('../services/unseen-lookup');
 const tmdb = require('../services/tmdb');
 const notifications = require('../services/notifications');
+const jobStatus = require('../services/job-status');
 
 const MAX_RETRIES = 8;
 const UNSEEN_MAX_RETRIES = MAX_RETRIES + 19;
@@ -174,8 +175,10 @@ async function recheckOnce() {
       { checked, resolved, abandoned, ms: Date.now() - t0 },
       'tmdb-rechecker: cycle done'
     );
+    await jobStatus.succeeded('tmdb', { checked, resolved, abandoned });
   } catch (err) {
     logger.error({ err }, 'tmdb-rechecker cycle failed');
+    await jobStatus.failed('tmdb', err);
   } finally {
     running = false;
   }

@@ -96,6 +96,7 @@ export const api = {
   markAlertRead: (id) => request(`/api/notifications/${id}/read`, { method: 'POST' }),
   deleteAlert: (id) => request(`/api/notifications/${id}`, { method: 'DELETE' }),
   clearAlerts: () => request('/api/notifications', { method: 'DELETE' }),
+  status: () => request('/api/status'),
   pushKey: () => request('/api/push/key'),
   subscribePush: (subscription) =>
     request('/api/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),

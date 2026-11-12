@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { fmtAgo } from './FriendsView';
 import NotificationSettingsModal from './NotificationSettingsModal';
+import StatusSheet, { statusHeadline } from './StatusSheet';
 
 function BellIcon() {
   return (
@@ -42,14 +43,30 @@ function GearIcon() {
   );
 }
 
-const ICON = { together: '🍿', friend_added: '👋', comment: '💬', recommend: '📨', booked: '🎟️' };
+const ICON = {
+  together: '🍿',
+  friend_added: '👋',
+  comment: '💬',
+  recommend: '📨',
+  booked: '🎟️',
+  identify: '🔎',
+  status: '⚠️',
+};
 
 // Global header bell: unread badge and a panel of recent notifications. Push
-// and ntfy configuration live behind the gear.
+// and ntfy configuration live behind the gear, and the foot of the panel leads
+// to the Status sheet.
 export default function NotificationsBell({ onOpen }) {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [status, setStatus] = useState(null);
+  // null when closed; otherwise the job to open expanded, if any.
+  const [statusOpen, setStatusOpen] = useState(null);
+
+  useEffect(() => {
+    if (open) api.status().then(setStatus).catch(() => {});
+  }, [open]);
 
   const load = useCallback(() => {
     api.alerts().then(setData).catch(() => {});
@@ -135,6 +152,7 @@ export default function NotificationsBell({ onOpen }) {
                       onClick={() => {
                         act(() => api.markAlertRead(n.id));
                         setOpen(false);
+                        if (n.payload?.status) return setStatusOpen({ focus: n.payload.status });
                         onOpen?.(n);
                       }}
                     >
@@ -157,8 +175,27 @@ export default function NotificationsBell({ onOpen }) {
                   </div>
                 ))
               )}
+              <button
+                type="button"
+                className={`status-foot ${status ? status.overall : 'idle'}`}
+                onClick={() => {
+                  setOpen(false);
+                  setStatusOpen({});
+                }}
+              >
+                <span className="status-dot" aria-hidden="true" />
+                <span className="status-foot-label">Status</span>
+                <span className="status-foot-text">{statusHeadline(status)}</span>
+                <span className="fmenu-chev">›</span>
+              </button>
             </div>
           </div>,
+          document.body
+        )}
+
+      {statusOpen &&
+        createPortal(
+          <StatusSheet focus={statusOpen.focus} onClose={() => setStatusOpen(null)} />,
           document.body
         )}
 

@@ -46,6 +46,7 @@ share what you're watching.
 **Operations**
 - **Daily backups** — automatic Postgres dumps, retained for 30 days.
 - **Owner lock** — an optional passcode gates your diary so only the friend-facing API is reachable when you share the instance.
+- **Status page**: every background job (email, Screen Unseen lookup, film matching, friend sync, backups, push) with when it last ran and whether it worked, plus a notification when one has been failing for over a day.
 
 ## Setup
 
