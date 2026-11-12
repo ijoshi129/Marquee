@@ -360,6 +360,6 @@ migrations under `server/migrations/`.
 
 ## Stack
 
-React 18 + Vite (plain JS/CSS) · Node 20 + Express · Postgres 16 · `imapflow` +
+React 18 + Vite (plain JS/CSS) · Node 24 + Express · Postgres 16 · `imapflow` +
 `cheerio` for email ingest · `web-push` for iOS notifications · single multi-stage
 Docker image bundled with Postgres via `compose.yaml`.
