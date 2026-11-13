@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.10';
+const WHATS_NEW_VERSION = '2.11';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.11',
+    sections: [
+      {
+        title: 'Posters in Now Playing',
+        items: [
+          'Films that showed only their initials now get a poster: when the showtimes source has none, or its link is dead, Marquee finds the film on TMDB.',
+          'Screen Unseen and Scream Unseen listings use the same Unseen artwork as your diary, and one you have booked is now marked Booked.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.10',
     sections: [

@@ -17,12 +17,19 @@ const {
   normalizeSeatMap,
 } = fandango._internal;
 
+const tmdb = require('../services/tmdb');
+
 const realQuery = pool.query;
 const realFetch = global.fetch;
+const realSearch = tmdb.search;
+process.env.TMDB_API_KEY = 'test-key';
 afterEach(() => {
+  process.env.TMDB_API_KEY = 'test-key';
   pool.query = realQuery;
   global.fetch = realFetch;
+  tmdb.search = realSearch;
   fandango.clearCache();
+  nowPlaying.clearPosterCache();
 });
 
 const amenity = (name) => ({ id: 1, name, description: '' });
@@ -313,4 +320,107 @@ test('flagFilms returns the board untouched when the diary cannot be read', asyn
   };
   const films = [{ title: 'Clayface' }];
   assert.equal(await nowPlaying.flagFilms(films), films);
+});
+
+const result = (title, release_year, popularity, poster = `https://image.tmdb.org/t/p/w500/${title.replace(/\W/g, '')}${release_year}.jpg`) => ({
+  tmdb_id: release_year,
+  title,
+  original_title: title,
+  release_year,
+  popularity,
+  poster_url: poster,
+});
+
+test('an Unseen listing gets the Unseen artwork, whatever poster the source sent', async () => {
+  tmdb.search = async () => {
+    throw new Error('an Unseen must not be looked up');
+  };
+  const out = await nowPlaying.fillPosters([
+    { title: 'AMC Screen Unseen: November 16', year: null, poster_url: 'https://img/pg-rated.jpg' },
+    { title: 'AMC Scream Unseen: November 30', year: null, poster_url: null },
+  ]);
+  assert.deepEqual(out.map((f) => [f.unseen, f.poster_url]), [
+    ['screen', '/screen-unseen.avif'],
+    ['scream', '/scream-unseen.avif'],
+  ]);
+});
+
+test('a film with no poster gets the same-titled film from TMDB, nearest in year', async () => {
+  const asked = [];
+  tmdb.search = async (q) => {
+    asked.push(q);
+    return [
+      result('Dead of Night', 1945, 12),
+      result('Dead of Night', 2026, 3),
+      result('Dead of Night Returns', 2026, 90),
+      result('Dead of Night', 2025, 50, null),
+    ];
+  };
+  const [has, lacks, undated] = await nowPlaying.fillPosters([
+    { title: 'Clayface', year: 2026, poster_url: 'https://img/clayface.jpg' },
+    { title: 'Dead of Night', year: 2026, poster_url: null },
+    { title: 'Dead of Night', year: null, poster_url: null },
+  ]);
+  // A film that already has a poster is never looked up.
+  assert.equal(has.poster_url, 'https://img/clayface.jpg');
+  assert.equal(lacks.poster_url, 'https://image.tmdb.org/t/p/w185/DeadofNight2026.jpg');
+  // With no year to go on, the best-known film of that title.
+  assert.equal(undated.poster_url, 'https://image.tmdb.org/t/p/w185/DeadofNight1945.jpg');
+  assert.deepEqual(asked, ['Dead of Night', 'Dead of Night']);
+});
+
+test('TMDB posters: no near match means no poster, and answers are remembered', async () => {
+  let calls = 0;
+  tmdb.search = async () => {
+    calls += 1;
+    return [result('Ghost Soldier', 1999, 40), result('Ghost Soldiers', 2026, 80)];
+  };
+  // Same title but a film from another era, and a near-miss title: neither will do.
+  assert.equal(await nowPlaying.tmdbPoster('Ghost Soldier', 2026), null);
+  assert.equal(await nowPlaying.tmdbPoster('Ghost Soldier (2026)'.replace(' (2026)', ''), 2026), null);
+  assert.equal(calls, 1);
+  assert.equal(await nowPlaying.tmdbPoster('', 2026), null);
+});
+
+test('a failed TMDB lookup leaves the film alone and is tried again next time', async () => {
+  let calls = 0;
+  tmdb.search = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('TMDB 503');
+    return [result('Mouse', 2026, 5)];
+  };
+  const film = { title: 'Mouse', year: 2026, poster_url: null };
+  assert.equal((await nowPlaying.fillPosters([film]))[0].poster_url, null);
+  assert.equal((await nowPlaying.fillPosters([film]))[0].poster_url, 'https://image.tmdb.org/t/p/w185/Mouse2026.jpg');
+});
+
+test('with no TMDB key, posters are skipped without a lookup', async () => {
+  delete process.env.TMDB_API_KEY;
+  tmdb.search = async () => {
+    throw new Error('must not be called');
+  };
+  assert.equal(await nowPlaying.tmdbPoster('Mouse', 2026), null);
+});
+
+test('a booked Unseen is matched to its listing by kind and day', async () => {
+  const { unseenKeyFromTitle, unseenKeyFromWatch } = nowPlaying._internal;
+  assert.equal(unseenKeyFromTitle('AMC Screen Unseen: November 16'), 'unseen:screen:11-16');
+  assert.equal(unseenKeyFromTitle('AMC Scream Unseen - Dec 7, 2026'), 'unseen:scream:12-7');
+  assert.equal(unseenKeyFromTitle('AMC Screen Unseen'), null);
+  assert.equal(unseenKeyFromTitle('Clayface'), null);
+  assert.equal(unseenKeyFromWatch({ title: 'AMC Screen Unseen', showtime: '2026-11-16T19:00:00.000Z' }), 'unseen:screen:11-16');
+  assert.equal(unseenKeyFromWatch({ title: 'Clayface', showtime: '2026-11-16T19:00:00.000Z' }), null);
+
+  pool.query = async () => ({
+    rows: [
+      { id: 'u1', title: 'AMC Screen Unseen 11/16/2026', status: 'pending', showtime: '2026-11-16T19:00:00.000Z', tmdb_title: 'Wildwood' },
+    ],
+  });
+  const out = await nowPlaying.flagFilms([
+    { title: 'AMC Screen Unseen: November 16' },
+    { title: 'AMC Screen Unseen: November 23' },
+    { title: 'AMC Scream Unseen: November 16' },
+    { title: 'Wildwood' },
+  ]);
+  assert.deepEqual(out.map((f) => f.booked && f.booked.watch_id), ['u1', null, null, null]);
 });

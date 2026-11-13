@@ -55,11 +55,25 @@ router.get('/showtimes', async (req, res) => {
       fandango.showtimes(theatre, date),
       fandango.calendar(theatre).catch(() => ({ dates: [], first: null })),
     ]);
-    const films = await nowPlaying.flagFilms(board.films);
+    const films = await nowPlaying.fillPosters(await nowPlaying.flagFilms(board.films));
     nowPlaying.recordSuccess({ theatre: theatre.toUpperCase(), films: films.length });
     res.json({ date: board.date || date, dates: cal.dates, films });
   } catch (err) {
     fail(res, err, 'showtimes');
+  }
+});
+
+// A stand-in for a poster whose link turned out to be dead. The client only
+// finds that out when the image fails to load, so it asks then.
+router.get('/poster', async (req, res) => {
+  const title = String(req.query.title || '').slice(0, 200);
+  const year = /^\d{4}$/.test(String(req.query.year || '')) ? Number(req.query.year) : null;
+  if (!title.trim()) return res.status(400).json({ error: 'title is required' });
+  try {
+    res.json({ poster_url: await nowPlaying.tmdbPoster(title, year) });
+  } catch (err) {
+    logger.warn(`now-playing: poster lookup failed for "${title}": ${err.message}`);
+    res.json({ poster_url: null });
   }
 });
 

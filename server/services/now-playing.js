@@ -5,6 +5,7 @@ const { pool } = require('../db');
 const logger = require('../logger');
 const jobStatus = require('./job-status');
 const fandango = require('./fandango');
+const tmdb = require('./tmdb');
 const { normalizeText, cleanTitle } = require('../utils/normalize');
 
 const STATE_KEY = 'now_playing_theatres';
@@ -59,6 +60,33 @@ async function setTheatres(input) {
 
 const titleKey = (title) => normalizeText(cleanTitle(title || ''));
 
+const UNSEEN = /amc\s+(screen|scream)\s+unseen/i;
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+// "screen" or "scream" for a mystery screening, else null.
+function unseenKind(title) {
+  const m = UNSEEN.exec(title || '');
+  return m ? m[1].toLowerCase() : null;
+}
+
+// The listing says "AMC Screen Unseen: November 16" and the reservation email
+// words it differently, so the two are matched on which Unseen and which day.
+function unseenKeyFromTitle(title) {
+  const kind = unseenKind(title);
+  const m = kind && /unseen\W+([a-z]{3})[a-z]*\W+(\d{1,2})\b/i.exec(title);
+  const month = m ? MONTHS.indexOf(m[1].toLowerCase()) : -1;
+  return month === -1 ? null : `unseen:${kind}:${month + 1}-${Number(m[2])}`;
+}
+
+// Showtimes are stored as the theatre's clock labelled UTC, so the UTC parts
+// are the local date.
+function unseenKeyFromWatch(w) {
+  const kind = unseenKind(w.title);
+  const d = kind && w.showtime ? new Date(w.showtime) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return `unseen:${kind}:${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
+}
+
 // Marks each film the owner has already seen or has a ticket for. A booking is
 // matched on the title AMC sold it under and never on the TMDB match: a Screen
 // Unseen that has been identified early would otherwise show up as "Booked"
@@ -86,19 +114,89 @@ async function flagFilms(films) {
         if (k) seen.set(k, w.id);
       }
     } else {
+      const entry = { watch_id: w.id, showtime: w.showtime };
       const k = titleKey(w.title);
-      if (k) booked.set(k, { watch_id: w.id, showtime: w.showtime });
+      if (k) booked.set(k, entry);
+      const u = unseenKeyFromWatch(w);
+      if (u) booked.set(u, entry);
     }
   }
   return films.map((f) => {
     const k = titleKey(f.title);
-    const b = booked.get(k);
+    const b = booked.get(k) || booked.get(unseenKeyFromTitle(f.title));
     return {
       ...f,
       seen_watch_id: seen.get(k) || null,
       booked: b ? { watch_id: b.watch_id, showtime: b.showtime } : null,
     };
   });
+}
+
+// ---------- posters ----------
+
+const UNSEEN_ART = { screen: '/screen-unseen.avif', scream: '/scream-unseen.avif' };
+const POSTER_HIT_MS = 7 * 24 * 60 * 60 * 1000;
+const POSTER_MISS_MS = 6 * 60 * 60 * 1000;
+const MAX_POSTERS = 500;
+const posterCache = new Map();
+
+// TMDB's poster for a film the showtimes source has none for. Only a result
+// with the same title counts: a blank poster is better than the wrong film's.
+async function tmdbPoster(title, year) {
+  const want = titleKey(title);
+  // Without a TMDB key there is nothing to ask, and no reason to log it per film.
+  if (!want || !process.env.TMDB_API_KEY) return null;
+  const key = `${want}|${year || ''}`;
+  const hit = posterCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+
+  const promise = (async () => {
+    const results = await tmdb.search(cleanTitle(title));
+    const same = results.filter(
+      (r) => r.poster_url && (titleKey(r.title) === want || titleKey(r.original_title) === want)
+    );
+    const top = tmdb.rankResults(same, { year: year || undefined })[0];
+    if (!top) return null;
+    if (year && top.release_year != null && Math.abs(top.release_year - year) > 1) return null;
+    // The list shows posters at thumbnail size.
+    return top.poster_url.replace('/t/p/w500/', '/t/p/w185/');
+  })();
+
+  const entry = { promise, expires: Date.now() + POSTER_HIT_MS };
+  posterCache.set(key, entry);
+  promise.then(
+    (url) => {
+      if (!url) entry.expires = Date.now() + POSTER_MISS_MS;
+    },
+    () => {
+      if (posterCache.get(key) === entry) posterCache.delete(key);
+    }
+  );
+  if (posterCache.size > MAX_POSTERS) posterCache.delete(posterCache.keys().next().value);
+  return promise;
+}
+
+// An Unseen gets the app's own artwork, the same as in the diary. Any other
+// film without a poster is looked up on TMDB. A lookup that fails leaves the
+// film as it was: posters never hold up the showtimes.
+async function fillPosters(films) {
+  return Promise.all(
+    films.map(async (f) => {
+      const kind = unseenKind(f.title);
+      if (kind) return { ...f, unseen: kind, poster_url: UNSEEN_ART[kind] };
+      if (f.poster_url) return f;
+      try {
+        return { ...f, poster_url: await tmdbPoster(f.title, f.year) };
+      } catch (err) {
+        logger.warn(`now-playing: no TMDB poster for "${f.title}": ${err.message}`);
+        return f;
+      }
+    })
+  );
+}
+
+function clearPosterCache() {
+  posterCache.clear();
 }
 
 // Successes are frequent and all alike, so only one in five minutes is written
@@ -126,7 +224,10 @@ module.exports = {
   getTheatres,
   setTheatres,
   flagFilms,
+  fillPosters,
+  tmdbPoster,
+  clearPosterCache,
   recordSuccess,
   recordFailure,
-  _internal: { cleanTheatres, titleKey },
+  _internal: { cleanTheatres, titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
 };

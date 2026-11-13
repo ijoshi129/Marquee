@@ -337,6 +337,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `GET /api/now-playing/theatres/search?q=` | AMC theatres near a ZIP or `City, ST`. |
 | `GET /api/now-playing/showtimes?theatre=&date=` | One theatre's films and showtimes for a day, plus the dates on sale. |
 | `GET /api/now-playing/seats/:hash` · `POST /api/now-playing/seats/counts` | A showing's seat map, and open-seat counts for several showings. |
+| `GET /api/now-playing/poster?title=&year=` | A TMDB poster for a film whose own poster is missing or dead. |
 
 **Friends & social**
 
