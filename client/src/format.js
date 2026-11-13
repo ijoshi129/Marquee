@@ -28,15 +28,6 @@ export function fmtShowtime(iso) {
   return `${date} · ${time}`;
 }
 
-// 'YYYY-MM-DD' → 'Jul 18', adding the year only when it isn't the current one.
-export function fmtShortDate(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-  if (!y || !m || !d) return '';
-  const base = `${MONTH_NAMES[m - 1]} ${d}`;
-  return y === new Date().getFullYear() ? base : `${base}, ${y}`;
-}
-
 // An Unseen's actual title stays hidden until the owner has seen the film —
 // revealing it earlier (in the diary or as an "Identify?" prompt) spoils the
 // mystery screening. Reveal 2h after the showtime, roughly when the film lets
@@ -72,13 +63,6 @@ export function isShowingNow(showtime, runtimeMinutes) {
   const trailers = 18 * 60000;
   const now = Date.now();
   return now >= start - 5 * 60000 && now <= start + trailers + runtime;
-}
-
-// True when an 'YYYY-MM-DD' release date is still in the future.
-export function isUpcoming(iso) {
-  if (!iso) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return iso.slice(0, 10) > today;
 }
 
 export function fmtRuntime(mins) {

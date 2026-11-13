@@ -78,19 +78,8 @@ async function syncFriend(friend) {
     );
     // Inbox writes that arrived before this first pull were keyed to the local
     // row id (authorOf's fallback); re-key them to the real instance id so the
-    // friend has one identity — otherwise recommendation/reaction dedupe misses.
+    // friend has one identity. Otherwise reaction dedupe misses.
     if (!friend.remote_instance_id && feed.instance_id) {
-      await client.query(
-        `DELETE FROM recommendations r
-          WHERE r.from_instance_id = $1 AND r.tmdb_id IS NOT NULL
-            AND EXISTS (SELECT 1 FROM recommendations r2
-                         WHERE r2.from_instance_id = $2 AND r2.tmdb_id = r.tmdb_id)`,
-        [friend.id, feed.instance_id]
-      );
-      await client.query(
-        `UPDATE recommendations SET from_instance_id = $2 WHERE from_instance_id = $1`,
-        [friend.id, feed.instance_id]
-      );
       await client.query(
         `DELETE FROM social_events se
           WHERE se.author_instance_id = $1 AND se.kind = 'reaction'

@@ -73,13 +73,14 @@ export const api = {
   notifications: () => request('/api/watches/notifications'),
   searchSuggest: (q) => request(`/api/search-suggest?q=${encodeURIComponent(q || '')}`),
   tags: () => request('/api/tags'),
-  listWatchlist: () => request('/api/watchlist'),
-  addWatchlist: (tmdb_id) =>
-    request('/api/watchlist', { method: 'POST', body: JSON.stringify({ tmdb_id }) }),
-  removeWatchlist: (id) => request(`/api/watchlist/${id}`, { method: 'DELETE' }),
-  markWatchlistWatched: (id, body = {}) =>
-    request(`/api/watchlist/${id}/watched`, { method: 'POST', body: JSON.stringify(body) }),
-  nowPlaying: () => request('/api/watchlist/now-playing'),
+  npTheatres: () => request('/api/now-playing/theatres'),
+  setNpTheatres: (body) =>
+    request('/api/now-playing/theatres', { method: 'PUT', body: JSON.stringify(body) }),
+  npSearchTheatres: (q) => request(`/api/now-playing/theatres/search${qs({ q })}`),
+  npShowtimes: (theatre, date) => request(`/api/now-playing/showtimes${qs({ theatre, date })}`),
+  npSeatMap: (hash) => request(`/api/now-playing/seats/${encodeURIComponent(hash)}`),
+  npSeatCounts: (hashes) =>
+    request('/api/now-playing/seats/counts', { method: 'POST', body: JSON.stringify({ hashes }) }),
   alistMembership: () => request('/api/alist-membership'),
   setAlistMembership: (year, has_alist) =>
     request(`/api/alist-membership/${year}`, {
@@ -121,14 +122,6 @@ export const api = {
   commentOnOwnWatch: (watchId, text) =>
     request(`/api/watches/${watchId}/comment`, { method: 'POST', body: JSON.stringify({ text }) }),
   watchComments: (watchId) => request(`/api/watches/${watchId}/comments`),
-  recommendFilm: (friendId, tmdb_id, title) =>
-    request(`/api/friends/${friendId}/recommend`, {
-      method: 'POST',
-      body: JSON.stringify({ tmdb_id, title }),
-    }),
-  recommendations: () => request('/api/recommendations'),
-  addRecommendation: (id) => request(`/api/recommendations/${id}/add`, { method: 'POST' }),
-  dismissRecommendation: (id) => request(`/api/recommendations/${id}/dismiss`, { method: 'POST' }),
   friendWatches: (id) => request(`/api/friends/${id}/watches`),
   friendProfile: (id) => request(`/api/friends/${id}/profile`),
   commonFilms: (id) => request(`/api/friends/${id}/common`),

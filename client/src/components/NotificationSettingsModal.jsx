@@ -4,7 +4,6 @@ import Switch from './Switch';
 
 const KIND_TOGGLES = [
   { key: 'notify_comment', label: 'Comments', hint: 'A friend comments on one of your films.' },
-  { key: 'notify_recommend', label: 'Recommendations', hint: 'A friend sends a film your way.' },
   { key: 'notify_together', label: 'Seeing together', hint: 'You and a friend booked the same showing.' },
   { key: 'notify_booked', label: 'Friend bookings', hint: 'A friend books a showing you’re not part of.' },
 ];

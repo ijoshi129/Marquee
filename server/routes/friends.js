@@ -678,21 +678,6 @@ router.post('/:id/comment', async (req, res) => {
   }
 });
 
-// POST /api/friends/:id/recommend { tmdb_id, title } — recommend a film to a friend.
-router.post('/:id/recommend', async (req, res) => {
-  try {
-    const { tmdb_id, title } = req.body || {};
-    if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
-    const r = await sendToFriend(req.params.id, { kind: 'recommend', tmdb_id, title });
-    if (r.status === 409) return res.status(409).json({ error: 'Add their URL first' });
-    if (r.status !== 200) return res.status(r.status).json({ error: 'Could not reach friend' });
-    res.json({ ok: true });
-  } catch (err) {
-    logger.error({ err }, 'recommend');
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // GET /api/friends/:id/common — films you and this friend have both watched,
 // with both ratings.
 router.get('/:id/common', async (req, res) => {

@@ -3,7 +3,6 @@ import { api } from '../api';
 import { fmtRuntime } from '../format';
 import WatchList from './WatchList';
 import { fmtAgo } from './FriendsView';
-import RecommendSheet from './RecommendSheet';
 import CommonFilmsSheet from './CommonFilmsSheet';
 
 // A friend's shared world: a light stats header (no A-List money) plus their
@@ -11,7 +10,6 @@ import CommonFilmsSheet from './CommonFilmsSheet';
 export default function FriendProfile({ friend, onBack, onRemoved }) {
   const [profile, setProfile] = useState(null);
   const [watches, setWatches] = useState([]);
-  const [recommend, setRecommend] = useState(false);
   const [common, setCommon] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -55,13 +53,8 @@ export default function FriendProfile({ friend, onBack, onRemoved }) {
     <section className="fp">
       <div className="fp-top">
         <button type="button" className="fp-back" onClick={onBack}>‹ Friends</button>
-        <span className="fp-top-actions">
-          <button type="button" className="fp-recommend" onClick={() => setRecommend(true)}>📨 Recommend</button>
-          <button type="button" className="fp-remove" onClick={remove}>Remove</button>
-        </span>
+        <button type="button" className="fp-remove" onClick={remove}>Remove</button>
       </div>
-
-      {recommend && <RecommendSheet friend={friend} onClose={() => setRecommend(false)} />}
 
       <header className="fp-head">
         <div className="fp-avatar" aria-hidden="true">

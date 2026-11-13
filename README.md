@@ -13,7 +13,7 @@ share what you're watching.
     <td align="center"><img src="docs/screenshots/film-detail.png" width="250"><br><sub><b>Film detail</b></sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/watchlist.png" width="250"><br><sub><b>Watchlist</b></sub></td>
+    <td align="center"><img src="docs/screenshots/now-playing.png" width="250"><br><sub><b>Now Playing</b></sub></td>
     <td align="center"><img src="docs/screenshots/friends-feed.png" width="250"><br><sub><b>Friends feed</b></sub></td>
     <td align="center"><img src="docs/screenshots/friend-profile.png" width="250"><br><sub><b>Friend profile</b></sub></td>
   </tr>
@@ -35,13 +35,18 @@ share what you're watching.
 - **Search & filter**: across your entire history by title, director, genre, rating, or format.
 - **Installable PWA**: works on phone and desktop, offline-friendly.
 
+**Now Playing**
+- **Showtimes at your AMC**: pick a home theatre and any others you go to. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
+- **Seats left and seat maps**: every showtime shows how many seats are open; tap it for the auditorium, seat by seat, refreshed while you look.
+- **Knows your diary**: films you have seen or already booked are marked.
+- Showtimes and seats are read from Fandango's public site endpoints, with no key or account. They are undocumented, so this tab can break if Fandango changes them; the Status page reports it when it does.
+
 **Friends (federation)**
 - **Connect instances directly**: no central server; you and a friend swap secret URLs and the two instances sync over HTTP. Each URL is its own credential: revoke or rotate one friend without touching the rest.
 - **Activity feed**: see what friends have logged and what's coming up.
 - **Seeing together**: matching upcoming reservations merge into one card with a shared comment thread.
-- **Recommend films**: push a film to a friend's watchlist with a "Recommended by you" badge.
 - **Taste-match**: % agreement and films-in-common on each friend's profile.
-- **Notifications**: in-app bell plus iOS Web Push and [ntfy](https://ntfy.sh) for recommendations, comments, and seeing-together alerts.
+- **Notifications**: in-app bell plus iOS Web Push and [ntfy](https://ntfy.sh) for comments, friend bookings, and seeing-together alerts.
 
 **Operations**
 - **Daily backups**: automatic Postgres dumps, retained for 30 days.
@@ -324,6 +329,15 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `GET /api/export[?download=0]` | Full JSON dump of watches, theatres, and TMDB cache. |
 | `GET /api/admin/database/export` · `POST /api/admin/database/import` | Full DB backup / restore (import is destructive). |
 
+**Now Playing**
+
+| Route | Purpose |
+|---|---|
+| `GET\|PUT /api/now-playing/theatres` | Home theatre and the saved list. |
+| `GET /api/now-playing/theatres/search?q=` | AMC theatres near a ZIP or `City, ST`. |
+| `GET /api/now-playing/showtimes?theatre=&date=` | One theatre's films and showtimes for a day, plus the dates on sale. |
+| `GET /api/now-playing/seats/:hash` · `POST /api/now-playing/seats/counts` | A showing's seat map, and open-seat counts for several showings. |
+
 **Friends & social**
 
 | Route | Purpose |
@@ -332,7 +346,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `POST /api/friends/:id/rotate` | Mint a fresh secret URL for a friend. |
 | `GET /api/friends/feed` | Combined activity feed. |
 | `GET /api/friends/:id/watches` · `GET /api/friends/:id/profile` · `GET /api/friends/:id/common` | A friend's cached diary, profile, and films-in-common. |
-| `POST /api/friends/:id/comment` · `POST /api/friends/:id/recommend` | Comment on / recommend a film. |
+| `POST /api/friends/:id/comment` | Comment on a friend's film. |
 | `GET\|PUT /api/friends/settings` | What you share. |
 | `GET\|POST\|DELETE /api/notifications` | In-app notifications (list, mark read, dismiss/clear). |
 | `/api/federation/:token/*` | Friend-facing; the secret URL is the credential. Fails closed unless `FEDERATION_ENABLED=1`. |
@@ -354,7 +368,7 @@ migrations under `server/migrations/`.
 - `tmdb_cache`: TMDB API responses, keyed by `tmdb_id`.
 - `email_log`: every parsed AMC email, deduped by `gmail_message_id`; pruned to the last 730 days.
 - `friends` / `friend_watches` / `friend_profiles`: connected instances and their cached diaries.
-- `social_events` / `notifications`: comments, recommendations, and the notification feed.
+- `social_events` / `notifications`: comments and the notification feed.
 - `_migrations`: tracks which numbered SQL files have been applied.
 
 </details>

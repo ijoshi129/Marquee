@@ -9,7 +9,6 @@ const SEND_TIMEOUT_MS = 5000;
 // Kinds without an entry (e.g. friend_added) always send when ntfy is on.
 const KINDS = {
   comment: { column: 'notify_comment', tags: ['speech_balloon'] },
-  recommend: { column: 'notify_recommend', tags: ['envelope_with_arrow'] },
   together: { column: 'notify_together', tags: ['popcorn'] },
   booked: { column: 'notify_booked', tags: ['tickets'] },
 };
@@ -22,7 +21,7 @@ async function getSettings() {
   return (await pool.query(`SELECT * FROM ntfy_settings WHERE id = TRUE`)).rows[0];
 }
 
-const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_recommend', 'notify_together', 'notify_booked'];
+const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_together', 'notify_booked'];
 
 async function updateSettings(body) {
   const updates = [];

@@ -2,12 +2,32 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.7';
+const WHATS_NEW_VERSION = '2.10';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.10',
+    sections: [
+      {
+        title: 'Now Playing',
+        items: [
+          'The Watchlist tab is now Now Playing: what is on at your AMC today, film by film and screen by screen (IMAX, Dolby Cinema, PRIME and the rest), with showtimes for the weeks ahead.',
+          'Every showtime shows how many seats are left. Tap one for the seat map: each seat in the auditorium, lit if it’s still open. It refreshes while you look.',
+          'Pick a home theatre, add any others you go to, and switch between them by tapping the theatre’s name.',
+          'Films you’ve seen or have a ticket for are marked, and the mark opens the film in your diary.',
+        ],
+      },
+      {
+        title: 'Watchlist and recommendations are gone',
+        items: [
+          'The Watchlist and sending films to friends have been removed to make room. Nothing in your diary changed.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.7',
     sections: [
