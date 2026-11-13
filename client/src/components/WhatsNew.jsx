@@ -73,27 +73,27 @@ const RELEASES = [
       {
         title: 'One card when you went together',
         items: [
-          'A film several of you saw at the same showing is now a single entry — "You, Alice & Bob saw" — instead of the same poster three times down the feed. Shared screenings span the full width, since they don’t belong to any one person.',
+          'A film several of you saw at the same showing is now a single entry ("You, Alice & Bob saw") instead of the same poster three times down the feed. Shared screenings span the full width, since they don’t belong to any one person.',
           'The conversation merges too: one thread per screening rather than a separate one on each person’s copy.',
         ],
       },
       {
         title: 'Unseens stand out in the feed',
         items: [
-          'A film that came from a Screen Unseen now carries its tag in the Friends feed, so you can tell at a glance who went in blind — on your films and your friends’ alike. Scream Unseen keeps its red.',
+          'A film that came from a Screen Unseen now carries its tag in the Friends feed, so you can tell at a glance who went in blind, on your films and your friends’ alike. Scream Unseen keeps its red.',
         ],
       },
       {
         title: 'A tidier feed',
         items: [
           'Coming up now shows a date for anything more than a week out, instead of a weekday that could mean any of three weeks.',
-          'Films nobody has rated yet no longer say so — the line just isn’t there.',
+          'Films nobody has rated yet no longer say so. The line just isn’t there.',
         ],
       },
       {
         title: 'Change the name friends see',
         items: [
-          'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took — now you can just type a new one and friends pick it up on their next sync.',
+          'Your instance name is now editable under Friends → Sharing. It used to be fixed the first time Marquee started up, so a name set later never took. Now you can just type a new one and friends pick it up on their next sync.',
         ],
       },
     ],
@@ -104,28 +104,28 @@ const RELEASES = [
       {
         title: 'The Friends feed reads like a conversation',
         items: [
-          'Everything you and your friends have seen now shares one timeline, newest at the bottom, grouped by day. Your films sit on the right, theirs on the left with their avatar — so a week of moviegoing reads top to bottom like a thread.',
+          'Everything you and your friends have seen now shares one timeline, newest at the bottom, grouped by day. Your films sit on the right, theirs on the left with their avatar, so a week of moviegoing reads top to bottom like a thread.',
           'Coming up stays pinned above it, so what’s booked never gets buried under what’s been seen.',
         ],
       },
       {
         title: 'Comments look like messages',
         items: [
-          'Threads are chat bubbles now — your replies on the right, your friend’s on the left.',
+          'Threads are chat bubbles now: your replies on the right, your friend’s on the left.',
           'Conversations about your own films live on the film itself. Open any film you’ve seen to catch up on what people said, and comment alerts take you straight there.',
         ],
       },
       {
         title: 'One paste connects you both ways',
         items: [
-          'Paste a friend’s secret URL and yours travels back to them automatically — no more sending links in both directions and hoping they both land.',
+          'Paste a friend’s secret URL and yours travels back to them automatically. No more sending links in both directions and hoping they both land.',
           'If a connection breaks, pasting a fresh URL repairs both ends at once.',
         ],
       },
       {
         title: 'Easier updates',
         items: [
-          'Marquee is now published as a ready-built image, so updating pulls it down instead of rebuilding from scratch — quicker, and much lighter on small home servers.',
+          'Marquee is now published as a ready-built image, so updating pulls it down instead of rebuilding from scratch. That’s quicker, and much lighter on small home servers.',
         ],
       },
     ],
@@ -136,33 +136,33 @@ const RELEASES = [
       {
         title: 'Connecting is now just a URL swap',
         items: [
-          'Adding a friend gives you a secret URL to text them — or show it as a QR code to scan; paste the one they send back and you’re connected. No invite codes, no expiry windows, no VPN between you.',
-          'Each friend gets their own URL, so you can cut one off — or rotate a leaked link — without touching anyone else. Tap a friend in Manage friends for their connection details and controls.',
+          'Adding a friend gives you a secret URL to text them, or show it as a QR code to scan; paste the one they send back and you’re connected. No invite codes, no expiry windows, no VPN between you.',
+          'Each friend gets their own URL, so you can cut one off (or rotate a leaked link) without touching anyone else. Tap a friend in Manage friends for their connection details and controls.',
         ],
       },
       {
         title: 'Coming up, up top',
         items: [
-          'Friends’ upcoming reservations now live in their own rail at the top of the Friends tab — tap a poster for details and the shared comment thread. The feed below starts at today.',
+          'Friends’ upcoming reservations now live in their own rail at the top of the Friends tab. Tap a poster for details and the shared comment thread. The feed below starts at today.',
         ],
       },
       {
         title: 'Friend bookings',
         items: [
-          'Get a heads-up when a friend books a showing — and if it matches one of yours, it arrives as a “seeing it together” alert instead.',
+          'Get a heads-up when a friend books a showing. If it matches one of yours, it arrives as a “seeing it together” alert instead.',
         ],
       },
       {
         title: 'Alerts via ntfy',
         items: [
-          'Notifications can now reach any device through ntfy — tap the gear in the bell panel, point it at ntfy.sh or your own server, and pick which alerts to send.',
+          'Notifications can now reach any device through ntfy. Tap the gear in the bell panel, point it at ntfy.sh or your own server, and pick which alerts to send.',
           'Tapping a comment alert now jumps straight to that film’s conversation.',
         ],
       },
       {
         title: 'Simpler under the hood',
         items: [
-          'Connections no longer get stuck in a “disconnected” state — if a friend’s URL stops working, the app says so and keeps trying until you paste a fresh one.',
+          'Connections no longer get stuck in a “disconnected” state. If a friend’s URL stops working, the app says so and keeps trying until you paste a fresh one.',
         ],
       },
     ],
@@ -173,21 +173,21 @@ const RELEASES = [
       {
         title: 'Friends',
         items: [
-          'Marquee can now connect to a friend’s Marquee — pair once with an invite code and you’ll each see what the other is watching. There’s no middleman; the two instances talk straight to each other.',
+          'Marquee can now connect to a friend’s Marquee. Pair once with an invite code and you’ll each see what the other is watching. There’s no middleman; the two instances talk straight to each other.',
           'A new Friends tab gathers their activity into a single feed.',
         ],
       },
       {
         title: 'Seeing it together',
         items: [
-          'When you and a friend have booked the same showtime, it shows up as one card — with a comment thread you both share.',
+          'When you and a friend have booked the same showtime, it shows up as one card, with a comment thread you both share.',
           'Once a film starts, friends headed to that showing show as “Watching now”.',
         ],
       },
       {
         title: 'Recommendations',
         items: [
-          'Send a film to a friend and it lands in their watchlist with a “Recommended by you” badge — and the other way around.',
+          'Send a film to a friend and it lands in their watchlist with a “Recommended by you” badge, and the other way around.',
         ],
       },
       {
@@ -199,7 +199,7 @@ const RELEASES = [
       {
         title: 'Notifications',
         items: [
-          'A bell for recommendations, comments, and “seeing it together” alerts — mark them read, dismiss, or clear.',
+          'A bell for recommendations, comments, and “seeing it together” alerts. Mark them read, dismiss, or clear.',
           'On an installed iPhone, these can arrive as push notifications.',
         ],
       },
@@ -218,14 +218,14 @@ const RELEASES = [
       {
         title: 'A-List by month',
         items: [
-          'The A-List membership editor now goes month by month, not just year by year — open it from “Edit A-List membership” under the In Review header.',
+          'The A-List membership editor now goes month by month, not just year by year. Open it from “Edit A-List membership” under the In Review header.',
           'Turn off the months you weren’t a member and films from those months drop out of your savings, so a partial year counts only the months it should.',
         ],
       },
       {
         title: 'Tap any stat for the full story',
         items: [
-          'Every number in the In Review overview now opens a detail sheet — A-List savings (what you paid vs. what tickets were worth), films, runtime, ratings distribution, and your full genre ranking.',
+          'Every number in the In Review overview now opens a detail sheet: A-List savings (what you paid vs. what tickets were worth), films, runtime, ratings distribution, and your full genre ranking.',
           'Tap any figure inside for a plain-English note on what it means.',
         ],
       },
@@ -233,19 +233,19 @@ const RELEASES = [
         title: 'Showtimes',
         items: [
           'Upcoming films in Now Playing show their release date right on the poster.',
-          'A booked reservation now wears its showtime on the card — date and time, not just “Upcoming”.',
+          'A booked reservation now wears its showtime on the card: date and time, not just “Upcoming”.',
         ],
       },
       {
         title: 'Screen Unseen',
         items: [
-          'Mystery screenings stay a mystery — the title and any “Identify?” prompt stay hidden until a couple hours after showtime, so nothing spoils what you’re about to see.',
+          'Mystery screenings stay a mystery. The title and any “Identify?” prompt stay hidden until a couple hours after showtime, so nothing spoils what you’re about to see.',
         ],
       },
       {
         title: 'Filters that show their work',
         items: [
-          'Tap a director’s name and the filter panel opens to show exactly who you’re filtering by — a chip you can tap to clear, so it’s never a mystery why the grid shrank.',
+          'Tap a director’s name and the filter panel opens to show exactly who you’re filtering by: a chip you can tap to clear, so it’s never a mystery why the grid shrank.',
         ],
       },
       {
@@ -262,7 +262,7 @@ const RELEASES = [
       {
         title: 'Fixes',
         items: [
-          'A film you reserved and then cancelled no longer shows as “Seen” in Now Playing — you can add it back to your watchlist.',
+          'A film you reserved and then cancelled no longer shows as “Seen” in Now Playing, so you can add it back to your watchlist.',
         ],
       },
     ],
@@ -273,7 +273,7 @@ const RELEASES = [
       {
         title: 'A-List by year',
         items: [
-          'Mark which years you actually had A-List — a small toggle tucked into the In Review header.',
+          'Mark which years you actually had A-List, with a small toggle tucked into the In Review header.',
           'Years you weren’t a member drop out of your savings, so an early year with a film or two no longer drags down the all-time total.',
         ],
       },
@@ -292,7 +292,7 @@ const RELEASES = [
       {
         title: 'Watchlist',
         items: [
-          'A new Watchlist tab for films to catch later — search to add, or pull from a Now Playing feed.',
+          'A new Watchlist tab for films to catch later. Search to add, or pull from a Now Playing feed.',
           'Tap the ✓ on a poster to log it as watched; the ✕ drops it.',
           'A reservation or walk-up for a listed film clears it automatically.',
         ],
@@ -300,21 +300,21 @@ const RELEASES = [
       {
         title: 'Wrapped',
         items: [
-          'A full-screen monthly recap — tap any month in the In Review chart.',
+          'A full-screen monthly recap. Tap any month in the In Review chart.',
           'It surfaces on its own in the last days of the month, then tucks into a chip.',
         ],
       },
       {
         title: 'A-List value',
         items: [
-          'See what your tickets would have cost against the flat A-List fee — in the overview and in Wrapped.',
+          'See what your tickets would have cost against the flat A-List fee, in the overview and in Wrapped.',
           'Premium formats (IMAX, Dolby, RealD 3D) count for a little more.',
         ],
       },
       {
         title: 'Details',
         items: [
-          'Rewatch badges — “2nd watch” on the poster, plus an On Repeat card in Wrapped.',
+          'Rewatch badges: “2nd watch” on the poster, plus an On Repeat card in Wrapped.',
           'The overview stats now follow the year you pick in In Review.',
           'Anniversary and re-release titles match the original film, and matches favour the year you saw it.',
         ],
