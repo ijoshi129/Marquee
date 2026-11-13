@@ -78,6 +78,7 @@ export const api = {
     request('/api/now-playing/theatres', { method: 'PUT', body: JSON.stringify(body) }),
   npSearchTheatres: (q) => request(`/api/now-playing/theatres/search${qs({ q })}`),
   npShowtimes: (theatre, date) => request(`/api/now-playing/showtimes${qs({ theatre, date })}`),
+  npPoster: (title, year) => request(`/api/now-playing/poster${qs({ title, year })}`),
   npSeatMap: (hash) => request(`/api/now-playing/seats/${encodeURIComponent(hash)}`),
   npSeatCounts: (hashes) =>
     request('/api/now-playing/seats/counts', { method: 'POST', body: JSON.stringify({ hashes }) }),

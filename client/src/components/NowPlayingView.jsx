@@ -36,7 +36,17 @@ function seatsLabel(c) {
 
 function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch }) {
   const ref = useRef(null);
-  const [posterFailed, setPosterFailed] = useState(false);
+  // 'own' is the listing's poster, a string is the stand-in found after that
+  // one failed to load, 'none' means there is nothing to show but initials.
+  const [poster, setPoster] = useState('own');
+
+  function posterBroke() {
+    if (poster !== 'own') return setPoster('none');
+    api
+      .npPoster(film.title, film.year)
+      .then((r) => setPoster(r.poster_url && r.poster_url !== film.poster_url ? r.poster_url : 'none'))
+      .catch(() => setPoster('none'));
+  }
 
   useEffect(() => {
     const el = ref.current;
@@ -68,8 +78,8 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch }) {
     <article className="np-film" ref={ref}>
       <div className="np-film-head">
         <div className="np-film-poster">
-          {film.poster_url && !posterFailed ? (
-            <img src={film.poster_url} alt="" loading="lazy" onError={() => setPosterFailed(true)} />
+          {film.poster_url && poster !== 'none' ? (
+            <img src={poster === 'own' ? film.poster_url : poster} alt="" loading="lazy" onError={posterBroke} />
           ) : (
             <div className="poster-blank">{film.title.slice(0, 2).toUpperCase()}</div>
           )}
