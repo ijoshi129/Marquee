@@ -10,7 +10,7 @@ import Backdrop from './components/Backdrop';
 import WhatsNew from './components/WhatsNew';
 import WrappedStory from './components/WrappedStory';
 import WrappedPrompt from './components/WrappedPrompt';
-import WatchlistView from './components/WatchlistView';
+import NowPlayingView from './components/NowPlayingView';
 import FriendsView from './components/FriendsView';
 import NotificationsBell from './components/NotificationsBell';
 import FriendsMenu from './components/FriendsMenu';
@@ -253,10 +253,11 @@ export default function App() {
           </button>
           <button
             type="button"
-            className={`topnav-tab ${view === 'watchlist' ? 'is-on' : ''}`}
-            onClick={() => setView('watchlist')}
+            className={`topnav-tab ${view === 'nowplaying' ? 'is-on' : ''}`}
+            onClick={() => setView('nowplaying')}
+            aria-label="Now Playing"
           >
-            Watchlist
+            <span className="topnav-wide">Now </span>Playing
           </button>
           <button
             type="button"
@@ -307,13 +308,8 @@ export default function App() {
       <main>
         {view === 'friends' ? (
           <FriendsView onAddFriend={() => setAddFriend(true)} focus={friendFocus} />
-        ) : view === 'watchlist' ? (
-          <WatchlistView
-            onWatched={() => {
-              setRefreshKey((k) => k + 1);
-              load();
-            }}
-          />
+        ) : view === 'nowplaying' ? (
+          <NowPlayingView onOpenWatch={openWatchById} />
         ) : (
           <>
             <Notifications

@@ -82,7 +82,6 @@ function Stars({ value }) {
 export default function FriendsView({ onAddFriend, focus }) {
   const [feed, setFeed] = useState(null);
   const [friends, setFriends] = useState([]);
-  const [recs, setRecs] = useState([]);
   const [selected, setSelected] = useState(null);
   const [picker, setPicker] = useState(null);
   const [expanded, setExpanded] = useState(null); // strip card id whose detail is open
@@ -101,25 +100,13 @@ export default function FriendsView({ onAddFriend, focus }) {
 
   const load = useCallback(async () => {
     try {
-      const [f, fr, rc] = await Promise.all([
-        api.friendsFeed(),
-        api.friends(),
-        api.recommendations().catch(() => []),
-      ]);
+      const [f, fr] = await Promise.all([api.friendsFeed(), api.friends()]);
       setFeed(f);
       setFriends(fr);
-      setRecs(rc);
     } catch (e) {
       setErr(e.message);
     }
   }, []);
-
-  async function actRec(fn) {
-    try {
-      await fn();
-    } catch {}
-    load();
-  }
 
   // Poll while open so live-synced changes surface on their own.
   useEffect(() => {
@@ -329,33 +316,6 @@ export default function FriendsView({ onAddFriend, focus }) {
             })}
           </div>
           {expandedItem && <div className="up-detail">{renderCard(expandedItem)}</div>}
-        </div>
-      )}
-
-      {recs.length > 0 && (
-        <div className="rec-strip">
-          <div className="rec-strip-title">Recommended for you</div>
-          {recs.map((r) => (
-            <div key={r.id} className="rec-card">
-              {r.poster_url ? (
-                <img className="rec-poster" src={r.poster_url} alt="" loading="lazy" />
-              ) : (
-                <span className="rec-poster blank">{(r.title || '?').slice(0, 2).toUpperCase()}</span>
-              )}
-              <div className="rec-info">
-                <div className="rec-from">{r.from_name} recommends</div>
-                <div className="rec-title">{r.title}{r.release_year ? ` · ${r.release_year}` : ''}</div>
-              </div>
-              <div className="rec-actions">
-                <button type="button" className="rec-add" onClick={() => actRec(() => api.addRecommendation(r.id))}>
-                  + Watchlist
-                </button>
-                <button type="button" className="rec-dismiss" onClick={() => actRec(() => api.dismissRecommendation(r.id))} aria-label="Dismiss">
-                  ✕
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
       )}
 

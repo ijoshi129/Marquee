@@ -10,7 +10,6 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
-const tmdb = require('../services/tmdb');
 const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 
@@ -192,36 +191,6 @@ async function handleComment(req, res) {
   res.json({ ok: true });
 }
 
-async function handleRecommend(req, res) {
-  const { tmdb_id, title } = req.body || {};
-  if (!tmdb_id && !title) return res.status(400).json({ error: 'tmdb_id or title required' });
-  // Cap peer-supplied strings so a friend can't store an unbounded blob.
-  const clamp = (s, n) => (typeof s === 'string' ? s.slice(0, n) : s);
-  const author = authorOf(req.friend);
-  let filmTitle = clamp(title, 300);
-  if (tmdb_id) {
-    try {
-      const d = await tmdb.getOrFetchDetails(tmdb_id);
-      filmTitle = d.title || title;
-    } catch {}
-  }
-  await pool.query(
-    `INSERT INTO recommendations (from_instance_id, from_name, tmdb_id, title)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (from_instance_id, tmdb_id) WHERE tmdb_id IS NOT NULL
-     DO UPDATE SET from_name = EXCLUDED.from_name, title = EXCLUDED.title,
-                   status = 'pending', created_at = NOW()`,
-    [author.instance_id, author.name, tmdb_id || null, filmTitle || `TMDB ${tmdb_id}`]
-  );
-  notify({
-    kind: 'recommend',
-    title: `${author.name} recommends ${filmTitle}`,
-    body: 'Add it to your watchlist?',
-    payload: { tmdb_id: tmdb_id || null },
-  }).catch(() => {});
-  res.json({ ok: true });
-}
-
 // A friend we've already handed a URL to sends theirs back here, so the owner
 // never has to paste it. We accept it when our slot is empty OR the current link
 // is known-broken (last_error set) — the latter repairs a dead connection, e.g.
@@ -244,7 +213,6 @@ async function handleConnect(req, res) {
 //   { kind: 'ping' }                                — "I changed, pull me now"
 //   { kind: 'connect', friend_url }                 — their URL back, for two-way
 //   { kind: 'comment', target_watch_id, body }      — comment on one of our films
-//   { kind: 'recommend', tmdb_id, title }           — recommend us a film
 // We're the hub for events on our watches: a stored comment is re-broadcast to
 // all friends inside our feed's comment threads.
 router.post('/:token/inbox', async (req, res) => {
@@ -257,7 +225,10 @@ router.post('/:token/inbox', async (req, res) => {
     }
     if (kind === 'connect') return await handleConnect(req, res);
     if (kind === 'comment') return await handleComment(req, res);
-    if (kind === 'recommend') return await handleRecommend(req, res);
+    // Recommendations were removed in 2.10. A friend on an older version can
+    // still send one, and a 400 would show them an error for a film we simply
+    // have nowhere to put.
+    if (kind === 'recommend') return res.json({ ok: true });
     res.status(400).json({ error: 'Unknown kind' });
   } catch (err) {
     logger.error({ err }, 'federation inbox');

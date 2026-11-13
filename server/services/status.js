@@ -9,6 +9,7 @@ const jobStatus = require('./job-status');
 const fed = require('./federation');
 const trakt = require('./trakt');
 const ntfy = require('./ntfy');
+const nowPlaying = require('./now-playing');
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -63,6 +64,15 @@ const JOBS = [
       );
       const n = rows[0].n;
       return { summary: n ? `${plural(n, 'screening')} still unnamed` : 'Every screening is named' };
+    },
+  },
+  {
+    key: 'showtimes',
+    name: 'Showtimes',
+    schedule: 'When Now Playing is open',
+    async describe() {
+      const { home } = await nowPlaying.getTheatres();
+      return { summary: home ? home.name : 'No home theatre picked' };
     },
   },
   {

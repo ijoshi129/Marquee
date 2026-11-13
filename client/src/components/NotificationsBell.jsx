@@ -47,7 +47,6 @@ const ICON = {
   together: '🍿',
   friend_added: '👋',
   comment: '💬',
-  recommend: '📨',
   booked: '🎟️',
   identify: '🔎',
   status: '⚠️',
