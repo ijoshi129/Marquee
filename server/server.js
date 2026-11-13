@@ -29,6 +29,7 @@ const statusRoute = require('./routes/status');
 const authRoute = require('./routes/auth');
 const { requireOwner } = require('./middleware/owner-auth');
 const federation = require('./services/federation');
+const { trustProxySetting } = require('./utils/trust-proxy');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
 const backup = require('./workers/backup');
@@ -39,6 +40,7 @@ const statusMonitor = require('./workers/status-monitor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
 
 // Security headers. CSP is disabled — getting it right with Vite's bundled
 // modules + inline styles + Google Fonts + service worker fetches is fiddly,
