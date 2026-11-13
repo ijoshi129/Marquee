@@ -181,3 +181,14 @@ test('job-status: a network failure records its cause, not just "fetch failed"',
   err.cause = { code: 'ECONNREFUSED' };
   assert.equal((await jobStatus.failed('ntfy', err)).last_error, 'fetch failed (ECONNREFUSED)');
 });
+
+test('job-status: a mail server refusal records what the server said', async () => {
+  stubState();
+  const err = new Error('Command failed');
+  err.responseText = 'Invalid credentials (Failure)';
+  err.authenticationFailed = true;
+  assert.equal(
+    (await jobStatus.failed('email', err)).last_error,
+    'Command failed (Invalid credentials (Failure))'
+  );
+});

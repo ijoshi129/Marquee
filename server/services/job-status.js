@@ -70,10 +70,13 @@ async function succeeded(job, detail = null) {
 async function failed(job, err) {
   const prev = await get(job);
   const now = new Date().toISOString();
-  // fetch() reports every network failure as "fetch failed"; the reason is on
-  // its cause.
+  // Two libraries put the useful part somewhere other than the message:
+  // fetch() calls every network failure "fetch failed" and keeps the reason on
+  // its cause, and the IMAP client calls every refusal "Command failed" and
+  // keeps the server's own words on responseText.
   const cause = err && err.cause && (err.cause.code || err.cause.message);
-  const message = `${(err && err.message) || err || 'failed'}${cause ? ` (${cause})` : ''}`.slice(
+  const reason = (err && err.responseText) || cause;
+  const message = `${(err && err.message) || err || 'failed'}${reason ? ` (${reason})` : ''}`.slice(
     0,
     MAX_ERROR_LENGTH
   );
