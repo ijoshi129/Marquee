@@ -3503,14 +3503,28 @@ input[type='date'].input-naked { color-scheme: dark; }
 .status-banner-text { font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; }
 .status-item { border-radius: var(--radius-md); }
 .status-item + .status-item { border-top: 1px solid var(--bg-tint); }
+/* An expanded job is one card: its row and its details share a background, so
+   the details read as part of the row and not as a box butting up against it. */
+.status-item.open { background: var(--bg-tint); }
+.status-item.open, .status-item.open + .status-item { border-top-color: transparent; }
 .status-main {
   width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px;
   background: none; border: none; color: var(--fg); cursor: pointer; text-align: left; border-radius: var(--radius-md);
 }
-.status-main:hover { background: var(--bg-tint); }
+/* Touch screens keep :hover on whatever was last tapped, which left a row lit
+   after it was closed. Only pointers that can hover get the highlight. */
+@media (hover: hover) {
+  .status-main:hover { background: var(--bg-tint); }
+  .status-item.open .status-main:hover { background: none; }
+}
 .status-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .status-name { font-weight: 600; font-size: 0.9rem; }
-.status-sub { font-size: 0.78rem; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere; }
+.status-sub {
+  font-size: 0.78rem; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere;
+  /* A long error would push the row to four or five lines; the details below
+     carry it in full. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .status-item.warn .status-sub { color: var(--warn); }
 .status-item.fail .status-sub { color: var(--danger); }
 .status-item.off .status-main { padding-top: 9px; padding-bottom: 9px; }
@@ -3520,7 +3534,7 @@ input[type='date'].input-naked { color-scheme: dark; }
   font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.04em; color: var(--fg-mute);
   white-space: nowrap; flex-shrink: 0;
 }
-.status-detail { margin: 0 12px 12px 33px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-tint); }
+.status-detail { margin: 0 12px 0 33px; padding: 10px 0 14px; border-top: 1px solid var(--bg-tint-strong); }
 .status-detail > div { display: flex; gap: 12px; align-items: baseline; }
 .status-detail > div + div { margin-top: 6px; }
 .status-detail dt {
@@ -3533,7 +3547,9 @@ input[type='date'].input-naked { color-scheme: dark; }
   width: 100%; display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 13px 12px;
   background: none; border: none; border-top: 1px solid var(--bg-tint-strong); color: var(--fg); cursor: pointer; text-align: left;
 }
-.status-foot:hover { background: var(--bg-tint); }
+@media (hover: hover) {
+  .status-foot:hover { background: var(--bg-tint); }
+}
 .status-foot-label {
   font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-mute);
 }
