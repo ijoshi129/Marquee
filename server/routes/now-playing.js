@@ -21,7 +21,7 @@ function fail(res, err, what) {
 
 router.get('/theatres', async (req, res) => {
   try {
-    res.json(await nowPlaying.getTheatres());
+    res.json(await nowPlaying.theatresForView());
   } catch (err) {
     logger.error({ err }, 'now-playing: read theatres');
     res.status(500).json({ error: 'Server error' });
@@ -30,7 +30,7 @@ router.get('/theatres', async (req, res) => {
 
 router.put('/theatres', async (req, res) => {
   try {
-    res.json(await nowPlaying.setTheatres(req.body));
+    res.json(await nowPlaying.theatresForView(await nowPlaying.setTheatres(req.body)));
   } catch (err) {
     logger.error({ err }, 'now-playing: save theatres');
     res.status(500).json({ error: 'Server error' });

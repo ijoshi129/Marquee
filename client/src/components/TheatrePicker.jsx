@@ -12,8 +12,14 @@ export default function TheatrePicker({ theatres, current, onClose, onSave, onSe
   const [err, setErr] = useState(null);
 
   const { home, saved } = theatres;
+  const visited = theatres.visited || [];
   const mine = [home, ...saved].filter(Boolean);
   const has = (id) => mine.some((t) => t.id === id);
+  const fromDiary = visited.filter((t) => !has(t.id));
+  const visits = (id) => {
+    const v = visited.find((t) => t.id === id);
+    return v ? `${v.visits} ${v.visits === 1 ? 'visit' : 'visits'}` : null;
+  };
 
   async function search(e) {
     e.preventDefault();
@@ -69,8 +75,7 @@ export default function TheatrePicker({ theatres, current, onClose, onSave, onSe
               <button type="button" className="theatre-main" onClick={() => onSelect(t.id)}>
                 <span className="theatre-name">{t.name}</span>
                 <span className="theatre-sub">
-                  {where(t)}
-                  {isHome ? `${where(t) ? ' · ' : ''}Home` : ''}
+                  {[where(t), isHome ? 'Home' : null, visits(t.id)].filter(Boolean).join(' · ')}
                 </span>
               </button>
               {!isHome && (
@@ -86,6 +91,21 @@ export default function TheatrePicker({ theatres, current, onClose, onSave, onSe
             </div>
           );
         })}
+
+        {fromDiary.length > 0 && <div className="theatre-section">From your diary</div>}
+        {fromDiary.map((t) => (
+          <div key={t.id} className={`theatre-row ${current === t.id ? 'is-current' : ''}`}>
+            <button type="button" className="theatre-main" onClick={() => onSelect(t.id)}>
+              <span className="theatre-name">{t.name}</span>
+              <span className="theatre-sub">{[where(t), visits(t.id)].filter(Boolean).join(' · ')}</span>
+            </button>
+            <span className="theatre-actions">
+              <button type="button" className="notif-action" onClick={() => makeHome(t)}>
+                Make home
+              </button>
+            </span>
+          </div>
+        ))}
 
         <form className="theatre-search" onSubmit={search}>
           <input
@@ -117,8 +137,8 @@ export default function TheatrePicker({ theatres, current, onClose, onSave, onSe
                 </span>
               </div>
               <span className="theatre-actions">
-                {has(t.id) ? (
-                  <span className="theatre-added">Added</span>
+                {has(t.id) || visited.some((v) => v.id === t.id) ? (
+                  <span className="theatre-added">{has(t.id) ? 'Added' : 'In your diary'}</span>
                 ) : (
                   <button type="button" className="theatre-add" onClick={() => add(t)}>
                     {home ? 'Add' : 'Set as home'}

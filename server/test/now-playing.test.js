@@ -23,7 +23,10 @@ const realQuery = pool.query;
 const realFetch = global.fetch;
 const realSearch = tmdb.search;
 process.env.TMDB_API_KEY = 'test-key';
+const realSearchTheatres = fandango.searchTheatres;
 afterEach(() => {
+  fandango.searchTheatres = realSearchTheatres;
+  nowPlaying._internal.resetLookupBackoff();
   process.env.TMDB_API_KEY = 'test-key';
   pool.query = realQuery;
   global.fetch = realFetch;
@@ -423,4 +426,91 @@ test('a booked Unseen is matched to its listing by kind and day', async () => {
     { title: 'Wildwood' },
   ]);
   assert.deepEqual(out.map((f) => f.booked && f.booked.watch_id), ['u1', null, null, null]);
+});
+
+// app_state plus the diary's theatre counts, enough for visitedTheatres.
+function stubDiary(counts, state = {}) {
+  const store = new Map(Object.entries(state));
+  pool.query = async (sql, params) => {
+    if (/FROM theaters t/.test(sql)) return { rows: counts.map(([name, visits]) => ({ name, visits })) };
+    if (/^\s*INSERT INTO app_state/.test(sql)) {
+      store.set(params[0], params[1]);
+      return { rows: [] };
+    }
+    if (/FROM app_state/.test(sql)) return { rows: store.has(params[0]) ? [{ value: store.get(params[0]) }] : [] };
+    throw new Error(`unexpected query: ${sql}`);
+  };
+  return store;
+}
+
+const HOME = { id: 'AABPS', name: 'AMC Monmouth Mall 15', city: 'Eatontown', state: 'NJ' };
+const NEAR_HOME = [
+  { id: 'AABPS', name: 'AMC Monmouth Mall 15', city: 'Eatontown', state: 'NJ' },
+  { id: 'AABPR', name: 'AMC Freehold 14', city: 'Freehold', state: 'NJ' },
+  { id: 'AAHRP', name: 'AMC Brunswick Square 13', city: 'East Brunswick', state: 'NJ' },
+];
+
+test("the diary's theatres are matched near home, most visited first, and remembered", async () => {
+  const store = stubDiary([
+    ['AMC Brunswick Square 13', 46],
+    ['AMC Monmouth Mall 15', 11],
+    ['AMC Somewhere On Holiday 8', 2],
+    ['AMC Freehold 14', 1],
+  ]);
+  const asked = [];
+  fandango.searchTheatres = async (q) => {
+    asked.push(q);
+    return NEAR_HOME;
+  };
+  const { visitedTheatres } = nowPlaying._internal;
+  const out = await visitedTheatres({ home: HOME, saved: [] });
+  // The theatre that is not near home has no listing to open, so it is left out.
+  assert.deepEqual(out.map((t) => [t.id, t.name, t.visits]), [
+    ['AAHRP', 'AMC Brunswick Square 13', 46],
+    ['AABPS', 'AMC Monmouth Mall 15', 11],
+    ['AABPR', 'AMC Freehold 14', 1],
+  ]);
+  assert.deepEqual(asked, ['Eatontown, NJ']);
+  assert.ok(JSON.parse(store.get('now_playing_visited'))['amc brunswick square 13']);
+});
+
+test("the diary's theatres need no lookup once every name is known", async () => {
+  stubDiary([['AMC Brunswick Square 13', 46], ['AMC Monmouth Mall 15', 11]], {
+    now_playing_visited: JSON.stringify({ 'amc brunswick square 13': NEAR_HOME[2] }),
+  });
+  fandango.searchTheatres = async () => {
+    throw new Error('must not be called');
+  };
+  const out = await nowPlaying._internal.visitedTheatres({ home: HOME, saved: [] });
+  assert.deepEqual(out.map((t) => t.id), ['AAHRP', 'AABPS']);
+});
+
+test('a failed theatre lookup still lists what is known, and is not retried at once', async () => {
+  stubDiary([['AMC Brunswick Square 13', 46], ['AMC Monmouth Mall 15', 11]]);
+  let calls = 0;
+  fandango.searchTheatres = async () => {
+    calls += 1;
+    throw new Error('HTTP 503');
+  };
+  const view = await nowPlaying.theatresForView({ home: HOME, saved: [] });
+  assert.deepEqual(view.visited.map((t) => t.id), ['AABPS']);
+  await nowPlaying.theatresForView({ home: HOME, saved: [] });
+  assert.equal(calls, 1);
+});
+
+test('with no home theatre or an empty diary there is nothing to list', async () => {
+  fandango.searchTheatres = async () => {
+    throw new Error('must not be called');
+  };
+  stubDiary([['AMC Brunswick Square 13', 46]]);
+  assert.deepEqual((await nowPlaying.theatresForView({ home: null, saved: [] })).visited, []);
+  stubDiary([]);
+  assert.deepEqual((await nowPlaying.theatresForView({ home: HOME, saved: [] })).visited, []);
+});
+
+test('theatresForView never loses the saved theatres to a diary failure', async () => {
+  pool.query = async () => {
+    throw new Error('db down');
+  };
+  assert.deepEqual(await nowPlaying.theatresForView({ home: HOME, saved: [] }), { home: HOME, saved: [], visited: [] });
 });

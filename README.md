@@ -38,7 +38,7 @@ share what you're watching.
 **Now Playing**
 - **Showtimes at your AMC**: pick a home theatre and any others you go to. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
 - **Seats left and seat maps**: every showtime shows how many seats are open; tap it for the auditorium, seat by seat, refreshed while you look.
-- **Knows your diary**: films you have seen or already booked are marked.
+- **Knows your diary**: films you have seen or already booked are marked, and the theatres you have been to appear as one-tap chips, most visited first.
 - Showtimes and seats are read from Fandango's public site endpoints, with no key or account. They are undocumented, so this tab can break if Fandango changes them; the Status page reports it when it does.
 
 **Friends (federation)**

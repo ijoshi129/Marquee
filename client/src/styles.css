@@ -2995,6 +2995,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 }
 .np-theatre-chev { color: var(--accent); }
 
+.np-switch,
 .np-dates,
 .np-formats {
   display: flex;
@@ -3004,8 +3005,24 @@ input[type='date'].input-naked { color-scheme: dark; }
   margin: 0 -16px;
   padding: 2px 16px;
 }
+.np-switch::-webkit-scrollbar,
 .np-dates::-webkit-scrollbar,
 .np-formats::-webkit-scrollbar { display: none; }
+.np-switch { margin-bottom: 14px; }
+.np-switch-chip {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.np-switch-chip.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .np-date-pill {
   flex: 0 0 auto;
   display: flex;
@@ -3136,6 +3153,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 @media (hover: hover) {
   .np-time:not(:disabled):hover { border-color: var(--accent); background: var(--accent-soft); }
   .np-date-pill:hover { border-color: var(--accent); }
+  .np-switch-chip:hover { border-color: var(--accent); }
   .np-theatre:hover .np-theatre-name { color: var(--accent); }
 }
 
@@ -3235,6 +3253,14 @@ input[type='date'].input-naked { color-scheme: dark; }
   background: var(--accent);
   color: var(--accent-fg);
   white-space: nowrap;
+}
+.theatre-section {
+  margin: 14px 12px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
 }
 .theatre-added, .theatre-none { font-size: 0.8rem; color: var(--fg-mute); }
 .theatre-none { padding: 14px 12px; }
