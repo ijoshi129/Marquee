@@ -20,6 +20,16 @@ const matcher = require('../services/matcher');
 const pendingExpirer = require('./pending-expirer');
 const jobStatus = require('../services/job-status');
 
+// IMAP's SINCE takes a date, not a time, and Gmail may read that date in the
+// account's own timezone. So a search "since" some instant can return anything
+// from the start of the day before it. The ids we already hold have to cover
+// that whole span, or an email from earlier on the boundary day looks new and
+// is downloaded again on every poll.
+function knownIdsFrom(since) {
+  const d = new Date(since);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 1));
+}
+
 async function ingestPhase() {
   // For backfill / catch-up, look back 90 days the first time, then since the latest
   // email_log row's received_at - 1 day on subsequent runs.
@@ -38,7 +48,7 @@ async function ingestPhase() {
   if (since) {
     const known = await pool.query(
       'SELECT gmail_message_id FROM email_log WHERE received_at >= $1',
-      [since]
+      [knownIdsFrom(since)]
     );
     knownIds = new Set(known.rows.map((r) => r.gmail_message_id));
   }
@@ -228,4 +238,4 @@ function stop() {
   if (task) task.stop();
 }
 
-module.exports = { start, stop, pollOnce, processPhase };
+module.exports = { start, stop, pollOnce, processPhase, _internal: { knownIdsFrom, ingestPhase } };
