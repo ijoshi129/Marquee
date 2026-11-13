@@ -82,7 +82,7 @@ export default function StatusSheet({ onClose, focus }) {
           [...data.jobs.filter((j) => j.level !== 'off'), ...data.jobs.filter((j) => j.level === 'off')].map((j) => {
             const expanded = open === j.key;
             return (
-              <div key={j.key} className={`status-item ${j.level}`}>
+              <div key={j.key} className={`status-item ${j.level}${expanded ? ' open' : ''}`}>
                 <button
                   type="button"
                   className="status-main"
