@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.13';
+const WHATS_NEW_VERSION = '2.14';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.14',
+    sections: [
+      {
+        title: 'Now Playing needs no setup',
+        items: [
+          'You no longer have to pick a home theatre. Now Playing opens on the theatre you go to most, with the others from your diary one tap away.',
+          'Marquee finds each theatre from the address in your AMC reservation emails, so one you visited on a trip shows up too. A home theatre is still there if you want one to open first.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.13',
     sections: [

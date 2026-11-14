@@ -272,8 +272,9 @@ export default function NowPlayingView({ onOpenWatch }) {
     const saved = await api.setNpTheatres(next);
     setTheatres(saved);
     if (select) chooseTheatre(select);
-    // Choosing the first theatre is the whole errand, so show its board.
-    if (!hadHome && saved.home) setPicking(false);
+    // Choosing a first theatre from the search is the whole errand, so show
+    // its board. Marking one already listed as home leaves the list open.
+    if (!hadHome && saved.home && select) setPicking(false);
     return saved;
   }
 
@@ -284,8 +285,11 @@ export default function NowPlayingView({ onOpenWatch }) {
       {firstRun && (
         <div className="empty">
           <div className="empty-glyph">✦</div>
-          <div className="empty-headline">Pick your home theatre.</div>
-          <div className="empty-sub">Showtimes and open seats for the AMC you go to most.</div>
+          <div className="empty-headline">Pick a theatre.</div>
+          <div className="empty-sub">
+            Showtimes and open seats for your AMC. Once you have seen a film or two, the theatres in your diary show up
+            here on their own.
+          </div>
           <button type="button" className="np-cta" onClick={() => setPicking(true)}>
             Find a theatre
           </button>

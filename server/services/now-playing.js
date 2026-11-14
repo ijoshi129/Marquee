@@ -6,6 +6,8 @@ const logger = require('../logger');
 const jobStatus = require('./job-status');
 const fandango = require('./fandango');
 const tmdb = require('./tmdb');
+const { simpleParser } = require('mailparser');
+const { load, bodyText } = require('../parsers/util');
 const { normalizeText, cleanTitle } = require('../utils/normalize');
 
 const STATE_KEY = 'now_playing_theatres';
@@ -62,6 +64,7 @@ async function setTheatres(input) {
 
 const VISITED_KEY = 'now_playing_visited';
 const RETRY_LOOKUP_MS = 10 * 60 * 1000;
+const MAX_TOWNS = 4;
 let lookupFailedAt = 0;
 
 async function readVisitedMap() {
@@ -80,12 +83,55 @@ async function readVisitedMap() {
   }
 }
 
+// The ZIP printed after a theatre's name in a reservation email:
+//   "AMC Monmouth Mall 15 180 Rt 35 Eatontown, NJ 07724"
+// The first comma after the name has to be the one before the state, which
+// keeps out a Thank You email, where the name is followed by other text and
+// then AMC's own office address.
+function zipAfterName(text, name) {
+  const body = String(text || '').replace(/\s+/g, ' ');
+  let from = 0;
+  for (;;) {
+    const at = body.indexOf(name, from);
+    if (at === -1) return null;
+    const m = /^\s*[^,]{3,80},\s*[A-Z]{2}\s+(\d{5})\b/.exec(body.slice(at + name.length, at + name.length + 140));
+    if (m) return m[1];
+    from = at + name.length;
+  }
+}
+
+// Where a diary theatre is, read from the reservation emails for films seen
+// there. Null when it was only ever entered by hand.
+async function zipFromEmails(theatreName) {
+  const { rows } = await pool.query(
+    `SELECT el.raw_html
+       FROM theaters t
+       JOIN watches w ON w.theater_id = t.id
+       JOIN email_log el ON el.gmail_message_id = w.reservation_email_id
+      WHERE t.name = $1
+      ORDER BY el.received_at DESC
+      LIMIT 3`,
+    [theatreName]
+  );
+  for (const r of rows) {
+    try {
+      const mail = await simpleParser(r.raw_html);
+      const html = mail.html || mail.textAsHtml || '';
+      const zip = zipAfterName(bodyText(load(html)) || mail.text, theatreName);
+      if (zip) return zip;
+    } catch {
+      /* an email that will not parse just has no address to offer */
+    }
+  }
+  return null;
+}
+
 // The theatres the owner has watched films at, most visited first, each tied
 // to its listing so its showtimes can be opened. The diary only knows a
 // theatre by the name in AMC's emails and the showtimes source can only be
-// searched by place, so names are matched against the AMC theatres around the
-// home theatre. A match is kept for good; one that is not near home (a theatre
-// visited on a trip) is left out.
+// searched by place. So each one is looked up by the ZIP its reservation
+// emails print, which needs no home theatre and finds one visited on a trip.
+// A match is kept for good.
 async function visitedTheatres({ home, saved }) {
   const { rows } = await pool.query(
     `SELECT t.name, COUNT(*)::int AS visits
@@ -100,29 +146,45 @@ async function visitedTheatres({ home, saved }) {
   const known = await readVisitedMap();
   for (const t of [home, ...saved].filter(Boolean)) known[normalizeText(t.name)] = t;
 
-  const missing = rows.filter((r) => !known[normalizeText(r.name)]);
-  const canLook = home && home.city && home.state && Date.now() - lookupFailedAt > RETRY_LOOKUP_MS;
-  if (missing.length && canLook) {
-    try {
-      const near = await fandango.searchTheatres(`${home.city}, ${home.state}`);
+  const isMissing = (r) => !known[normalizeText(r.name)];
+  if (rows.some(isMissing) && Date.now() - lookupFailedAt > RETRY_LOOKUP_MS) {
+    let found = false;
+    const take = (near) => {
       const byName = new Map(near.map((t) => [normalizeText(t.name), t]));
-      let found = false;
-      for (const r of missing) {
+      for (const r of rows.filter(isMissing)) {
         const hit = cleanTheatre(byName.get(normalizeText(r.name)));
         if (!hit) continue;
         known[normalizeText(r.name)] = hit;
         found = true;
       }
-      if (found) {
-        await pool.query(
-          `INSERT INTO app_state (key, value) VALUES ($1, $2)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-          [VISITED_KEY, JSON.stringify(known)]
-        );
+    };
+    try {
+      // One search usually settles several: a ZIP's results are the AMCs
+      // around it, and a person's theatres tend to be near each other.
+      for (const r of rows) {
+        if (!isMissing(r)) continue;
+        const zip = await zipFromEmails(r.name);
+        if (zip) take(await fandango.searchTheatres(zip));
       }
+      // A search only reaches about fifteen miles, so one entered by hand is
+      // tried against the towns of the theatres already placed, home first.
+      const towns = [...new Set([home, ...Object.values(known)].filter((t) => t && t.city && t.state).map((t) => `${t.city}, ${t.state}`))];
+      for (const town of towns.slice(0, MAX_TOWNS)) {
+        if (!rows.some(isMissing)) break;
+        take(await fandango.searchTheatres(town));
+      }
+      // Whatever is still unmatched is not asked about again for a while.
+      if (rows.some(isMissing)) lookupFailedAt = Date.now();
     } catch (err) {
       lookupFailedAt = Date.now();
       logger.warn(`now-playing: could not look up the diary's theatres: ${err.message}`);
+    }
+    if (found) {
+      await pool.query(
+        `INSERT INTO app_state (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [VISITED_KEY, JSON.stringify(known)]
+      );
     }
   }
 
@@ -318,5 +380,5 @@ module.exports = {
   clearPosterCache,
   recordSuccess,
   recordFailure,
-  _internal: { cleanTheatres, visitedTheatres, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
+  _internal: { cleanTheatres, visitedTheatres, zipAfterName, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
 };

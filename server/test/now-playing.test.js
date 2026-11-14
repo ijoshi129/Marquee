@@ -429,9 +429,10 @@ test('a booked Unseen is matched to its listing by kind and day', async () => {
 });
 
 // app_state plus the diary's theatre counts, enough for visitedTheatres.
-function stubDiary(counts, state = {}) {
+function stubDiary(counts, state = {}, emails = {}) {
   const store = new Map(Object.entries(state));
   pool.query = async (sql, params) => {
+    if (/JOIN email_log/.test(sql)) return { rows: (emails[params[0]] || []).map((raw_html) => ({ raw_html })) };
     if (/FROM theaters t/.test(sql)) return { rows: counts.map(([name, visits]) => ({ name, visits })) };
     if (/^\s*INSERT INTO app_state/.test(sql)) {
       store.set(params[0], params[1]);
@@ -513,4 +514,81 @@ test('theatresForView never loses the saved theatres to a diary failure', async 
     throw new Error('db down');
   };
   assert.deepEqual(await nowPlaying.theatresForView({ home: HOME, saved: [] }), { home: HOME, saved: [], visited: [] });
+});
+
+const reservationEmail = (line) =>
+  ['From: AMC Theatres <amc@amctheatres.com>', 'Subject: Your Order', 'Content-Type: text/html; charset=utf-8', '', `<html><body><table><tr><td>Your Ticket Reservation Details</td></tr><tr><td>${line}</td></tr></table></body></html>`].join('\r\n');
+
+test('zipAfterName reads the ZIP printed after the theatre, and nothing looser', () => {
+  const { zipAfterName } = nowPlaying._internal;
+  assert.equal(zipAfterName('Get Directions AMC Monmouth Mall 15 180 Rt 35 Eatontown, NJ 07724 Add to calendar', 'AMC Monmouth Mall 15'), '07724');
+  // The name appears first in the ticket block with no address, then again with one.
+  assert.equal(
+    zipAfterName('AMC Freehold 14 The listed showtime is when the trailers start. AMC Freehold 14 101 Trotters Way Freehold, NJ 07728', 'AMC Freehold 14'),
+    '07728'
+  );
+  // A Thank You email: the only address after the name is AMC's own office.
+  assert.equal(
+    zipAfterName("AMC Freehold 14 We hope you enjoyed seeing Supergirl Don't Miss These Movies This email was sent by: AMC Theatres, 11500 Ash Street, Leawood, KS 66211", 'AMC Freehold 14'),
+    null
+  );
+  // Some mail renders with no space between the lines.
+  assert.equal(zipAfterName('AMC Brunswick Square 13755 Nj-18East Brunswick, NJ 08816', 'AMC Brunswick Square 13'), '08816');
+  assert.equal(zipAfterName('AMC Freehold 14', 'AMC Freehold 14'), null);
+  assert.equal(zipAfterName('', 'AMC Freehold 14'), null);
+});
+
+test("with no home theatre, the diary's theatres are found from their emails", async () => {
+  const store = stubDiary(
+    [['AMC Brunswick Square 13', 46], ['AMC Monmouth Mall 15', 11], ['AMC Vacation Spot 9', 2], ['AMC Freehold 14', 1]],
+    {},
+    {
+      'AMC Brunswick Square 13': [reservationEmail('AMC Brunswick Square 13 755 Nj-18 East Brunswick, NJ 08816')],
+      'AMC Vacation Spot 9': [reservationEmail('AMC Vacation Spot 9 1 Beach Rd Miami, FL 33139')],
+      // Freehold was only ever entered by hand: no email to read.
+    }
+  );
+  const asked = [];
+  fandango.searchTheatres = async (q) => {
+    asked.push(q);
+    if (q === '33139') return [{ id: 'AAMIA', name: 'AMC Vacation Spot 9', city: 'Miami', state: 'FL' }];
+    return NEAR_HOME;
+  };
+  const view = await nowPlaying.theatresForView({ home: null, saved: [] });
+  assert.equal(view.home, null);
+  assert.deepEqual(view.visited.map((t) => [t.id, t.visits]), [['AAHRP', 46], ['AABPS', 11], ['AAMIA', 2], ['AABPR', 1]]);
+  // Brunswick's ZIP settled Monmouth and Freehold too; only the trip needed its own search.
+  assert.deepEqual(asked, ['08816', '33139']);
+  assert.equal(Object.keys(JSON.parse(store.get('now_playing_visited'))).length, 4);
+});
+
+test('a theatre that cannot be placed is left out and not asked about again at once', async () => {
+  stubDiary([['AMC Brunswick Square 13', 46], ['AMC Nowhere 3', 1]], {}, {
+    'AMC Brunswick Square 13': [reservationEmail('AMC Brunswick Square 13 755 Nj-18 East Brunswick, NJ 08816')],
+  });
+  let calls = 0;
+  fandango.searchTheatres = async () => {
+    calls += 1;
+    return NEAR_HOME;
+  };
+  const first = await nowPlaying.theatresForView({ home: null, saved: [] });
+  assert.deepEqual(first.visited.map((t) => t.id), ['AAHRP']);
+  const callsAfterFirst = calls;
+  await nowPlaying.theatresForView({ home: null, saved: [] });
+  assert.equal(calls, callsAfterFirst);
+});
+
+test('a theatre entered by hand is tried against the towns of those already placed', async () => {
+  stubDiary([['AMC Brunswick Square 13', 46], ['AMC Monmouth Mall 15', 3]], {}, {
+    'AMC Brunswick Square 13': [reservationEmail('AMC Brunswick Square 13 755 Nj-18 East Brunswick, NJ 08816')],
+  });
+  const asked = [];
+  fandango.searchTheatres = async (q) => {
+    asked.push(q);
+    // Monmouth is out of reach of the ZIP, in reach of the town search.
+    return q === '08816' ? [NEAR_HOME[2]] : NEAR_HOME;
+  };
+  const view = await nowPlaying.theatresForView({ home: null, saved: [] });
+  assert.deepEqual(view.visited.map((t) => t.id), ['AAHRP', 'AABPS']);
+  assert.deepEqual(asked, ['08816', 'East Brunswick, NJ']);
 });
