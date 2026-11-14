@@ -18,6 +18,12 @@ const RELEASES = [
           'They come from your diary, so there is nothing to set up. Tap the theatre’s name to make any of them your home theatre.',
         ],
       },
+      {
+        title: 'Today means today',
+        items: [
+          'From early evening until midnight, Today was showing tomorrow’s showtimes, so you would see 11 AM shows at 7 PM. It now shows what is left of tonight.',
+        ],
+      },
     ],
   },
   {
