@@ -2,12 +2,24 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.11';
+const WHATS_NEW_VERSION = '2.13';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.13',
+    sections: [
+      {
+        title: 'Switch theatres in one tap',
+        items: [
+          'Now Playing shows a row of the theatres you’ve been to, most visited first, right under the theatre’s name. Tap one to see what’s on there. It remembers the one you were last looking at.',
+          'They come from your diary, so there is nothing to set up. Tap the theatre’s name to make any of them your home theatre.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.11',
     sections: [

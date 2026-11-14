@@ -160,7 +160,15 @@ export default function NowPlayingView({ onOpenWatch }) {
       .catch((e) => setErr(e.message));
   }, []);
 
-  const all = useMemo(() => (theatres ? [theatres.home, ...theatres.saved].filter(Boolean) : []), [theatres]);
+  // Home first, then the diary's theatres by visits, then any others saved.
+  const all = useMemo(() => {
+    if (!theatres) return [];
+    const out = [];
+    for (const t of [theatres.home, ...(theatres.visited || []), ...theatres.saved]) {
+      if (t && !out.some((o) => o.id === t.id)) out.push(t);
+    }
+    return out;
+  }, [theatres]);
   const theatre = all.find((t) => t.id === theatreId) || (theatres && theatres.home) || all[0] || null;
 
   const chooseTheatre = useCallback((id) => {
@@ -280,6 +288,23 @@ export default function NowPlayingView({ onOpenWatch }) {
             </span>
           </span>
         </button>
+      )}
+
+      {all.length > 1 && (
+        <div className="np-switch" role="tablist" aria-label="Your theatres">
+          {all.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={t.id === activeId}
+              className={`np-switch-chip ${t.id === activeId ? 'is-on' : ''}`}
+              onClick={() => t.id !== activeId && chooseTheatre(t.id)}
+            >
+              {t.name.replace(/^AMC\s+/i, '')}
+            </button>
+          ))}
+        </div>
       )}
 
       {dates.length > 0 && (

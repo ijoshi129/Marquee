@@ -58,6 +58,94 @@ async function setTheatres(input) {
   return value;
 }
 
+// ---------- theatres from the diary ----------
+
+const VISITED_KEY = 'now_playing_visited';
+const RETRY_LOOKUP_MS = 10 * 60 * 1000;
+let lookupFailedAt = 0;
+
+async function readVisitedMap() {
+  const { rows } = await pool.query('SELECT value FROM app_state WHERE key = $1', [VISITED_KEY]);
+  if (!rows[0]) return {};
+  try {
+    const parsed = JSON.parse(rows[0].value);
+    const out = {};
+    for (const [name, t] of Object.entries(parsed || {})) {
+      const clean = cleanTheatre(t);
+      if (clean) out[name] = clean;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// The theatres the owner has watched films at, most visited first, each tied
+// to its listing so its showtimes can be opened. The diary only knows a
+// theatre by the name in AMC's emails and the showtimes source can only be
+// searched by place, so names are matched against the AMC theatres around the
+// home theatre. A match is kept for good; one that is not near home (a theatre
+// visited on a trip) is left out.
+async function visitedTheatres({ home, saved }) {
+  const { rows } = await pool.query(
+    `SELECT t.name, COUNT(*)::int AS visits
+       FROM theaters t
+       JOIN watches w ON w.theater_id = t.id
+      WHERE w.status = 'watched'
+      GROUP BY t.id, t.name
+      ORDER BY visits DESC, MAX(COALESCE(w.watched_at, w.showtime)) DESC NULLS LAST`
+  );
+  if (!rows.length) return [];
+
+  const known = await readVisitedMap();
+  for (const t of [home, ...saved].filter(Boolean)) known[normalizeText(t.name)] = t;
+
+  const missing = rows.filter((r) => !known[normalizeText(r.name)]);
+  const canLook = home && home.city && home.state && Date.now() - lookupFailedAt > RETRY_LOOKUP_MS;
+  if (missing.length && canLook) {
+    try {
+      const near = await fandango.searchTheatres(`${home.city}, ${home.state}`);
+      const byName = new Map(near.map((t) => [normalizeText(t.name), t]));
+      let found = false;
+      for (const r of missing) {
+        const hit = cleanTheatre(byName.get(normalizeText(r.name)));
+        if (!hit) continue;
+        known[normalizeText(r.name)] = hit;
+        found = true;
+      }
+      if (found) {
+        await pool.query(
+          `INSERT INTO app_state (key, value) VALUES ($1, $2)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [VISITED_KEY, JSON.stringify(known)]
+        );
+      }
+    } catch (err) {
+      lookupFailedAt = Date.now();
+      logger.warn(`now-playing: could not look up the diary's theatres: ${err.message}`);
+    }
+  }
+
+  const out = [];
+  for (const r of rows) {
+    const t = known[normalizeText(r.name)];
+    if (t && !out.some((o) => o.id === t.id)) out.push({ ...t, visits: r.visits });
+  }
+  return out;
+}
+
+// What the Now Playing tab opens with: the saved theatres plus the diary's.
+// The diary's list is a convenience, so a failure there never hides the rest.
+async function theatresForView(settings) {
+  const base = settings || (await getTheatres());
+  try {
+    return { ...base, visited: await visitedTheatres(base) };
+  } catch (err) {
+    logger.error({ err }, "now-playing: could not list the diary's theatres");
+    return { ...base, visited: [] };
+  }
+}
+
 const titleKey = (title) => normalizeText(cleanTitle(title || ''));
 
 const UNSEEN = /amc\s+(screen|scream)\s+unseen/i;
@@ -223,11 +311,12 @@ module.exports = {
   JOB,
   getTheatres,
   setTheatres,
+  theatresForView,
   flagFilms,
   fillPosters,
   tmdbPoster,
   clearPosterCache,
   recordSuccess,
   recordFailure,
-  _internal: { cleanTheatres, titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
+  _internal: { cleanTheatres, visitedTheatres, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
 };
