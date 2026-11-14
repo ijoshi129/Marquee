@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
-import { MONTH_NAMES, fmtRuntime, fmtShowtime } from '../format';
+import { MONTH_NAMES, fmtRuntime, fmtShowtime, localDate } from '../format';
 import SeatMapSheet from './SeatMapSheet';
 import TheatrePicker from './TheatrePicker';
 
@@ -143,7 +143,7 @@ export default function NowPlayingView({ onOpenWatch }) {
   const [theatres, setTheatres] = useState(null);
   const [theatreId, setTheatreId] = useState(storedTheatre);
   const [date, setDate] = useState(null);
-  const [today, setToday] = useState(null);
+  const [today, setToday] = useState(localDate);
   const [board, setBoard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -174,7 +174,6 @@ export default function NowPlayingView({ onOpenWatch }) {
   const chooseTheatre = useCallback((id) => {
     setTheatreId(id);
     setDate(null);
-    setToday(null);
     setBoard(null);
     setFormat('All');
     try {
@@ -182,26 +181,43 @@ export default function NowPlayingView({ onOpenWatch }) {
     } catch {}
   }, []);
 
+  // The day is always named in the request. Left out, the showtimes source
+  // answers for its own today, which turns over at midnight UTC: early evening
+  // in the US, when it would hand back tomorrow's board as today's.
+  useEffect(() => {
+    const tick = () => setToday(localDate());
+    const id = setInterval(tick, 60000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, []);
+
+  // A new day: a date picked before it may now be in the past.
+  useEffect(() => {
+    setDate(null);
+  }, [today]);
+
   const activeId = theatre ? theatre.id : null;
+  const shownDate = date || today;
   useEffect(() => {
     if (!activeId) return undefined;
     let alive = true;
     setLoading(true);
     setErr(null);
     api
-      .npShowtimes(activeId, date)
+      .npShowtimes(activeId, shownDate)
       .then((b) => {
         if (!alive) return;
         setBoard(b);
-        // The first, dateless request answers for the theatre's own today.
-        if (!date && b.date) setToday(b.date);
       })
       .catch((e) => alive && setErr(e.message))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [activeId, date]);
+  }, [activeId, shownDate]);
 
   const needCounts = useCallback((film) => {
     const hashes = [];
@@ -246,11 +262,10 @@ export default function NowPlayingView({ onOpenWatch }) {
 
   const dates = useMemo(() => {
     if (!board) return [];
-    const list = (board.dates || []).filter((d) => !today || d >= today);
-    if (today && !list.includes(today)) list.unshift(today);
+    const list = (board.dates || []).filter((d) => d >= today);
+    if (!list.includes(today)) list.unshift(today);
     return list;
   }, [board, today]);
-  const shownDate = date || today;
 
   async function saveTheatres(next, select) {
     const hadHome = Boolean(theatres && theatres.home);

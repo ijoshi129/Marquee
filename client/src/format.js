@@ -28,6 +28,13 @@ export function fmtShowtime(iso) {
   return `${date} · ${time}`;
 }
 
+// Today's date where the phone is, as 'YYYY-MM-DD'. Not toISOString(): that is
+// the date in UTC, which is already tomorrow from early evening in the US.
+export function localDate(d = new Date()) {
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+}
+
 // An Unseen's actual title stays hidden until the owner has seen the film —
 // revealing it earlier (in the diary or as an "Identify?" prompt) spoils the
 // mystery screening. Reveal 2h after the showtime, roughly when the film lets
