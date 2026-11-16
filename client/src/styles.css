@@ -3171,7 +3171,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 }
 
 /* Film info sheet */
-.film-card { max-width: 620px; max-height: 92vh; overflow-y: auto; }
+.film-card { max-width: 620px; max-height: 92vh; max-height: 92dvh; }
 .film-hero { display: flex; gap: 16px; align-items: flex-start; margin: 4px 12px 14px; }
 .film-poster {
   flex: 0 0 auto;
@@ -3230,7 +3230,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .film-loading, .film-none { margin: 6px 12px 10px; font-size: 13.5px; color: var(--fg-mute); }
 
 /* Seat map sheet */
-.seat-card { max-width: 720px; max-height: 92vh; overflow-y: auto; }
+.seat-card { max-width: 720px; max-height: 92vh; max-height: 92dvh; }
 .seat-head { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .seat-title { font-family: var(--font-display); font-size: 20px; line-height: 1.15; letter-spacing: -0.01em; }
 .seat-sub {
@@ -3292,7 +3292,6 @@ input[type='date'].input-naked { color-scheme: dark; }
 .seat-stale { margin: 10px 12px 0; font-size: 12px; color: var(--warn); }
 
 /* Theatre picker sheet */
-.theatre-card { max-height: 88vh; overflow-y: auto; }
 .theatre-row { display: flex; align-items: center; gap: 12px; padding: 4px 12px; border-radius: var(--radius-md); }
 .theatre-row + .theatre-row { border-top: 1px solid var(--bg-tint); }
 .theatre-row.is-current .theatre-name { color: var(--accent); }
@@ -3631,7 +3630,15 @@ input[type='date'].input-naked { color-scheme: dark; }
   background: linear-gradient(180deg, var(--bg-elev-2), var(--bg-elev));
   border: 1px solid var(--bg-tint-strong); border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); box-shadow: 0 -30px 70px -20px #000;
+  /* Every sheet stops short of the top of the screen and scrolls. Without
+     this a long one grows off the top with no way to reach it. dvh is the
+     height actually visible on a phone, where vh ignores the browser's bars. */
+  max-height: 88vh; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain;
 }
+/* The bell: its title row and the Status line stay put, the list scrolls. */
+.notif-card { display: flex; flex-direction: column; overflow: hidden; }
+.notif-card > * { flex-shrink: 0; }
+.notif-card > .notif-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .fmenu-grab { width: 38px; height: 4px; border-radius: 99px; background: var(--bg-tint-strong); margin: 6px auto 12px; }
 .fmenu-row {
   width: 100%; display: flex; align-items: center; gap: 14px; padding: 15px 12px;
@@ -3770,7 +3777,6 @@ input[type='date'].input-naked { color-scheme: dark; }
 .qr-canvas { border-radius: var(--radius-md); background: #fff; display: block; }
 
 /* Status sheet: one row per background job, plus its entry at the foot of the bell */
-.status-card { max-height: 88vh; overflow-y: auto; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--fg-faint); }
 .ok > .status-dot, .ok > .status-main .status-dot { background: var(--success); }
 .warn > .status-dot, .warn > .status-main .status-dot { background: var(--warn); }

@@ -24,6 +24,12 @@ const RELEASES = [
           'Tap a film’s poster or title in Now Playing for its synopsis, director, cast, score and trailer.',
         ],
       },
+      {
+        title: 'Notifications scroll again',
+        items: [
+          'With a long list, the notifications panel ran off the top of the screen and could not be scrolled. It now stops short of the top, and the list scrolls between the title row and the Status line.',
+        ],
+      },
     ],
   },
   {
