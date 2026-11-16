@@ -8,7 +8,7 @@ const fandango = require('./fandango');
 const tmdb = require('./tmdb');
 const { simpleParser } = require('mailparser');
 const { load, bodyText } = require('../parsers/util');
-const { normalizeText, cleanTitle } = require('../utils/normalize');
+const { normalizeText, cleanTitle, isRerelease } = require('../utils/normalize');
 
 const STATE_KEY = 'now_playing_theatres';
 const MAX_SAVED = 12;
@@ -290,39 +290,71 @@ const POSTER_MISS_MS = 6 * 60 * 60 * 1000;
 const MAX_POSTERS = 500;
 const posterCache = new Map();
 
-// TMDB's poster for a film the showtimes source has none for. Only a result
-// with the same title counts: a blank poster is better than the wrong film's.
-async function tmdbPoster(title, year) {
+// The TMDB film a listing is, or null. Only a result with the same title
+// counts, and within a year of the listing's when it gives one: no answer is
+// better than the wrong film's poster or synopsis. Answers are remembered.
+function tmdbMatch(title, year, { needPoster = false } = {}) {
   const want = titleKey(title);
   // Without a TMDB key there is nothing to ask, and no reason to log it per film.
-  if (!want || !process.env.TMDB_API_KEY) return null;
-  const key = `${want}|${year || ''}`;
+  if (!want || !process.env.TMDB_API_KEY) return Promise.resolve(null);
+  const key = `${want}|${year || ''}|${needPoster ? 'p' : ''}`;
   const hit = posterCache.get(key);
   if (hit && hit.expires > Date.now()) return hit.promise;
 
   const promise = (async () => {
     const results = await tmdb.search(cleanTitle(title));
     const same = results.filter(
-      (r) => r.poster_url && (titleKey(r.title) === want || titleKey(r.original_title) === want)
+      (r) => (!needPoster || r.poster_url) && (titleKey(r.title) === want || titleKey(r.original_title) === want)
     );
-    const top = tmdb.rankResults(same, { year: year || undefined })[0];
+    // A re-release is listed under this year but is the film from its first
+    // run, so the year says nothing and the best-known film of that title wins.
+    const rerelease = isRerelease(title);
+    const top = tmdb.rankResults(same, { year: year || undefined, rerelease })[0];
     if (!top) return null;
-    if (year && top.release_year != null && Math.abs(top.release_year - year) > 1) return null;
-    // The list shows posters at thumbnail size.
-    return top.poster_url.replace('/t/p/w500/', '/t/p/w185/');
+    if (!rerelease && year && top.release_year != null && Math.abs(top.release_year - year) > 1) return null;
+    return top;
   })();
 
   const entry = { promise, expires: Date.now() + POSTER_HIT_MS };
   posterCache.set(key, entry);
   promise.then(
-    (url) => {
-      if (!url) entry.expires = Date.now() + POSTER_MISS_MS;
+    (found) => {
+      if (!found) entry.expires = Date.now() + POSTER_MISS_MS;
     },
     () => {
       if (posterCache.get(key) === entry) posterCache.delete(key);
     }
   );
   if (posterCache.size > MAX_POSTERS) posterCache.delete(posterCache.keys().next().value);
+  return promise;
+}
+
+// TMDB's poster for a film the showtimes source has none for.
+async function tmdbPoster(title, year) {
+  const match = await tmdbMatch(title, year, { needPoster: true });
+  // The list shows posters at thumbnail size.
+  return match ? match.poster_url.replace('/t/p/w500/', '/t/p/w185/') : null;
+}
+
+const INFO_MS = 24 * 60 * 60 * 1000;
+const infoCache = new Map();
+
+// Synopsis, cast, score and trailer for the film sheet, or null when the film
+// cannot be placed. An Unseen is never looked up: its listing says nothing,
+// and finding out what it is would be the spoiler.
+async function filmInfo(title, year) {
+  if (unseenKind(title)) return null;
+  const match = await tmdbMatch(title, year);
+  if (!match) return null;
+  const hit = infoCache.get(match.tmdb_id);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = tmdb.filmInfo(match.tmdb_id);
+  const entry = { promise, expires: Date.now() + INFO_MS };
+  infoCache.set(match.tmdb_id, entry);
+  promise.catch(() => {
+    if (infoCache.get(match.tmdb_id) === entry) infoCache.delete(match.tmdb_id);
+  });
+  if (infoCache.size > MAX_POSTERS) infoCache.delete(infoCache.keys().next().value);
   return promise;
 }
 
@@ -347,6 +379,7 @@ async function fillPosters(films) {
 
 function clearPosterCache() {
   posterCache.clear();
+  infoCache.clear();
 }
 
 // Successes are frequent and all alike, so only one in five minutes is written
@@ -377,6 +410,7 @@ module.exports = {
   flagFilms,
   fillPosters,
   tmdbPoster,
+  filmInfo,
   clearPosterCache,
   recordSuccess,
   recordFailure,

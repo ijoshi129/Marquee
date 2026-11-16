@@ -77,6 +77,19 @@ router.get('/poster', async (req, res) => {
   }
 });
 
+// More about one film on the board: synopsis, cast, score, trailer.
+router.get('/film', async (req, res) => {
+  const title = String(req.query.title || '').slice(0, 200);
+  const year = /^\d{4}$/.test(String(req.query.year || '')) ? Number(req.query.year) : null;
+  if (!title.trim()) return res.status(400).json({ error: 'title is required' });
+  try {
+    res.json({ info: await nowPlaying.filmInfo(title, year) });
+  } catch (err) {
+    logger.warn(`now-playing: film info failed for "${title}": ${err.message}`);
+    res.status(502).json({ error: 'Film details are not answering right now' });
+  }
+});
+
 router.post('/seats/counts', async (req, res) => {
   try {
     const hashes = Array.isArray(req.body.hashes) ? req.body.hashes : [];

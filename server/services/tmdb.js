@@ -68,6 +68,44 @@ async function fetchDetails(tmdbId) {
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// The official trailer if there is one, else any trailer, else a teaser.
+function pickTrailer(videos) {
+  const onYouTube = (videos || []).filter((v) => v && v.site === 'YouTube' && v.key);
+  const rank = (v) => (v.type === 'Trailer' ? 0 : v.type === 'Teaser' ? 2 : 4) + (v.official ? 0 : 1);
+  const best = onYouTube.filter((v) => v.type === 'Trailer' || v.type === 'Teaser').sort((a, b) => rank(a) - rank(b))[0];
+  return best ? `https://www.youtube.com/watch?v=${best.key}` : null;
+}
+
+// Everything the film sheet in Now Playing shows. Kept apart from the diary's
+// cached details: this is for films the owner has not seen, and it carries the
+// cast, score and trailer that the diary has no use for.
+async function filmInfo(tmdbId) {
+  const data = await tmdbFetch(`/movie/${tmdbId}`, { append_to_response: 'credits,videos' });
+  const crew = data.credits?.crew || [];
+  const cast = (data.credits?.cast || [])
+    .slice()
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+    .slice(0, 6)
+    .map((c) => ({ name: c.name, character: c.character || null }));
+  return {
+    tmdb_id: data.id,
+    title: data.title,
+    tagline: data.tagline || null,
+    overview: data.overview || null,
+    release_date: data.release_date || null,
+    runtime_minutes: data.runtime || null,
+    genres: (data.genres || []).map((g) => g.name),
+    directors: crew.filter((c) => c.job === 'Director').map((c) => c.name),
+    cast,
+    score: data.vote_count >= 10 && data.vote_average ? Math.round(data.vote_average * 10) / 10 : null,
+    votes: data.vote_count || 0,
+    poster_url: data.poster_path ? POSTER_BASE + data.poster_path : null,
+    backdrop_url: data.backdrop_path ? `https://image.tmdb.org/t/p/w780${data.backdrop_path}` : null,
+    trailer_url: pickTrailer(data.videos?.results),
+    tmdb_url: `https://www.themoviedb.org/movie/${data.id}`,
+  };
+}
+
 async function getOrFetchDetails(tmdbId) {
   const cached = await pool.query(
     'SELECT payload, fetched_at FROM tmdb_cache WHERE tmdb_id = $1',
@@ -161,4 +199,4 @@ function similarity(a, b) {
   return inter / (ax.size + bx.size - inter || 1);
 }
 
-module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf };
+module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf, filmInfo, pickTrailer };

@@ -24,8 +24,10 @@ const realFetch = global.fetch;
 const realSearch = tmdb.search;
 process.env.TMDB_API_KEY = 'test-key';
 const realSearchTheatres = fandango.searchTheatres;
+const realFilmInfo = tmdb.filmInfo;
 afterEach(() => {
   fandango.searchTheatres = realSearchTheatres;
+  tmdb.filmInfo = realFilmInfo;
   nowPlaying._internal.resetLookupBackoff();
   process.env.TMDB_API_KEY = 'test-key';
   pool.query = realQuery;
@@ -591,4 +593,106 @@ test('a theatre entered by hand is tried against the towns of those already plac
   const view = await nowPlaying.theatresForView({ home: null, saved: [] });
   assert.deepEqual(view.visited.map((t) => t.id), ['AAHRP', 'AABPS']);
   assert.deepEqual(asked, ['08816', 'East Brunswick, NJ']);
+});
+
+test('pickTrailer prefers the official trailer, then any trailer, then a teaser', () => {
+  const v = (type, official, key, site = 'YouTube') => ({ type, official, key, site });
+  assert.equal(
+    tmdb.pickTrailer([v('Teaser', true, 'teaser'), v('Trailer', false, 'fan'), v('Trailer', true, 'official'), v('Featurette', true, 'extra')]),
+    'https://www.youtube.com/watch?v=official'
+  );
+  assert.equal(tmdb.pickTrailer([v('Teaser', true, 'teaser'), v('Trailer', false, 'fan')]), 'https://www.youtube.com/watch?v=fan');
+  assert.equal(tmdb.pickTrailer([v('Featurette', true, 'extra'), v('Teaser', false, 'teaser')]), 'https://www.youtube.com/watch?v=teaser');
+  // Not on YouTube, or nothing that is a trailer: no link.
+  assert.equal(tmdb.pickTrailer([v('Trailer', true, 'x', 'Vimeo'), v('Clip', true, 'clip')]), null);
+  assert.equal(tmdb.pickTrailer(undefined), null);
+});
+
+test('tmdb.filmInfo shapes the synopsis, people, score and trailer', async () => {
+  let asked = null;
+  global.fetch = async (url) => {
+    asked = new URL(url);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 777,
+        title: 'Clayface',
+        tagline: 'Wear a new face.',
+        overview: 'An actor is offered a way back.',
+        release_date: '2026-09-11',
+        runtime: 118,
+        genres: [{ name: 'Horror' }, { name: 'Thriller' }],
+        vote_average: 7.26,
+        vote_count: 412,
+        poster_path: '/p.jpg',
+        backdrop_path: '/b.jpg',
+        credits: {
+          crew: [{ job: 'Producer', name: 'P' }, { job: 'Director', name: 'James Watkins' }],
+          cast: [
+            { name: 'Third', character: 'C', order: 2 },
+            { name: 'Lead', character: 'Matt Hagen', order: 0 },
+            { name: 'Second', character: 'B', order: 1 },
+            ...[3, 4, 5, 6, 7].map((n) => ({ name: `Extra ${n}`, character: '', order: n })),
+          ],
+        },
+        videos: { results: [{ type: 'Trailer', official: true, site: 'YouTube', key: 'abc123' }] },
+      }),
+    };
+  };
+  const info = await tmdb.filmInfo(777);
+  assert.equal(asked.pathname, '/3/movie/777');
+  assert.equal(asked.searchParams.get('append_to_response'), 'credits,videos');
+  assert.deepEqual(
+    { title: info.title, tagline: info.tagline, runtime: info.runtime_minutes, genres: info.genres, directors: info.directors, score: info.score },
+    { title: 'Clayface', tagline: 'Wear a new face.', runtime: 118, genres: ['Horror', 'Thriller'], directors: ['James Watkins'], score: 7.3 }
+  );
+  assert.deepEqual(info.cast.map((c) => c.name), ['Lead', 'Second', 'Third', 'Extra 3', 'Extra 4', 'Extra 5']);
+  assert.equal(info.trailer_url, 'https://www.youtube.com/watch?v=abc123');
+  assert.equal(info.tmdb_url, 'https://www.themoviedb.org/movie/777');
+  assert.equal(info.backdrop_url, 'https://image.tmdb.org/t/p/w780/b.jpg');
+});
+
+test('tmdb.filmInfo hides a score that only a handful of people voted on', async () => {
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ id: 1, title: 'Tiny', vote_average: 10, vote_count: 3 }) });
+  const info = await tmdb.filmInfo(1);
+  assert.deepEqual({ score: info.score, cast: info.cast, directors: info.directors, trailer: info.trailer_url, overview: info.overview }, { score: null, cast: [], directors: [], trailer: null, overview: null });
+});
+
+test('film info is looked up once per film, and never for an Unseen', async () => {
+  let searches = 0;
+  let fetches = 0;
+  tmdb.search = async () => {
+    searches += 1;
+    return [result('Clayface', 2026, 80), result('Clayface', 1998, 5)];
+  };
+  tmdb.filmInfo = async (id) => {
+    fetches += 1;
+    return { tmdb_id: id, title: 'Clayface' };
+  };
+  assert.deepEqual(await nowPlaying.filmInfo('Clayface', 2026), { tmdb_id: 2026, title: 'Clayface' });
+  await nowPlaying.filmInfo('Clayface', 2026);
+  assert.deepEqual([searches, fetches], [1, 1]);
+
+  // No same-titled film near that year: nothing, and no details request.
+  assert.equal(await nowPlaying.filmInfo('Clayface', 2010), null);
+  assert.equal(fetches, 1);
+
+  assert.equal(await nowPlaying.filmInfo('AMC Screen Unseen: November 16', null), null);
+  assert.equal(searches, 2);
+});
+
+test('a film with no poster on TMDB can still be described', async () => {
+  tmdb.search = async () => [result('Mouse', 2026, 5, null)];
+  tmdb.filmInfo = async (id) => ({ tmdb_id: id });
+  assert.equal(await nowPlaying.tmdbPoster('Mouse', 2026), null);
+  assert.deepEqual(await nowPlaying.filmInfo('Mouse', 2026), { tmdb_id: 2026 });
+});
+
+test('a re-release is matched to the original film, whatever year it is listed under', async () => {
+  tmdb.search = async (q) => {
+    assert.equal(q, 'Top Gun');
+    return [result('Top Gun', 1986, 60), result('Top Gun', 2025, 2)];
+  };
+  assert.equal(await nowPlaying.tmdbPoster('Top Gun 40th Anniversary', 2026), 'https://image.tmdb.org/t/p/w185/TopGun1986.jpg');
 });
