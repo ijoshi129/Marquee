@@ -2,12 +2,25 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.14';
+const WHATS_NEW_VERSION = '2.15';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.15',
+    sections: [
+      {
+        title: 'Guess the Unseen',
+        items: [
+          'Tap an upcoming Screen Unseen or Scream Unseen in Now Playing, then Show likely candidates, for a ranked shortlist of what it could be.',
+          'It works from what AMC publishes (the rating and a runtime), which films open in the next three weeks, and the record: most Unseens reach cinemas 4 or 11 days later. Each guess says why it fits.',
+          'The list stays closed until you ask for it, every time, so it never spoils one by accident. These are guesses, not a leak.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.14',
     sections: [

@@ -2,6 +2,7 @@ const express = require('express');
 const logger = require('../logger');
 const fandango = require('../services/fandango');
 const nowPlaying = require('../services/now-playing');
+const unseenGuess = require('../services/unseen-guess');
 
 const router = express.Router();
 
@@ -87,6 +88,23 @@ router.get('/film', async (req, res) => {
   } catch (err) {
     logger.warn(`now-playing: film info failed for "${title}": ${err.message}`);
     res.status(502).json({ error: 'Film details are not answering right now' });
+  }
+});
+
+// Guesses at what an upcoming Unseen is. Asked for only when the owner taps to
+// see them: the sheet never loads this on its own.
+router.get('/unseen-guesses', async (req, res) => {
+  const date = String(req.query.date || '');
+  const kind = String(req.query.kind || '');
+  const rating = /^(G|PG|PG-13|R|NC-17)$/i.test(String(req.query.rating || '')) ? String(req.query.rating).toUpperCase() : null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !['screen', 'scream'].includes(kind)) {
+    return res.status(400).json({ error: 'date and kind are required' });
+  }
+  try {
+    res.json(await unseenGuess.guesses({ date, kind, rating }));
+  } catch (err) {
+    logger.warn(`now-playing: unseen guesses failed for ${date}: ${err.message}`);
+    res.status(502).json({ error: 'Could not work out candidates right now' });
   }
 });
 

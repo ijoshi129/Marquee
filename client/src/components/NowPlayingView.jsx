@@ -410,7 +410,7 @@ export default function NowPlayingView({ onOpenWatch }) {
         ))}
       </div>
 
-      {about && <FilmInfoSheet film={about} onClose={() => setAbout(null)} />}
+      {about && <FilmInfoSheet film={about} date={shownDate} onClose={() => setAbout(null)} />}
 
       {seat && (
         <SeatMapSheet

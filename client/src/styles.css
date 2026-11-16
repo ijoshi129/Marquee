@@ -3229,6 +3229,80 @@ input[type='date'].input-naked { color-scheme: dark; }
 .film-more { font-size: 13px; color: var(--accent); text-decoration: none; }
 .film-loading, .film-none { margin: 6px 12px 10px; font-size: 13.5px; color: var(--fg-mute); }
 
+/* Likely candidates for an Unseen, inside the film sheet */
+.film-candidate { margin-top: 8px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.guess-gate { margin: 4px 12px 8px; }
+.guess-reveal {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.guess-note { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--fg-mute); }
+.guess { margin: 4px 12px 6px; }
+.guess-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  margin-bottom: 8px;
+}
+.guess-basis, .guess-revealed { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--fg-dim); }
+.guess-revealed b { color: var(--fg); }
+.guess .film-none { margin-left: 0; margin-right: 0; }
+.guess-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--bg-tint);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.guess-poster {
+  flex: 0 0 auto;
+  width: 40px;
+  aspect-ratio: 2 / 3;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  color: var(--fg-mute);
+}
+.guess-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.guess-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.guess-name { font-size: 0.95rem; font-weight: 600; }
+.guess-why { font-size: 0.74rem; line-height: 1.4; color: var(--fg-dim); }
+.guess-fit {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--pill-bg);
+  color: var(--fg-mute);
+}
+.guess-fit.strong { background: var(--accent-soft); color: var(--accent); }
+.guess-fit.possible { background: var(--pill-bg-on); color: var(--pill-fg); }
+
 /* Seat map sheet */
 .seat-card { max-width: 720px; max-height: 92vh; max-height: 92dvh; }
 .seat-head { display: flex; flex-direction: column; gap: 3px; min-width: 0; }

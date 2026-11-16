@@ -205,3 +205,33 @@ test('megathread discovery reports nothing when Reddit is closed and no thread i
   stubState(null);
   assert.equal(await unseenLookup._internal.findCurrentMegathreadId(), null);
 });
+
+const { parseUnrevealed } = require('../services/unseen-lookup');
+
+// The shape the megathread took on 2026-11-16: past screenings carry their
+// title inline, the ones still to come carry AMC's rating and runtime.
+const UPCOMING_HTML = `<div class="md"><ul>
+<li><p><a href="https://www.amctheatres.com/movies/amc-screen-unseen-november-9-85345">105.Paper Tiger -R - NEON - Nov 9 2026</a></p></li>
+<li><p><a href="https://www.amctheatres.com/movies/amc-screen-unseen-november-16-85583">106.Rated PG - 1h54m - Nov 16 2026</a> - ARR-1h54m AR-TBD - Screen Unseen - Revealed As: TBD</p></li>
+<li><p><a href="https://www.amctheatres.com/movies/amc-screen-unseen-december-14-85614">107.Rated PG-13 - 2h9m - Dec 14 2026</a> - Revealed As: TBD</p></li>
+<li><p><a href="https://www.amctheatres.com/movies/amc-scream-unseen-december-21-85615">108.Rated R - 2h - Dec 21 2026</a> - Revealed As: TBD</p></li>
+</ul></div>`;
+
+test('parseUnrevealed reads the rating and runtime of the screenings still to come', () => {
+  const $ = cheerio.load(UPCOMING_HTML);
+  assert.deepEqual(parseUnrevealed($, $('.md').first()), [
+    { number: 106, date: '2026-11-16', type: 'screen', rating: 'PG', runtime: 114 },
+    { number: 107, date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 },
+    { number: 108, date: '2026-12-21', type: 'scream', rating: 'R', runtime: 120 },
+  ]);
+});
+
+test('the revealed and unrevealed readings of one thread do not overlap', () => {
+  const $ = cheerio.load(UPCOMING_HTML);
+  const md = $('.md').first();
+  const revealed = parseMegathread($, md);
+  assert.deepEqual(revealed.map((e) => [e.title, e.date, e.studio]), [['Paper Tiger', '2026-11-09', 'NEON']]);
+  // The diary's reader keeps its old shape: no runtime field.
+  assert.equal('runtime' in revealed[0], false);
+  assert.equal(parseUnrevealed($, md).length, 3);
+});
