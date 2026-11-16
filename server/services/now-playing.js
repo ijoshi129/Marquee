@@ -6,7 +6,9 @@ const logger = require('../logger');
 const jobStatus = require('./job-status');
 const fandango = require('./fandango');
 const tmdb = require('./tmdb');
-const { normalizeText, cleanTitle } = require('../utils/normalize');
+const { simpleParser } = require('mailparser');
+const { load, bodyText } = require('../parsers/util');
+const { normalizeText, cleanTitle, isRerelease } = require('../utils/normalize');
 
 const STATE_KEY = 'now_playing_theatres';
 const MAX_SAVED = 12;
@@ -62,6 +64,7 @@ async function setTheatres(input) {
 
 const VISITED_KEY = 'now_playing_visited';
 const RETRY_LOOKUP_MS = 10 * 60 * 1000;
+const MAX_TOWNS = 4;
 let lookupFailedAt = 0;
 
 async function readVisitedMap() {
@@ -80,12 +83,55 @@ async function readVisitedMap() {
   }
 }
 
+// The ZIP printed after a theatre's name in a reservation email:
+//   "AMC Monmouth Mall 15 180 Rt 35 Eatontown, NJ 07724"
+// The first comma after the name has to be the one before the state, which
+// keeps out a Thank You email, where the name is followed by other text and
+// then AMC's own office address.
+function zipAfterName(text, name) {
+  const body = String(text || '').replace(/\s+/g, ' ');
+  let from = 0;
+  for (;;) {
+    const at = body.indexOf(name, from);
+    if (at === -1) return null;
+    const m = /^\s*[^,]{3,80},\s*[A-Z]{2}\s+(\d{5})\b/.exec(body.slice(at + name.length, at + name.length + 140));
+    if (m) return m[1];
+    from = at + name.length;
+  }
+}
+
+// Where a diary theatre is, read from the reservation emails for films seen
+// there. Null when it was only ever entered by hand.
+async function zipFromEmails(theatreName) {
+  const { rows } = await pool.query(
+    `SELECT el.raw_html
+       FROM theaters t
+       JOIN watches w ON w.theater_id = t.id
+       JOIN email_log el ON el.gmail_message_id = w.reservation_email_id
+      WHERE t.name = $1
+      ORDER BY el.received_at DESC
+      LIMIT 3`,
+    [theatreName]
+  );
+  for (const r of rows) {
+    try {
+      const mail = await simpleParser(r.raw_html);
+      const html = mail.html || mail.textAsHtml || '';
+      const zip = zipAfterName(bodyText(load(html)) || mail.text, theatreName);
+      if (zip) return zip;
+    } catch {
+      /* an email that will not parse just has no address to offer */
+    }
+  }
+  return null;
+}
+
 // The theatres the owner has watched films at, most visited first, each tied
 // to its listing so its showtimes can be opened. The diary only knows a
 // theatre by the name in AMC's emails and the showtimes source can only be
-// searched by place, so names are matched against the AMC theatres around the
-// home theatre. A match is kept for good; one that is not near home (a theatre
-// visited on a trip) is left out.
+// searched by place. So each one is looked up by the ZIP its reservation
+// emails print, which needs no home theatre and finds one visited on a trip.
+// A match is kept for good.
 async function visitedTheatres({ home, saved }) {
   const { rows } = await pool.query(
     `SELECT t.name, COUNT(*)::int AS visits
@@ -100,29 +146,45 @@ async function visitedTheatres({ home, saved }) {
   const known = await readVisitedMap();
   for (const t of [home, ...saved].filter(Boolean)) known[normalizeText(t.name)] = t;
 
-  const missing = rows.filter((r) => !known[normalizeText(r.name)]);
-  const canLook = home && home.city && home.state && Date.now() - lookupFailedAt > RETRY_LOOKUP_MS;
-  if (missing.length && canLook) {
-    try {
-      const near = await fandango.searchTheatres(`${home.city}, ${home.state}`);
+  const isMissing = (r) => !known[normalizeText(r.name)];
+  if (rows.some(isMissing) && Date.now() - lookupFailedAt > RETRY_LOOKUP_MS) {
+    let found = false;
+    const take = (near) => {
       const byName = new Map(near.map((t) => [normalizeText(t.name), t]));
-      let found = false;
-      for (const r of missing) {
+      for (const r of rows.filter(isMissing)) {
         const hit = cleanTheatre(byName.get(normalizeText(r.name)));
         if (!hit) continue;
         known[normalizeText(r.name)] = hit;
         found = true;
       }
-      if (found) {
-        await pool.query(
-          `INSERT INTO app_state (key, value) VALUES ($1, $2)
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-          [VISITED_KEY, JSON.stringify(known)]
-        );
+    };
+    try {
+      // One search usually settles several: a ZIP's results are the AMCs
+      // around it, and a person's theatres tend to be near each other.
+      for (const r of rows) {
+        if (!isMissing(r)) continue;
+        const zip = await zipFromEmails(r.name);
+        if (zip) take(await fandango.searchTheatres(zip));
       }
+      // A search only reaches about fifteen miles, so one entered by hand is
+      // tried against the towns of the theatres already placed, home first.
+      const towns = [...new Set([home, ...Object.values(known)].filter((t) => t && t.city && t.state).map((t) => `${t.city}, ${t.state}`))];
+      for (const town of towns.slice(0, MAX_TOWNS)) {
+        if (!rows.some(isMissing)) break;
+        take(await fandango.searchTheatres(town));
+      }
+      // Whatever is still unmatched is not asked about again for a while.
+      if (rows.some(isMissing)) lookupFailedAt = Date.now();
     } catch (err) {
       lookupFailedAt = Date.now();
       logger.warn(`now-playing: could not look up the diary's theatres: ${err.message}`);
+    }
+    if (found) {
+      await pool.query(
+        `INSERT INTO app_state (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [VISITED_KEY, JSON.stringify(known)]
+      );
     }
   }
 
@@ -228,39 +290,71 @@ const POSTER_MISS_MS = 6 * 60 * 60 * 1000;
 const MAX_POSTERS = 500;
 const posterCache = new Map();
 
-// TMDB's poster for a film the showtimes source has none for. Only a result
-// with the same title counts: a blank poster is better than the wrong film's.
-async function tmdbPoster(title, year) {
+// The TMDB film a listing is, or null. Only a result with the same title
+// counts, and within a year of the listing's when it gives one: no answer is
+// better than the wrong film's poster or synopsis. Answers are remembered.
+function tmdbMatch(title, year, { needPoster = false } = {}) {
   const want = titleKey(title);
   // Without a TMDB key there is nothing to ask, and no reason to log it per film.
-  if (!want || !process.env.TMDB_API_KEY) return null;
-  const key = `${want}|${year || ''}`;
+  if (!want || !process.env.TMDB_API_KEY) return Promise.resolve(null);
+  const key = `${want}|${year || ''}|${needPoster ? 'p' : ''}`;
   const hit = posterCache.get(key);
   if (hit && hit.expires > Date.now()) return hit.promise;
 
   const promise = (async () => {
     const results = await tmdb.search(cleanTitle(title));
     const same = results.filter(
-      (r) => r.poster_url && (titleKey(r.title) === want || titleKey(r.original_title) === want)
+      (r) => (!needPoster || r.poster_url) && (titleKey(r.title) === want || titleKey(r.original_title) === want)
     );
-    const top = tmdb.rankResults(same, { year: year || undefined })[0];
+    // A re-release is listed under this year but is the film from its first
+    // run, so the year says nothing and the best-known film of that title wins.
+    const rerelease = isRerelease(title);
+    const top = tmdb.rankResults(same, { year: year || undefined, rerelease })[0];
     if (!top) return null;
-    if (year && top.release_year != null && Math.abs(top.release_year - year) > 1) return null;
-    // The list shows posters at thumbnail size.
-    return top.poster_url.replace('/t/p/w500/', '/t/p/w185/');
+    if (!rerelease && year && top.release_year != null && Math.abs(top.release_year - year) > 1) return null;
+    return top;
   })();
 
   const entry = { promise, expires: Date.now() + POSTER_HIT_MS };
   posterCache.set(key, entry);
   promise.then(
-    (url) => {
-      if (!url) entry.expires = Date.now() + POSTER_MISS_MS;
+    (found) => {
+      if (!found) entry.expires = Date.now() + POSTER_MISS_MS;
     },
     () => {
       if (posterCache.get(key) === entry) posterCache.delete(key);
     }
   );
   if (posterCache.size > MAX_POSTERS) posterCache.delete(posterCache.keys().next().value);
+  return promise;
+}
+
+// TMDB's poster for a film the showtimes source has none for.
+async function tmdbPoster(title, year) {
+  const match = await tmdbMatch(title, year, { needPoster: true });
+  // The list shows posters at thumbnail size.
+  return match ? match.poster_url.replace('/t/p/w500/', '/t/p/w185/') : null;
+}
+
+const INFO_MS = 24 * 60 * 60 * 1000;
+const infoCache = new Map();
+
+// Synopsis, cast, score and trailer for the film sheet, or null when the film
+// cannot be placed. An Unseen is never looked up: its listing says nothing,
+// and finding out what it is would be the spoiler.
+async function filmInfo(title, year) {
+  if (unseenKind(title)) return null;
+  const match = await tmdbMatch(title, year);
+  if (!match) return null;
+  const hit = infoCache.get(match.tmdb_id);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = tmdb.filmInfo(match.tmdb_id);
+  const entry = { promise, expires: Date.now() + INFO_MS };
+  infoCache.set(match.tmdb_id, entry);
+  promise.catch(() => {
+    if (infoCache.get(match.tmdb_id) === entry) infoCache.delete(match.tmdb_id);
+  });
+  if (infoCache.size > MAX_POSTERS) infoCache.delete(infoCache.keys().next().value);
   return promise;
 }
 
@@ -285,6 +379,7 @@ async function fillPosters(films) {
 
 function clearPosterCache() {
   posterCache.clear();
+  infoCache.clear();
 }
 
 // Successes are frequent and all alike, so only one in five minutes is written
@@ -315,8 +410,9 @@ module.exports = {
   flagFilms,
   fillPosters,
   tmdbPoster,
+  filmInfo,
   clearPosterCache,
   recordSuccess,
   recordFailure,
-  _internal: { cleanTheatres, visitedTheatres, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
+  _internal: { cleanTheatres, visitedTheatres, zipAfterName, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
 };

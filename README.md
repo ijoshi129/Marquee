@@ -36,7 +36,8 @@ share what you're watching.
 - **Installable PWA**: works on phone and desktop, offline-friendly.
 
 **Now Playing**
-- **Showtimes at your AMC**: pick a home theatre and any others you go to. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
+- **Showtimes at your AMC**: no setup. It opens on the theatre you go to most, found from your reservation emails, and you can add others or set a home theatre. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
+- **Film details**: tap a poster or title for the synopsis, director, cast, TMDB score and trailer.
 - **Seats left and seat maps**: every showtime shows how many seats are open; tap it for the auditorium, seat by seat, refreshed while you look.
 - **Knows your diary**: films you have seen or already booked are marked, and the theatres you have been to appear as one-tap chips, most visited first.
 - Showtimes and seats are read from Fandango's public site endpoints, with no key or account. They are undocumented, so this tab can break if Fandango changes them; the Status page reports it when it does.
@@ -338,6 +339,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `GET /api/now-playing/showtimes?theatre=&date=` | One theatre's films and showtimes for a day, plus the dates on sale. |
 | `GET /api/now-playing/seats/:hash` · `POST /api/now-playing/seats/counts` | A showing's seat map, and open-seat counts for several showings. |
 | `GET /api/now-playing/poster?title=&year=` | A TMDB poster for a film whose own poster is missing or dead. |
+| `GET /api/now-playing/film?title=&year=` | Synopsis, cast, score and trailer for a film on the board, from TMDB. |
 
 **Friends & social**
 

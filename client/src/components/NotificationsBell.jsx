@@ -112,7 +112,7 @@ export default function NotificationsBell({ onOpen }) {
       {open &&
         createPortal(
           <div className="fmenu-backdrop" onClick={() => setOpen(false)}>
-            <div className="fmenu-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="fmenu-card notif-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
               <div className="fmenu-grab" />
               <div className="notif-head">
                 <span className="picker-title" style={{ margin: 0 }}>Notifications</span>
@@ -140,40 +140,42 @@ export default function NotificationsBell({ onOpen }) {
                   </button>
                 </span>
               </div>
-              {data.items.length === 0 ? (
-                <div className="friends-empty">Nothing yet.</div>
-              ) : (
-                data.items.map((n) => (
-                  <div key={n.id} className={`notif-item ${n.read_at ? '' : 'unread'}`}>
-                    <button
-                      type="button"
-                      className="notif-main"
-                      onClick={() => {
-                        act(() => api.markAlertRead(n.id));
-                        setOpen(false);
-                        if (n.payload?.status) return setStatusOpen({ focus: n.payload.status });
-                        onOpen?.(n);
-                      }}
-                    >
-                      <span className="notif-ico">{ICON[n.kind] || '•'}</span>
-                      <span className="notif-text">
-                        <span className="notif-title">{n.title}</span>
-                        {n.body && <span className="notif-sub">{n.body}</span>}
-                        <span className="notif-time">{fmtAgo(n.created_at)}</span>
-                      </span>
-                      {!n.read_at && <span className="notif-dot" aria-hidden="true" />}
-                    </button>
-                    <button
-                      type="button"
-                      className="notif-x"
-                      aria-label="Dismiss"
-                      onClick={() => act(() => api.deleteAlert(n.id))}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))
-              )}
+              <div className="notif-scroll">
+                {data.items.length === 0 ? (
+                  <div className="friends-empty">Nothing yet.</div>
+                ) : (
+                  data.items.map((n) => (
+                    <div key={n.id} className={`notif-item ${n.read_at ? '' : 'unread'}`}>
+                      <button
+                        type="button"
+                        className="notif-main"
+                        onClick={() => {
+                          act(() => api.markAlertRead(n.id));
+                          setOpen(false);
+                          if (n.payload?.status) return setStatusOpen({ focus: n.payload.status });
+                          onOpen?.(n);
+                        }}
+                      >
+                        <span className="notif-ico">{ICON[n.kind] || '•'}</span>
+                        <span className="notif-text">
+                          <span className="notif-title">{n.title}</span>
+                          {n.body && <span className="notif-sub">{n.body}</span>}
+                          <span className="notif-time">{fmtAgo(n.created_at)}</span>
+                        </span>
+                        {!n.read_at && <span className="notif-dot" aria-hidden="true" />}
+                      </button>
+                      <button
+                        type="button"
+                        className="notif-x"
+                        aria-label="Dismiss"
+                        onClick={() => act(() => api.deleteAlert(n.id))}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
               <button
                 type="button"
                 className={`status-foot ${status ? status.overall : 'idle'}`}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { MONTH_NAMES, fmtRuntime, fmtShowtime, localDate } from '../format';
+import FilmInfoSheet from './FilmInfoSheet';
 import SeatMapSheet from './SeatMapSheet';
 import TheatrePicker from './TheatrePicker';
 
@@ -34,7 +35,7 @@ function seatsLabel(c) {
   return `${c.available} left`;
 }
 
-function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch }) {
+function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch, onInfo }) {
   const ref = useRef(null);
   // 'own' is the listing's poster, a string is the stand-in found after that
   // one failed to load, 'none' means there is nothing to show but initials.
@@ -70,6 +71,12 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch }) {
     };
   }, [film, onNeedCounts]);
 
+  // What the info sheet should show: the poster that actually loaded here.
+  const shownFilm = {
+    ...film,
+    poster_url: poster === 'own' ? film.poster_url : poster === 'none' ? null : poster,
+  };
+
   const meta = [film.rating, film.runtime ? fmtRuntime(film.runtime) : null, film.genres.slice(0, 2).join(', ')]
     .filter(Boolean)
     .join(' · ');
@@ -77,15 +84,24 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch }) {
   return (
     <article className="np-film" ref={ref}>
       <div className="np-film-head">
-        <div className="np-film-poster">
+        <button
+          type="button"
+          className="np-film-poster"
+          onClick={() => onInfo(shownFilm)}
+          aria-label={`About ${film.title}`}
+        >
           {film.poster_url && poster !== 'none' ? (
-            <img src={poster === 'own' ? film.poster_url : poster} alt="" loading="lazy" onError={posterBroke} />
+            <img src={shownFilm.poster_url} alt="" loading="lazy" onError={posterBroke} />
           ) : (
             <div className="poster-blank">{film.title.slice(0, 2).toUpperCase()}</div>
           )}
-        </div>
+        </button>
         <div className="np-film-info">
-          <h3 className="np-film-title">{film.title}</h3>
+          <h3 className="np-film-title">
+            <button type="button" className="np-film-open" onClick={() => onInfo(shownFilm)}>
+              {film.title}
+            </button>
+          </h3>
           {meta && <div className="np-film-meta">{meta}</div>}
           {(film.booked || film.seen_watch_id) && (
             <div className="np-flags">
@@ -151,6 +167,7 @@ export default function NowPlayingView({ onOpenWatch }) {
   const [counts, setCounts] = useState({});
   const [picking, setPicking] = useState(false);
   const [seat, setSeat] = useState(null);
+  const [about, setAbout] = useState(null);
   const asked = useRef(new Set());
 
   useEffect(() => {
@@ -272,8 +289,9 @@ export default function NowPlayingView({ onOpenWatch }) {
     const saved = await api.setNpTheatres(next);
     setTheatres(saved);
     if (select) chooseTheatre(select);
-    // Choosing the first theatre is the whole errand, so show its board.
-    if (!hadHome && saved.home) setPicking(false);
+    // Choosing a first theatre from the search is the whole errand, so show
+    // its board. Marking one already listed as home leaves the list open.
+    if (!hadHome && saved.home && select) setPicking(false);
     return saved;
   }
 
@@ -284,8 +302,11 @@ export default function NowPlayingView({ onOpenWatch }) {
       {firstRun && (
         <div className="empty">
           <div className="empty-glyph">✦</div>
-          <div className="empty-headline">Pick your home theatre.</div>
-          <div className="empty-sub">Showtimes and open seats for the AMC you go to most.</div>
+          <div className="empty-headline">Pick a theatre.</div>
+          <div className="empty-sub">
+            Showtimes and open seats for your AMC. Once you have seen a film or two, the theatres in your diary show up
+            here on their own.
+          </div>
           <button type="button" className="np-cta" onClick={() => setPicking(true)}>
             Find a theatre
           </button>
@@ -383,10 +404,13 @@ export default function NowPlayingView({ onOpenWatch }) {
             counts={counts}
             onNeedCounts={needCounts}
             onPick={(film, group, showtime) => setSeat({ film, group, showtime })}
+            onInfo={setAbout}
             onOpenWatch={onOpenWatch}
           />
         ))}
       </div>
+
+      {about && <FilmInfoSheet film={about} onClose={() => setAbout(null)} />}
 
       {seat && (
         <SeatMapSheet
