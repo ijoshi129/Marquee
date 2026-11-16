@@ -38,6 +38,7 @@ share what you're watching.
 **Now Playing**
 - **Showtimes at your AMC**: no setup. It opens on the theatre you go to most, found from your reservation emails, and you can add others or set a home theatre. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
 - **Film details**: tap a poster or title for the synopsis, director, cast, TMDB score and trailer.
+- **Guess the Unseen**: an upcoming Screen or Scream Unseen offers a ranked shortlist of likely films, worked out from AMC's rating and runtime, what opens soon, and how past Unseens went. Hidden until you ask.
 - **Seats left and seat maps**: every showtime shows how many seats are open; tap it for the auditorium, seat by seat, refreshed while you look.
 - **Knows your diary**: films you have seen or already booked are marked, and the theatres you have been to appear as one-tap chips, most visited first.
 - Showtimes and seats are read from Fandango's public site endpoints, with no key or account. They are undocumented, so this tab can break if Fandango changes them; the Status page reports it when it does.
@@ -340,6 +341,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `GET /api/now-playing/seats/:hash` · `POST /api/now-playing/seats/counts` | A showing's seat map, and open-seat counts for several showings. |
 | `GET /api/now-playing/poster?title=&year=` | A TMDB poster for a film whose own poster is missing or dead. |
 | `GET /api/now-playing/film?title=&year=` | Synopsis, cast, score and trailer for a film on the board, from TMDB. |
+| `GET /api/now-playing/unseen-guesses?date=&kind=&rating=` | Ranked guesses at what an upcoming Unseen is. |
 
 **Friends & social**
 

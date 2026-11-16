@@ -68,6 +68,47 @@ async function fetchDetails(tmdbId) {
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// Films opening in US cinemas between two dates, best known first. Pass a
+// certification to keep only films TMDB lists with that US rating.
+async function discoverOpening({ from, to, certification }) {
+  const params = {
+    region: 'US',
+    'release_date.gte': from,
+    'release_date.lte': to,
+    with_release_type: '2|3',
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+  };
+  if (certification) {
+    params.certification_country = 'US';
+    params.certification = certification;
+  }
+  const data = await tmdbFetch('/discover/movie', params);
+  return (data.results || []).map((r) => ({ ...shapeSearchResult(r), genre_ids: r.genre_ids || [] }));
+}
+
+// When and how a film opens in the US, with its runtime and makers. The
+// release date on a film's main record is its first anywhere, which for a
+// festival film is months before it reaches a cinema here.
+async function releaseFacts(tmdbId) {
+  const data = await tmdbFetch(`/movie/${tmdbId}`, { append_to_response: 'release_dates' });
+  const us = (data.release_dates?.results || []).find((r) => r.iso_3166_1 === 'US');
+  const dates = us ? us.release_dates : [];
+  const day = (d) => String(d.release_date || '').slice(0, 10);
+  const theatrical = dates.filter((d) => d.type === 2 || d.type === 3).map((d) => ({ date: day(d), type: d.type }));
+  return {
+    tmdb_id: data.id,
+    title: data.title,
+    first_release: data.release_date || null,
+    runtime_minutes: data.runtime || null,
+    genres: (data.genres || []).map((g) => g.name),
+    companies: (data.production_companies || []).map((c) => c.name),
+    poster_url: data.poster_path ? POSTER_BASE + data.poster_path : null,
+    us_dates: theatrical.filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
+    us_ratings: [...new Set(dates.map((d) => d.certification).filter(Boolean))],
+  };
+}
+
 // The official trailer if there is one, else any trailer, else a teaser.
 function pickTrailer(videos) {
   const onYouTube = (videos || []).filter((v) => v && v.site === 'YouTube' && v.key);
@@ -199,4 +240,14 @@ function similarity(a, b) {
   return inter / (ax.size + bx.size - inter || 1);
 }
 
-module.exports = { search, getOrFetchDetails, autoMatch, rankResults, yearOf, filmInfo, pickTrailer };
+module.exports = {
+  search,
+  getOrFetchDetails,
+  autoMatch,
+  rankResults,
+  yearOf,
+  filmInfo,
+  pickTrailer,
+  discoverOpening,
+  releaseFacts,
+};

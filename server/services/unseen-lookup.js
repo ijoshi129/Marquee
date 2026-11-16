@@ -176,7 +176,15 @@ function lookupDatesForWatch(w) {
 // Parse the megathread body (a cheerio-wrapped `.md` element). Each Screen/
 // Scream Unseen is an <a> to amctheatres.com; the reveal for new-format entries
 // is a "Revealed As: >!Title!<" bullet between this link and the next.
-function parseMegathread($, md) {
+// "1h54m" or "2h" in minutes, else null.
+function runtimeMinutes(text) {
+  const m = /\b(\d+)\s*h(?:\s*(\d+)\s*m)?/i.exec(text || '');
+  return m ? Number(m[1]) * 60 + Number(m[2] || 0) : null;
+}
+
+// Every numbered entry in a megathread. A revealed one carries its title; one
+// still to come carries only what AMC has published, its rating and runtime.
+function readEntries($, md) {
   const entries = [];
   if (!md || !md.length) return entries;
 
@@ -227,13 +235,26 @@ function parseMegathread($, md) {
       if (reveal && !/^TBD$/i.test(reveal[1])) title = reveal[1].trim();
     }
 
-    if (!title) continue; // Unrevealed (TBD / no reveal yet) — skip.
-
+    const runtime = title ? null : runtimeMinutes(body);
     for (const date of parseDateString(dateStr)) {
-      entries.push({ number, title, rating, studio, date, url: href, type });
+      entries.push({ number, title, rating, studio, date, url: href, type, runtime });
     }
   }
   return entries;
+}
+
+// The revealed screenings: what the diary needs to name a film it has seen.
+function parseMegathread($, md) {
+  return readEntries($, md)
+    .filter((e) => e.title)
+    .map(({ runtime, ...e }) => e);
+}
+
+// The screenings still to come, with the rating and runtime AMC has published.
+function parseUnrevealed($, md) {
+  return readEntries($, md)
+    .filter((e) => !e.title && e.rating)
+    .map((e) => ({ number: e.number, date: e.date, type: e.type, rating: e.rating.toUpperCase(), runtime: e.runtime }));
 }
 
 // Predecessor megathreads are "ASU's N-M" links to reddit (cover earlier ranges).
@@ -269,6 +290,7 @@ function cacheThread(postId, title, bodyHtml) {
   if (!md.length) throw new Error(`no post body for ${postId}`);
   const result = {
     entries: parseMegathread($, md),
+    upcoming: parseUnrevealed($, md),
     predecessorUrls: extractPredecessorUrls($, md),
     fetchedAt: Date.now(),
     title,
@@ -429,6 +451,30 @@ async function lookupByDate(date, type) {
   return null;
 }
 
+// What is publicly known about one Unseen before it happens: AMC's rating and
+// stated runtime, the reveal if Reddit already has it, and how often each
+// studio has supplied a past Unseen. Reads only the current megathread, which
+// is normally already cached, so this adds no request of its own.
+async function cluesFor(date, type) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const id = await findCurrentMegathreadId();
+  if (!id) return null;
+  const thread = await loadThread(id);
+  const same = (e) => e.date === date && e.type === type;
+  const revealed = thread.entries.find(same) || null;
+  const pending = (thread.upcoming || []).find(same) || null;
+  const studios = {};
+  for (const e of thread.entries) {
+    if (e.studio) studios[e.studio] = (studios[e.studio] || 0) + 1;
+  }
+  return {
+    revealed: revealed ? { title: revealed.title, rating: revealed.rating || null, studio: revealed.studio || null } : null,
+    rating: pending ? pending.rating : revealed && revealed.rating ? revealed.rating.toUpperCase() : null,
+    runtime: pending ? pending.runtime : null,
+    studios,
+  };
+}
+
 // Resolve a watch's actual movie via Reddit + TMDB, update DB. Returns:
 //   { resolved: true, tmdbId, title }   on success
 //   { resolved: false, reason: '...' }  otherwise (idempotent — does not touch DB)
@@ -522,7 +568,9 @@ function clearCaches() {
 module.exports = {
   resolveAndAssign,
   lookupByDate,
+  cluesFor,
   parseMegathread,
+  parseUnrevealed,
   parseDateString,
   clearCaches,
   // exported for tests/scripts
