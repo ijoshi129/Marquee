@@ -285,6 +285,25 @@ test('seatCounts leaves out a showing that has gone off sale', async () => {
   await assert.rejects(fandango.seatMap('v2-gone0000'), (e) => e.status === 404 && /no longer on sale/.test(e.message));
 });
 
+test('a showing listed but not yet open for booking is told apart from the source failing', async () => {
+  // The seat map answers 500 with this body for a showing the theatre has not
+  // put on sale. Seen on 2026-11-16 for Unseens four and five weeks out.
+  stubFetch((url) =>
+    url.pathname.endsWith('/v2-notyet000')
+      ? { status: 500, body: [{ id: 'PosCommunicationError', message: 'There was an error retrieving data for this performance. Please try again.' }] }
+      : url.pathname.endsWith('/v2-broken000')
+        ? { status: 500, body: { message: 'Internal Server Error' } }
+        : { body: SEATS }
+  );
+  await assert.rejects(fandango.seatMap('v2-notyet000'), (e) => e.status === 409 && e.code === 'not_on_sale' && /not on sale yet/.test(e.message));
+  await assert.rejects(fandango.seatMap('v2-broken000'), (e) => e.status === 502 && e.code === null && /HTTP 500/.test(e.message));
+  // The chip can say so, where a real failure just shows no count.
+  assert.deepEqual(await fandango.seatCounts(['v2-good0000', 'v2-notyet000', 'v2-broken000']), {
+    'v2-good0000': { available: 3, total: 4 },
+    'v2-notyet000': { on_sale: false },
+  });
+});
+
 test('theatre settings keep one home, drop duplicates and junk', () => {
   const { cleanTheatres } = nowPlaying._internal;
   const home = { id: 'aaore', name: ' AMC Empire 25 ', city: 'New York', state: 'NY', extra: 'x' };

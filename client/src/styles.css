@@ -3167,6 +3167,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .np-time.is-low .np-time-seats { color: var(--warn); }
 .np-time.is-mine { border-color: var(--accent); background: var(--accent-soft); }
 .np-time.is-watched .np-time-clock::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+.np-time.is-notyet { opacity: 0.6; border-style: dashed; }
 .np-time.is-full { opacity: 0.55; }
 .np-time.is-full .np-time-clock { text-decoration: line-through; }
 .np-time.is-full .np-time-seats { color: var(--danger); }

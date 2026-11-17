@@ -136,9 +136,10 @@ async function checkWatching(now = Date.now()) {
     try {
       seats = await fandango.seatMap(w.hash);
     } catch (err) {
-      // Off sale: nothing left to watch. Anything else: try again next pass.
+      // Off sale: nothing left to watch. Not open for booking: keep waiting.
+      // Anything else: try again next pass, and say something went wrong.
       if (err.status !== 404) {
-        failed = err;
+        if (err.code !== 'not_on_sale') failed = err;
         keep.push(w);
       }
       continue;
@@ -167,7 +168,9 @@ async function checkUnseens(now = Date.now()) {
   if (!where.length) return { upcoming: upcoming.length, sent: 0 };
 
   const state = await readJson(STATE_KEY, {});
-  const told = state.unseen || {};
+  // Kept under a new name since 2.17: what 2.16 remembered as told were
+  // listings, not showings on sale, and must not count.
+  const told = state.on_sale || {};
   let sent = 0;
   for (const u of upcoming) {
     const found = [];
@@ -184,30 +187,47 @@ async function checkUnseens(now = Date.now()) {
       }
       const films = await nowPlaying.flagFilms(board.films.filter((f) => nowPlaying.unseenKind(f.title) === u.type));
       if (!films.length) continue;
-      told[key] = true;
-      if (films.some((f) => f.booked)) booked = true;
+      if (films.some((f) => f.booked)) {
+        booked = true;
+        told[key] = true;
+        continue;
+      }
       const times = films.flatMap((f) => f.formats.flatMap((g) => g.showtimes)).filter((s) => !s.past);
       // Listed, but every showing has started: too late to be news.
       if (!times.length) continue;
+      // Listed is not on sale. A showing appears with a time weeks before the
+      // theatre opens it for booking, so it only counts once its seats load.
+      // Until then nothing is recorded, and the next pass looks again.
+      const bookable = times.find((s) => s.hash);
+      if (!bookable) continue;
+      try {
+        await fandango.seatMap(bookable.hash);
+      } catch {
+        continue;
+      }
+      told[key] = true;
       found.push({ theatre: t, times: times.map((s) => s.label) });
     }
     // Already holding a ticket: there is nothing to tell.
     if (!found.length || booked) continue;
     const kind = u.type === 'scream' ? 'Scream Unseen' : 'Screen Unseen';
     const clues = [u.rating, u.runtime ? fmtRuntime(u.runtime) : null].filter(Boolean).join(' · ');
-    const places = found.map((f) => `${shortName(f.theatre.name)}${f.times.length ? ` ${f.times.slice(0, 2).join(', ')}` : ''}`).join('; ');
+    // A push shows a line or two, so name the main theatre and count the rest.
+    const [first, ...rest] = found;
+    const places = `${shortName(first.theatre.name)} ${first.times.slice(0, 2).join(', ')}${rest.length ? ` and ${rest.length} more` : ''}`;
     const row = await notifications.notify({
       kind: 'nowplaying',
       title: `${kind} on sale: ${dayLabel(u.date)}`,
       body: [clues, places].filter(Boolean).join(' · '),
       payload: { now_playing: { theatre: found[0].theatre.id, date: u.date } },
-      dedupeKey: `unseen-listed:${u.date}:${u.type}:${found.map((f) => f.theatre.id).sort().join(',')}`,
+      dedupeKey: `unseen-on-sale:${u.date}:${u.type}:${found.map((f) => f.theatre.id).sort().join(',')}`,
     });
     if (row) sent += 1;
   }
   // Forget screenings that have passed, so the record does not grow for ever.
   for (const key of Object.keys(told)) if (key.slice(0, 10) < today) delete told[key];
-  await writeJson(STATE_KEY, { ...(await readJson(STATE_KEY, {})), unseen: told });
+  const { unseen: _listedOnly, ...rest } = await readJson(STATE_KEY, {});
+  await writeJson(STATE_KEY, { ...rest, on_sale: told });
   return { upcoming: upcoming.length, sent };
 }
 
