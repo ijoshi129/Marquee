@@ -2,12 +2,57 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.17';
+const WHATS_NEW_VERSION = '3.0';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '3.0',
+    sections: [
+      {
+        title: 'Now Playing',
+        items: [
+          'A tab of what is on at the AMCs you go to, picked up from your diary with nothing to set up. Switch theatres in one tap, see every showtime with its seats left, and open a full seat map.',
+          'Tap a film for its synopsis, cast, score and trailer.',
+          'Upcoming Screen Unseens and Scream Unseens come with a short list of likely films, kept behind a tap so nothing is spoiled.',
+        ],
+      },
+      {
+        title: 'Your seat and a reminder',
+        items: [
+          'Marquee reads your auditorium and seat from each AMC email, for past bookings too, and marks your seat on the seat map.',
+          'Two hours before a booked show you get a notification with the theatre, auditorium, seat, and when the film itself starts after the trailers.',
+        ],
+      },
+      {
+        title: 'Alerts worth having',
+        items: [
+          'Hear when an Unseen can actually be booked at one of your theatres, when new films arrive, and when a showing you are watching fills up or sells out.',
+        ],
+      },
+      {
+        title: 'Friends',
+        items: [
+          'The Friends feed reads like a conversation, comments look like messages, and when you book the same showing it says where each of you is sitting.',
+          'New: Marquee can reach a friend over Tailcat, an encrypted tunnel that needs no domain, open port or shared VPN on either side. Whoever runs your Marquee turns it on with TAILCAT_ENABLED=1, and Add a friend then offers a Tailcat link beside the web link. Existing friends keep working as before.',
+        ],
+      },
+      {
+        title: 'A Status page',
+        items: [
+          'The Status line under notifications shows whether email, friends, backups and the rest are running, and you are told if something has been failing for a day.',
+        ],
+      },
+      {
+        title: 'Gone',
+        items: [
+          'The Watchlist and recommendations, replaced by Now Playing.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.17',
     sections: [
@@ -466,6 +511,41 @@ function readState() {
   return 'fresh';
 }
 
+// Each major version shows its x.0 release in full; the point releases that
+// followed sit folded underneath it.
+function seriesOf(releases) {
+  const out = [];
+  for (const rel of releases) {
+    const major = rel.version.split('.')[0];
+    let group = out.find((g) => g.major === major);
+    if (!group) {
+      group = { major, main: null, minors: [] };
+      out.push(group);
+    }
+    if (rel.version === `${major}.0`) group.main = rel;
+    else group.minors.push(rel);
+  }
+  return out;
+}
+
+function Release({ rel }) {
+  return (
+    <>
+      <div className="whats-new-version">v{rel.version}</div>
+      {rel.sections.map((s) => (
+        <section key={s.title} className="whats-new-section">
+          <div className="whats-new-section-title">{s.title}</div>
+          <ul className="whats-new-list">
+            {s.items.map((it, i) => (
+              <li key={i}>{it}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
+  );
+}
+
 export default function WhatsNew() {
   // 'fresh': user has never seen this version → show expanded card.
   // 'collapsed': user closed it once → show the bottom-left icon.
@@ -529,19 +609,24 @@ export default function WhatsNew() {
         <h2 className="whats-new-title">Marquee v{WHATS_NEW_VERSION}</h2>
       </header>
       <div className="whats-new-body">
-        {RELEASES.map((rel) => (
-          <div key={rel.version} className="whats-new-release">
-            <div className="whats-new-version">v{rel.version}</div>
-            {rel.sections.map((s) => (
-              <section key={s.title} className="whats-new-section">
-                <div className="whats-new-section-title">{s.title}</div>
-                <ul className="whats-new-list">
-                  {s.items.map((it, i) => (
-                    <li key={i}>{it}</li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+        {seriesOf(RELEASES).map(({ major, main, minors }) => (
+          <div key={major} className="whats-new-release">
+            {main && <Release rel={main} />}
+            {minors.length > 0 && (
+              <details className="whats-new-minors">
+                <summary>
+                  {main ? 'Smaller updates' : `Version ${major}`}
+                  <span className="whats-new-minors-range">
+                    v{minors[minors.length - 1].version} to v{minors[0].version}
+                  </span>
+                </summary>
+                {minors.map((rel) => (
+                  <div key={rel.version} className="whats-new-minor">
+                    <Release rel={rel} />
+                  </div>
+                ))}
+              </details>
+            )}
           </div>
         ))}
       </div>

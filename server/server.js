@@ -28,6 +28,7 @@ const statusRoute = require('./routes/status');
 const authRoute = require('./routes/auth');
 const { requireOwner } = require('./middleware/owner-auth');
 const federation = require('./services/federation');
+const tailcat = require('./services/tailcat');
 const { trustProxySetting } = require('./utils/trust-proxy');
 const emailPoller = require('./workers/email-poller');
 const pendingExpirer = require('./workers/pending-expirer');
@@ -198,6 +199,9 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     statusMonitor.start();
     showtimeReminder.start();
     nowPlayingAlerts.start();
+    if (federation.isEnabled()) {
+      tailcat.start().catch((err) => logger.error({ err }, 'tailcat: could not start'));
+    }
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -210,6 +214,7 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       statusMonitor.stop();
       showtimeReminder.stop();
       nowPlayingAlerts.stop();
+      tailcat.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };

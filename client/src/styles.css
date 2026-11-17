@@ -2444,6 +2444,33 @@ input[type='date'].input-naked { color-scheme: dark; }
 .whats-new-release + .whats-new-release .whats-new-version {
   color: var(--fg-mute);
 }
+.whats-new-minors > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-tint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.whats-new-minors > summary::-webkit-details-marker { display: none; }
+.whats-new-minors > summary::after { content: '+'; color: var(--fg-mute); letter-spacing: 0; }
+.whats-new-minors[open] > summary::after { content: '\2212'; }
+.whats-new-minors-range { margin-left: auto; color: var(--fg-mute); letter-spacing: 0.08em; }
+.whats-new-minor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 0 0;
+}
+.whats-new-minor + .whats-new-minor { margin-top: 18px; border-top: 1px solid var(--rule); }
 .whats-new-section-title {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -3877,6 +3904,13 @@ input[type='date'].input-naked { color-scheme: dark; }
 
 /* QR */
 .qr-wrap { display: flex; justify-content: center; padding: 4px 0; }
+.link-kind { display: flex; gap: 4px; padding: 3px; border-radius: 99px; background: var(--bg-tint); }
+.link-kind-tab {
+  flex: 1; border: 0; border-radius: 99px; padding: 7px 10px; cursor: pointer;
+  background: transparent; color: var(--fg-dim);
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.link-kind-tab.is-active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
 .qr-canvas { border-radius: var(--radius-md); background: #fff; display: block; }
 
 /* Status sheet: one row per background job, plus its entry at the foot of the bell */

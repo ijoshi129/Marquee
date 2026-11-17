@@ -10,6 +10,7 @@ const express = require('express');
 const logger = require('../logger');
 const { pool } = require('../db');
 const fed = require('../services/federation');
+const tailcat = require('../services/tailcat');
 const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
 const { forFriends } = require('../utils/seats');
@@ -203,6 +204,9 @@ async function handleComment(req, res) {
 async function handleConnect(req, res) {
   const friendUrl = fed.parseFriendUrl((req.body || {}).friend_url);
   if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+  if (tailcat.isTailcatUrl(friendUrl) && !tailcat.isEnabled()) {
+    return res.status(400).json({ error: 'Tailcat is not turned on here' });
+  }
 
   const { rows } = await pool.query(
     `UPDATE friends SET friend_url = $1, last_error = NULL, updated_at = NOW()

@@ -131,8 +131,8 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
       return;
     }
     await run('rotate', async () => {
-      const { my_url } = await api.rotateFriendUrl(friend.id);
-      setRotated(my_url);
+      const { my_url, my_urls } = await api.rotateFriendUrl(friend.id);
+      setRotated({ url: my_url, urls: my_urls || null });
     });
   }
 
@@ -205,7 +205,7 @@ function FriendDetail({ friend, status, onBack, onChanged, onRemoved }) {
       <div className="mf-section">
         <div className="mf-section-title">Your URL for them</div>
         {rotated ? (
-          <UrlReveal url={rotated} label={`Send this to ${friend.display_name} — shown only once.`} />
+          <UrlReveal url={rotated.url} urls={rotated.urls} label={`Send this to ${friend.display_name}. It’s shown only once.`} />
         ) : (
           <div className="mf-urlline">
             <span className="mf-url">Stored hashed — rotate to issue a fresh one.</span>

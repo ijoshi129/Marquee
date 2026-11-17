@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { pool } = require('../db');
 const { fetchWithTimeout } = require('./http');
+const tailcat = require('./tailcat');
 
 // 256-bit URL-safe secret — the token embedded in a capability URL.
 function generateSecret() {
@@ -83,8 +84,8 @@ function safeBaseUrl(raw) {
 }
 
 // Validate an owner-pasted capability URL: acceptable origin (same rules as
-// safeBaseUrl) and a path of exactly /api/federation/<token>. Returns the
-// normalized URL string, or null.
+// safeBaseUrl), or a tailcat://<address> one, and a path of exactly
+// /api/federation/<token>. Returns the normalized URL string, or null.
 function parseFriendUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   let url;
@@ -93,10 +94,43 @@ function parseFriendUrl(raw) {
   } catch {
     return null;
   }
-  if (!safeBaseUrl(url.origin)) return null;
+  let origin;
+  if (url.protocol === 'tailcat:') {
+    if (!tailcat.ADDR_RX.test(url.host)) return null;
+    origin = `tailcat://${url.host}`;
+  } else {
+    origin = safeBaseUrl(url.origin);
+    if (!origin) return null;
+  }
   const m = url.pathname.match(/^\/api\/federation\/([^/]+)\/?$/);
   if (!m || !TOKEN_RX.test(m[1])) return null;
-  return `${url.origin}/api/federation/${m[1]}`;
+  return `${origin}/api/federation/${m[1]}`;
+}
+
+function webBaseUrl() {
+  return (process.env.FEDERATION_BASE_URL || '').replace(/\/+$/, '') || null;
+}
+
+// Every way a friend can reach us with this token: the web URL when
+// FEDERATION_BASE_URL is set, the Tailcat one while the helper is up.
+function myUrlsFor(token) {
+  const web = webBaseUrl();
+  return {
+    web: web ? `${web}/api/federation/${token}` : null,
+    tailcat: tailcat.myUrlFor(token),
+  };
+}
+
+function canMint() {
+  return Boolean(webBaseUrl() || tailcat.myAddress());
+}
+
+// Which of our URLs to hand a friend reached over friendUrl: the same kind
+// when we have it, so a Tailcat friend gets a Tailcat link back and an older
+// instance (which can't read tailcat://) gets the web one.
+function urlForPeer(urls, friendUrl) {
+  if (tailcat.isTailcatUrl(friendUrl)) return urls.tailcat || urls.web;
+  return urls.web || urls.tailcat;
 }
 
 const PING_DEBOUNCE_MS = 400;
@@ -161,6 +195,9 @@ module.exports = {
   isEnabled,
   safeBaseUrl,
   parseFriendUrl,
+  myUrlsFor,
+  canMint,
+  urlForPeer,
   notifyFriends,
   sendConnect,
 };
