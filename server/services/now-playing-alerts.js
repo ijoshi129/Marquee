@@ -195,7 +195,9 @@ async function checkUnseens(now = Date.now()) {
     if (!found.length || booked) continue;
     const kind = u.type === 'scream' ? 'Scream Unseen' : 'Screen Unseen';
     const clues = [u.rating, u.runtime ? fmtRuntime(u.runtime) : null].filter(Boolean).join(' · ');
-    const places = found.map((f) => `${shortName(f.theatre.name)}${f.times.length ? ` ${f.times.slice(0, 2).join(', ')}` : ''}`).join('; ');
+    // A push shows a line or two, so name the main theatre and count the rest.
+    const [first, ...rest] = found;
+    const places = `${shortName(first.theatre.name)} ${first.times.slice(0, 2).join(', ')}${rest.length ? ` and ${rest.length} more` : ''}`;
     const row = await notifications.notify({
       kind: 'nowplaying',
       title: `${kind} on sale: ${dayLabel(u.date)}`,

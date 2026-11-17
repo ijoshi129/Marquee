@@ -198,6 +198,21 @@ test('unseens: an upcoming one on sale at your theatres is announced once, with 
   assert.deepEqual(Object.keys(db.get('now_playing_alert_state').unseen).sort(), ['2026-12-14|screen|AABPS', '2026-12-14|screen|AAHRP']);
 });
 
+test('unseens: on sale at several theatres at once, the alert names the main one and counts the rest', async () => {
+  stubDb();
+  const sent = captureNotify();
+  const others = [OTHER, { id: 'AACPH', name: 'AMC New Brunswick 18' }, { id: 'AABPR', name: 'AMC Freehold 14' }];
+  nowPlaying.theatresForView = async () => ({ home: HOME, saved: [], visited: others });
+  nowPlaying.flagFilms = async (films) => films.map((f) => ({ ...f, booked: null }));
+  unseenLookup.upcomingUnseens = async () => [{ date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 }];
+  fandango.showtimes = async (id, date) => ({ date, films: [unseenFilm(['7:00 PM', '9:45 PM', '10:30 PM'])] });
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 1);
+  assert.equal(sent[0].body, 'PG-13 · 2h 9m · Monmouth Mall 15 7:00 PM, 9:45 PM and 3 more');
+  // Short enough for a push to show whole.
+  assert.ok(`${sent[0].title} ${sent[0].body}`.length < 110);
+  assert.deepEqual(sent[0].payload, { now_playing: { theatre: 'AABPS', date: '2026-12-14' } });
+});
+
 test('unseens: nothing is said about one you already hold a ticket for', async () => {
   stubDb();
   const sent = captureNotify();
