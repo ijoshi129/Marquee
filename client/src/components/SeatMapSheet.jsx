@@ -89,7 +89,7 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
           </button>
         </div>
 
-        {err && !map && <div className="error-banner">{err}</div>}
+        {err && !map && (/not on sale/i.test(err) ? <div className="seat-loading">{err}.</div> : <div className="error-banner">{err}</div>)}
         {!map && !err && <div className="seat-loading">Finding seats…</div>}
 
         {map && (

@@ -161,7 +161,14 @@ test('watching: a showing gone off sale is dropped, a failed lookup is kept and 
 
 const HOME = { id: 'AABPS', name: 'AMC Monmouth Mall 15' };
 const OTHER = { id: 'AAHRP', name: 'AMC Brunswick Square 13' };
-const unseenFilm = (times) => ({ id: 900, title: 'AMC Screen Unseen: December 14', formats: [{ format: 'Standard', notes: [], showtimes: times.map((label) => ({ label, past: false })) }] });
+const unseenFilm = (times) => ({ id: 900, title: 'AMC Screen Unseen: December 14', formats: [{ format: 'Standard', notes: [], showtimes: times.map((label, i) => ({ label, past: false, hash: `v2-unseen0000${i}` })) }] });
+const seatsOpen = async () => ({ available: 50, total: 74 });
+const notOnSale = async () => {
+  const err = new Error('Tickets for this showing are not on sale yet');
+  err.status = 409;
+  err.code = 'not_on_sale';
+  throw err;
+};
 
 test('unseens: an upcoming one on sale at your theatres is announced once, with its clues', async () => {
   const db = stubDb();
@@ -173,6 +180,7 @@ test('unseens: an upcoming one on sale at your theatres is announced once, with 
     { date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 },
     { date: '2026-12-21', type: 'scream', rating: 'R', runtime: 115 },
   ];
+  fandango.seatMap = seatsOpen;
   const asked = [];
   let listed = { AABPS: true, AAHRP: false };
   fandango.showtimes = async (id, date) => {
@@ -201,6 +209,7 @@ test('unseens: an upcoming one on sale at your theatres is announced once, with 
 test('unseens: on sale at several theatres at once, the alert names the main one and counts the rest', async () => {
   stubDb();
   const sent = captureNotify();
+  fandango.seatMap = seatsOpen;
   const others = [OTHER, { id: 'AACPH', name: 'AMC New Brunswick 18' }, { id: 'AABPR', name: 'AMC Freehold 14' }];
   nowPlaying.theatresForView = async () => ({ home: HOME, saved: [], visited: others });
   nowPlaying.flagFilms = async (films) => films.map((f) => ({ ...f, booked: null }));
@@ -211,6 +220,59 @@ test('unseens: on sale at several theatres at once, the alert names the main one
   // Short enough for a push to show whole.
   assert.ok(`${sent[0].title} ${sent[0].body}`.length < 110);
   assert.deepEqual(sent[0].payload, { now_playing: { theatre: 'AABPS', date: '2026-12-14' } });
+});
+
+test('unseens: listed but not yet bookable is not "on sale", and is announced once it is', async () => {
+  // What happened on 2026-11-16: both December Unseens were listed at 7:00 PM
+  // and marked available, weeks before AMC opened them for booking.
+  const db = stubDb();
+  const sent = captureNotify();
+  nowPlaying.theatresForView = async () => ({ home: HOME, saved: [], visited: [OTHER] });
+  nowPlaying.flagFilms = async (films) => films.map((f) => ({ ...f, booked: null }));
+  unseenLookup.upcomingUnseens = async () => [{ date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 }];
+  fandango.showtimes = async (id, date) => ({ date, films: [unseenFilm(['7:00 PM'])] });
+  const seatAsks = [];
+  let open = [];
+  fandango.seatMap = async (hash) => {
+    seatAsks.push(hash);
+    return open.length ? seatsOpen() : notOnSale();
+  };
+
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
+  assert.equal(sent.length, 0);
+  // Nothing is remembered as told, so every pass looks again, once per theatre.
+  assert.deepEqual(db.get('now_playing_alert_state').unseen, {});
+  assert.equal(seatAsks.length, 4);
+
+  open = ['all'];
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 1);
+  assert.deepEqual([sent[0].title, sent[0].body], ['Screen Unseen on sale: Mon, Dec 14', 'PG-13 · 2h 9m · Monmouth Mall 15 7:00 PM and 1 more']);
+  assert.match(sent[0].dedupeKey, /^unseen-on-sale:/);
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
+});
+
+test('unseens: a listing with no showing to check is not announced', async () => {
+  stubDb();
+  const sent = captureNotify();
+  nowPlaying.theatresForView = async () => ({ home: HOME, saved: [], visited: [] });
+  nowPlaying.flagFilms = async (films) => films.map((f) => ({ ...f, booked: null }));
+  unseenLookup.upcomingUnseens = async () => [{ date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 }];
+  fandango.showtimes = async (id, date) => ({ date, films: [{ id: 900, title: 'AMC Screen Unseen: December 14', formats: [{ format: 'Standard', notes: [], showtimes: [{ label: '7:00 PM', past: false, hash: null }] }] }] });
+  fandango.seatMap = async () => {
+    throw new Error('must not be asked');
+  };
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
+  assert.equal(sent.length, 0);
+});
+
+test('watching: a showing not yet open for booking is kept, and is not an error', async () => {
+  const db = stubDb({ now_playing_watching: [watch()] });
+  captureNotify();
+  fandango.seatMap = notOnSale;
+  const out = await alerts.checkWatching(NOW);
+  assert.deepEqual([out.watching, out.sent, out.error], [1, 0, null]);
+  assert.equal(db.get('now_playing_watching').length, 1);
 });
 
 test('unseens: nothing is said about one you already hold a ticket for', async () => {

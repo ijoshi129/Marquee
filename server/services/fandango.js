@@ -27,10 +27,11 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SHOWTIME_HASH = /^[A-Za-z0-9_-]{8,128}$/;
 
 class FandangoError extends Error {
-  constructor(message, status = 502) {
+  constructor(message, status = 502, code = null) {
     super(message);
     this.name = 'FandangoError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -105,7 +106,16 @@ async function getJson(path, query = {}) {
     )
   );
   if (res.status === 404) throw new FandangoError('Not found', 404);
-  if (!res.ok) throw new FandangoError(`Showtimes source returned HTTP ${res.status}`);
+  if (!res.ok) {
+    // A showing can be listed, with a time and marked available, weeks before
+    // the theatre opens it for booking. Asking for its seats then gets this
+    // error from the theatre's ticketing system. It is not the source failing.
+    const detail = await res.json().catch(() => null);
+    if (Array.isArray(detail) && detail.some((d) => d && d.id === 'PosCommunicationError')) {
+      throw new FandangoError('Tickets for this showing are not on sale yet', 409, 'not_on_sale');
+    }
+    throw new FandangoError(`Showtimes source returned HTTP ${res.status}`);
+  }
   try {
     return await res.json();
   } catch {
@@ -385,8 +395,9 @@ async function seatCounts(hashes) {
       try {
         const m = await seatMap(hash);
         out[hash] = { available: m.available, total: m.total };
-      } catch {
-        /* left out on purpose */
+      } catch (err) {
+        // Not yet bookable is worth saying. Anything else is left out.
+        if (err.code === 'not_on_sale') out[hash] = { on_sale: false };
       }
     })
   );

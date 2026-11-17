@@ -31,6 +31,7 @@ function dateLabel(iso, today) {
 
 function seatsLabel(c) {
   if (!c) return null;
+  if (c.on_sale === false) return 'Not on sale';
   if (c.available <= 0) return 'Full';
   return `${c.available} left`;
 }
@@ -130,13 +131,14 @@ function FilmCard({ film, counts, watched, onNeedCounts, onPick, onOpenWatch, on
           <div className="np-times">
             {g.showtimes.map((s) => {
               const c = s.hash ? counts[s.hash] : null;
-              const full = s.sold_out || (c && c.available <= 0);
+              const notYet = Boolean(c && c.on_sale === false);
+              const full = !notYet && (s.sold_out || (c && c.available <= 0));
               const low = !full && c && c.total > 0 && c.available / c.total <= 0.15;
               return (
                 <button
                   key={s.starts_at + (s.hash || '')}
                   type="button"
-                  className={`np-time ${full ? 'is-full' : ''} ${low ? 'is-low' : ''} ${s.hash && watched.has(s.hash) ? 'is-watched' : ''} ${isMine(film, s) ? 'is-mine' : ''}`}
+                  className={`np-time ${full ? 'is-full' : ''} ${low ? 'is-low' : ''} ${notYet ? 'is-notyet' : ''} ${s.hash && watched.has(s.hash) ? 'is-watched' : ''} ${isMine(film, s) ? 'is-mine' : ''}`}
                   disabled={!s.hash}
                   onClick={() => onPick(film, g, s)}
                 >

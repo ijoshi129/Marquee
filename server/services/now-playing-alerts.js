@@ -136,9 +136,10 @@ async function checkWatching(now = Date.now()) {
     try {
       seats = await fandango.seatMap(w.hash);
     } catch (err) {
-      // Off sale: nothing left to watch. Anything else: try again next pass.
+      // Off sale: nothing left to watch. Not open for booking: keep waiting.
+      // Anything else: try again next pass, and say something went wrong.
       if (err.status !== 404) {
-        failed = err;
+        if (err.code !== 'not_on_sale') failed = err;
         keep.push(w);
       }
       continue;
@@ -184,11 +185,25 @@ async function checkUnseens(now = Date.now()) {
       }
       const films = await nowPlaying.flagFilms(board.films.filter((f) => nowPlaying.unseenKind(f.title) === u.type));
       if (!films.length) continue;
-      told[key] = true;
-      if (films.some((f) => f.booked)) booked = true;
+      if (films.some((f) => f.booked)) {
+        booked = true;
+        told[key] = true;
+        continue;
+      }
       const times = films.flatMap((f) => f.formats.flatMap((g) => g.showtimes)).filter((s) => !s.past);
       // Listed, but every showing has started: too late to be news.
       if (!times.length) continue;
+      // Listed is not on sale. A showing appears with a time weeks before the
+      // theatre opens it for booking, so it only counts once its seats load.
+      // Until then nothing is recorded, and the next pass looks again.
+      const bookable = times.find((s) => s.hash);
+      if (!bookable) continue;
+      try {
+        await fandango.seatMap(bookable.hash);
+      } catch {
+        continue;
+      }
+      told[key] = true;
       found.push({ theatre: t, times: times.map((s) => s.label) });
     }
     // Already holding a ticket: there is nothing to tell.
@@ -203,7 +218,7 @@ async function checkUnseens(now = Date.now()) {
       title: `${kind} on sale: ${dayLabel(u.date)}`,
       body: [clues, places].filter(Boolean).join(' · '),
       payload: { now_playing: { theatre: found[0].theatre.id, date: u.date } },
-      dedupeKey: `unseen-listed:${u.date}:${u.type}:${found.map((f) => f.theatre.id).sort().join(',')}`,
+      dedupeKey: `unseen-on-sale:${u.date}:${u.type}:${found.map((f) => f.theatre.id).sort().join(',')}`,
     });
     if (row) sent += 1;
   }
