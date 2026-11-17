@@ -203,7 +203,7 @@ test('unseens: an upcoming one on sale at your theatres is announced once, with 
   listed = { AABPS: true, AAHRP: true };
   assert.equal((await alerts.checkUnseens(NOW)).sent, 1);
   assert.equal(sent[1].body, 'PG-13 · 2h 9m · Brunswick Square 13 7:00 PM');
-  assert.deepEqual(Object.keys(db.get('now_playing_alert_state').unseen).sort(), ['2026-12-14|screen|AABPS', '2026-12-14|screen|AAHRP']);
+  assert.deepEqual(Object.keys(db.get('now_playing_alert_state').on_sale).sort(), ['2026-12-14|screen|AABPS', '2026-12-14|screen|AAHRP']);
 });
 
 test('unseens: on sale at several theatres at once, the alert names the main one and counts the rest', async () => {
@@ -242,7 +242,7 @@ test('unseens: listed but not yet bookable is not "on sale", and is announced on
   assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
   assert.equal(sent.length, 0);
   // Nothing is remembered as told, so every pass looks again, once per theatre.
-  assert.deepEqual(db.get('now_playing_alert_state').unseen, {});
+  assert.deepEqual(db.get('now_playing_alert_state').on_sale, {});
   assert.equal(seatAsks.length, 4);
 
   open = ['all'];
@@ -250,6 +250,21 @@ test('unseens: listed but not yet bookable is not "on sale", and is announced on
   assert.deepEqual([sent[0].title, sent[0].body], ['Screen Unseen on sale: Mon, Dec 14', 'PG-13 · 2h 9m · Monmouth Mall 15 7:00 PM and 1 more']);
   assert.match(sent[0].dedupeKey, /^unseen-on-sale:/);
   assert.equal((await alerts.checkUnseens(NOW)).sent, 0);
+});
+
+test('unseens: what 2.16 remembered as told does not hold back the real alert', async () => {
+  // 2.16 marked a theatre as told when the Unseen was only listed.
+  const db = stubDb({ now_playing_alert_state: { unseen: { '2026-12-14|screen|AABPS': true }, films: { AABPS: [1, 2] } } });
+  const sent = captureNotify();
+  nowPlaying.theatresForView = async () => ({ home: HOME, saved: [], visited: [] });
+  nowPlaying.flagFilms = async (films) => films.map((f) => ({ ...f, booked: null }));
+  unseenLookup.upcomingUnseens = async () => [{ date: '2026-12-14', type: 'screen', rating: 'PG-13', runtime: 129 }];
+  fandango.showtimes = async (id, date) => ({ date, films: [unseenFilm(['7:00 PM'])] });
+  fandango.seatMap = seatsOpen;
+  assert.equal((await alerts.checkUnseens(NOW)).sent, 1);
+  const state = db.get('now_playing_alert_state');
+  // The old record is dropped, the new one kept, and the rest left alone.
+  assert.deepEqual(state, { films: { AABPS: [1, 2] }, on_sale: { '2026-12-14|screen|AABPS': true } });
 });
 
 test('unseens: a listing with no showing to check is not announced', async () => {

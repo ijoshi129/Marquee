@@ -168,7 +168,9 @@ async function checkUnseens(now = Date.now()) {
   if (!where.length) return { upcoming: upcoming.length, sent: 0 };
 
   const state = await readJson(STATE_KEY, {});
-  const told = state.unseen || {};
+  // Kept under a new name since 2.17: what 2.16 remembered as told were
+  // listings, not showings on sale, and must not count.
+  const told = state.on_sale || {};
   let sent = 0;
   for (const u of upcoming) {
     const found = [];
@@ -224,7 +226,8 @@ async function checkUnseens(now = Date.now()) {
   }
   // Forget screenings that have passed, so the record does not grow for ever.
   for (const key of Object.keys(told)) if (key.slice(0, 10) < today) delete told[key];
-  await writeJson(STATE_KEY, { ...(await readJson(STATE_KEY, {})), unseen: told });
+  const { unseen: _listedOnly, ...rest } = await readJson(STATE_KEY, {});
+  await writeJson(STATE_KEY, { ...rest, on_sale: told });
   return { upcoming: upcoming.length, sent };
 }
 
