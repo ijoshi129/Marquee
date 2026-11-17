@@ -212,7 +212,8 @@ export default function App() {
   }
 
   function handleUpdated(watch) {
-    if (editing && editing.id === watch.id) setEditing(watch);
+    // Functional, so a save that lands after the sheet closed does not reopen it.
+    setEditing((cur) => (cur && cur.id === watch.id ? watch : cur));
     setRefreshKey((k) => k + 1);
     // Re-fetch so server-side filters (status, search, period) are reapplied —
     // a row whose new status no longer matches the current filter should drop out.
@@ -385,6 +386,11 @@ export default function App() {
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
           onFilterDirector={filterByDirector}
+          onOpenNowPlaying={(focus) => {
+            setEditing(null);
+            setNpFocus({ ...focus, key: Date.now() });
+            setView('nowplaying');
+          }}
         />
       )}
 

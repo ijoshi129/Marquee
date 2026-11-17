@@ -12,7 +12,7 @@ function money(n) {
 
 // The auditorium for one showing: every seat where it sits, lit if it is still
 // open. Refreshes while it is up, since seats go as you look at them.
-export default function SeatMapSheet({ film, group, showtime, theatre, mine, watching, onWatch, onCounts, onClose }) {
+export default function SeatMapSheet({ film, group, showtime, theatre, mine, watching, onWatch, onCounts, onClose, layout, subtitle: subtitleText, note, extra }) {
   const [map, setMap] = useState(null);
   const [err, setErr] = useState(null);
   const [zoom, setZoom] = useState(false);
@@ -29,6 +29,10 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
   }
 
   useEffect(() => {
+    if (layout) {
+      setMap(layout);
+      return undefined;
+    }
     let alive = true;
     const load = () =>
       api
@@ -48,7 +52,7 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
     };
     // onCounts is a fresh closure every render; the showing is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showtime.hash]);
+  }, [layout, showtime && showtime.hash]);
 
   const rows = useMemo(() => {
     if (!map) return [];
@@ -64,9 +68,11 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
     return [...by.values()].map((r) => ({ row: r.row, y: r.y / r.n }));
   }, [map]);
 
-  const subtitle = [showtime.label, group.format, map && map.auditorium ? `Screen ${map.auditorium}` : null]
-    .filter(Boolean)
-    .join(' · ');
+  const subtitle =
+    subtitleText ||
+    [showtime && showtime.label, group && group.format, map && map.auditorium ? `Screen ${map.auditorium}` : null]
+      .filter(Boolean)
+      .join(' · ');
   const hasAccessible = map && map.seats.some((s) => s.kind !== 'standard');
 
   return (
@@ -94,7 +100,7 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
 
         {map && (
           <>
-            <div className="seat-count">
+            {!layout && <div className="seat-count">
               <span className="seat-count-n">{map.available}</span>
               <span className="seat-count-rest">
                 of {map.total} seats open
@@ -103,14 +109,14 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
               <button type="button" className="seat-zoom" onClick={() => setZoom((z) => !z)}>
                 {zoom ? 'Fit' : 'Zoom'}
               </button>
-            </div>
+            </div>}
 
             <div className={`seat-scroll ${zoom ? 'is-zoomed' : ''}`}>
               <svg
                 className="seat-svg"
                 viewBox={`${-PAD - GUTTER} ${-SCREEN_H - PAD} ${map.width + 2 * PAD + GUTTER} ${map.height + SCREEN_H + 2 * PAD}`}
                 role="img"
-                aria-label={`${map.available} of ${map.total} seats open`}
+                aria-label={layout ? 'Auditorium layout' : `${map.available} of ${map.total} seats open`}
               >
                 <path
                   className="seat-screen"
@@ -127,27 +133,37 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
                 {map.seats.map((s) => (
                   <rect
                     key={s.id}
-                    className={`seat ${mySeats.has(s.id) ? 'is-mine' : s.open ? 'is-open' : 'is-taken'} ${s.kind !== 'standard' ? `is-${s.kind}` : ''}`}
+                    className={`seat ${mySeats.has(s.id) ? 'is-mine' : layout ? 'is-layout' : s.open ? 'is-open' : 'is-taken'} ${s.kind !== 'standard' ? `is-${s.kind}` : ''}`}
                     x={s.x + s.w * 0.08}
                     y={s.y + s.h * 0.08}
                     width={s.w * 0.84}
                     height={s.h * 0.84}
                     rx={Math.min(s.w, s.h) * 0.22}
                   >
-                    <title>{`${s.id}${mySeats.has(s.id) ? ' (yours)' : s.open ? '' : ' (taken)'}`}</title>
+                    <title>{`${s.id}${mySeats.has(s.id) ? ' (yours)' : layout || s.open ? '' : ' (taken)'}`}</title>
                   </rect>
                 ))}
               </svg>
             </div>
 
-            <div className="seat-legend">
-              <span><i className="seat-key is-open" /> Open</span>
-              <span><i className="seat-key is-taken" /> Taken</span>
-              {mySeats.size > 0 && <span><i className="seat-key is-mine" /> Yours</span>}
-              {hasAccessible && <span><i className="seat-key is-open is-wheelchair" /> Wheelchair and companion</span>}
-            </div>
+            {layout ? (
+              <div className="seat-legend">
+                {mySeats.size > 0 && <span><i className="seat-key is-mine" /> Where you sat</span>}
+              </div>
+            ) : (
+              <div className="seat-legend">
+                <span><i className="seat-key is-open" /> Open</span>
+                <span><i className="seat-key is-taken" /> Taken</span>
+                {mySeats.size > 0 && <span><i className="seat-key is-mine" /> Yours</span>}
+                {hasAccessible && <span><i className="seat-key is-open is-wheelchair" /> Wheelchair and companion</span>}
+              </div>
+            )}
+            {layout && mySeats.size > 0 && !map.seats.some((x) => mySeats.has(x.id)) && (
+              <div className="seat-stale">Seat {[...mySeats].join(', ')} is not on this layout. The auditorium may have changed since.</div>
+            )}
+            {note && <div className="seat-note">{note}</div>}
 
-            {mine && (
+            {mine && !layout && (
               <div className="seat-mine">
                 You&rsquo;re booked for this one
                 {mine.seats?.length ? `: ${mine.seats.length > 1 ? 'seats' : 'seat'} ${mine.seats.join(', ')}` : ''}
@@ -167,7 +183,8 @@ export default function SeatMapSheet({ film, group, showtime, theatre, mine, wat
               </div>
             )}
 
-            {map.prices.length > 0 && (
+            {extra}
+            {map.prices && map.prices.length > 0 && (
               <div className="seat-prices">{map.prices.map((p) => `${p.label} ${money(p.price)}`).join(' · ')}</div>
             )}
             {err && <div className="seat-stale">Could not refresh: {err}</div>}

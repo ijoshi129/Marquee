@@ -282,6 +282,167 @@ async function flagFilms(films) {
   });
 }
 
+// ---------- your seat on the map ----------
+
+const LAYOUT_KEY = 'seat_layouts';
+const MAX_LAYOUTS = 300;
+const MAX_PROBES = 24;
+const PROBE_AGAIN_MS = 60 * 60 * 1000;
+const PROBE_BATCH = 3;
+const probedAt = new Map();
+
+// The diary theatre's listing, found the way the theatre switcher finds it. A
+// theatre only ever booked, never watched at, is looked up by its email's ZIP.
+async function theatreForName(name) {
+  if (!name) return null;
+  const key = normalizeText(name);
+  const known = await readVisitedMap();
+  if (known[key]) return known[key];
+  const settings = await getTheatres();
+  for (const t of [settings.home, ...(settings.saved || [])]) {
+    if (t && normalizeText(t.name) === key) return t;
+  }
+  const zip = await zipFromEmails(name);
+  if (!zip) return null;
+  const hit = cleanTheatre((await fandango.searchTheatres(zip)).find((t) => normalizeText(t.name) === key));
+  if (!hit) return null;
+  known[key] = hit;
+  await pool.query(
+    `INSERT INTO app_state (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [VISITED_KEY, JSON.stringify(known)]
+  );
+  return hit;
+}
+
+async function readLayouts() {
+  const { rows } = await pool.query('SELECT value FROM app_state WHERE key = $1', [LAYOUT_KEY]);
+  try {
+    return rows[0] ? JSON.parse(rows[0].value) || {} : {};
+  } catch {
+    return {};
+  }
+}
+
+// An auditorium's seats without who has them: its shape does not change from
+// one showing to the next, so a past booking can be drawn on today's layout.
+function layoutOf(map) {
+  return {
+    auditorium: map.auditorium,
+    width: map.width,
+    height: map.height,
+    seats: map.seats.map(({ open, ...s }) => s),
+    seen_at: new Date().toISOString(),
+  };
+}
+
+async function keepLayouts(theatreId, maps) {
+  const fresh = maps.filter((m) => m && m.auditorium && m.seats.length);
+  if (!fresh.length) return;
+  const all = await readLayouts();
+  for (const m of fresh) all[`${theatreId}:${m.auditorium}`] = layoutOf(m);
+  const keys = Object.keys(all);
+  if (keys.length > MAX_LAYOUTS) {
+    keys.sort((a, b) => String(all[a].seen_at).localeCompare(String(all[b].seen_at)));
+    for (const k of keys.slice(0, keys.length - MAX_LAYOUTS)) delete all[k];
+  }
+  await pool.query(
+    `INSERT INTO app_state (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [LAYOUT_KEY, JSON.stringify(all)]
+  );
+}
+
+// The listing for the booked showing: same film (by the title AMC sold it
+// under, or which Unseen on which day) at the same minute.
+function findShowing(board, w) {
+  const want = titleKey(w.title);
+  const unseen = unseenKeyFromWatch(w);
+  const startsAt = new Date(w.showtime).toISOString().slice(0, 16);
+  for (const f of board.films) {
+    if (titleKey(f.title) !== want && !(unseen && unseenKeyFromTitle(f.title) === unseen)) continue;
+    for (const g of f.formats) {
+      const s = g.showtimes.find((x) => x.starts_at === startsAt && x.hash);
+      if (s) return { film: f, format: g.format, showtime: s };
+    }
+  }
+  return null;
+}
+
+// Showings to open one by one until the auditorium turns up: one per film
+// first, since a film tends to keep to one auditorium all day.
+function probeOrder(board) {
+  const lists = board.films.map((f) => f.formats.flatMap((g) => g.showtimes).filter((s) => s.hash && !s.past));
+  const out = [];
+  for (let i = 0; out.length < MAX_PROBES && lists.some((l) => l[i]); i++) {
+    for (const l of lists) if (l[i] && out.length < MAX_PROBES) out.push(l[i].hash);
+  }
+  return out;
+}
+
+async function findLayout(theatreId, auditorium) {
+  const key = `${theatreId}:${auditorium}`;
+  const saved = (await readLayouts())[key];
+  if (saved) return saved;
+  if (Date.now() - (probedAt.get(key) || 0) < PROBE_AGAIN_MS) return null;
+  probedAt.set(key, Date.now());
+  const board = await fandango.showtimes(theatreId);
+  const order = probeOrder(board);
+  const maps = [];
+  let found = null;
+  for (let i = 0; i < order.length && !found; i += PROBE_BATCH) {
+    const batch = await Promise.all(order.slice(i, i + PROBE_BATCH).map((h) => fandango.seatMap(h).catch(() => null)));
+    for (const m of batch.filter(Boolean)) {
+      maps.push(m);
+      if (!found && m.auditorium === String(auditorium)) found = m;
+    }
+  }
+  await keepLayouts(theatreId, maps);
+  return found ? layoutOf(found) : null;
+}
+
+// What the film sheet's seat map shows. A booking still to come gets its
+// showing's live map; one that has passed gets its auditorium's layout, taken
+// from whatever is showing there now, with no record of who else was in.
+async function bookingSeats(watchId) {
+  const { rows } = await pool.query(
+    `SELECT w.id, w.title, w.status, w.showtime, w.auditorium, w.seats, t.name AS theatre_name
+       FROM watches w LEFT JOIN theaters t ON t.id = w.theater_id
+      WHERE w.id = $1`,
+    [watchId]
+  );
+  const w = rows[0];
+  if (!w) return null;
+  const mine = { seats: w.seats || [], auditorium: w.auditorium || null };
+  if (!w.auditorium) return { mode: 'none', mine, reason: 'This booking has no auditorium on record.' };
+  const theatre = await theatreForName(w.theatre_name);
+  if (!theatre) return { mode: 'none', mine, reason: 'This theatre could not be found in the listings.' };
+
+  if (w.showtime && w.status === 'pending' && new Date(w.showtime).getTime() > Date.now() - 6 * 3600 * 1000) {
+    const date = new Date(w.showtime).toISOString().slice(0, 10);
+    const hit = findShowing(await fandango.showtimes(theatre.id, date), w);
+    if (hit) {
+      const map = await fandango.seatMap(hit.showtime.hash).catch(() => null);
+      if (map) keepLayouts(theatre.id, [map]).catch(() => {});
+      return {
+        mode: 'live',
+        mine,
+        theatre,
+        date,
+        film: { title: hit.film.title },
+        format: hit.format,
+        showtime: { hash: hit.showtime.hash, label: hit.showtime.label },
+      };
+    }
+  }
+
+  const layout = await findLayout(theatre.id, w.auditorium);
+  if (!layout) {
+    return { mode: 'none', mine, theatre, reason: `Nothing is showing in auditorium ${w.auditorium} right now, so its layout can't be drawn. Try again another day.` };
+  }
+  return { mode: 'layout', mine, theatre, layout };
+}
+
 // ---------- posters ----------
 
 const UNSEEN_ART = { screen: '/screen-unseen.avif', scream: '/scream-unseen.avif' };
@@ -415,5 +576,6 @@ module.exports = {
   clearPosterCache,
   recordSuccess,
   recordFailure,
-  _internal: { cleanTheatres, visitedTheatres, zipAfterName, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
+  bookingSeats,
+  _internal: { findShowing, probeOrder, layoutOf, cleanTheatres, visitedTheatres, zipAfterName, resetLookupBackoff: () => (lookupFailedAt = 0), titleKey, unseenKeyFromTitle, unseenKeyFromWatch },
 };

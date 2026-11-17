@@ -150,6 +150,19 @@ router.post('/seats/counts', async (req, res) => {
   }
 });
 
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.get('/booking/:watchId', async (req, res) => {
+  if (!UUID_RX.test(req.params.watchId)) return res.status(404).json({ error: 'Not found' });
+  try {
+    const out = await nowPlaying.bookingSeats(req.params.watchId);
+    if (!out) return res.status(404).json({ error: 'Not found' });
+    res.json(out);
+  } catch (err) {
+    fail(res, err, 'booking seats');
+  }
+});
+
 router.get('/seats/:hash', async (req, res) => {
   try {
     res.json(await fandango.seatMap(req.params.hash));
