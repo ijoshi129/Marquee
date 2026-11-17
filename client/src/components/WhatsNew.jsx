@@ -19,6 +19,13 @@ const RELEASES = [
         ],
       },
       {
+        title: 'Where your friends are sitting',
+        items: [
+          'When you and a friend book the same showing, the card in Friends now says where each of you is sitting, and whether you are side by side.',
+          'A friend’s upcoming film shows their seat too, so you can book next to them. Your seat is shared the same way: switch it off under Sharing if you would sooner not.',
+        ],
+      },
+      {
         title: 'A reminder before the show',
         items: [
           'Two hours before a film you have booked, a notification with the theatre, auditorium and seat, when the film itself starts after the trailers, and roughly when it lets out.',

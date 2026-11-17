@@ -49,7 +49,7 @@ share what you're watching.
 **Friends (federation)**
 - **Connect instances directly**: no central server; you and a friend swap secret URLs and the two instances sync over HTTP. Each URL is its own credential: revoke or rotate one friend without touching the rest.
 - **Activity feed**: see what friends have logged and what's coming up.
-- **Seeing together**: matching upcoming reservations merge into one card with a shared comment thread.
+- **Seeing together**: matching upcoming reservations merge into one card with a shared comment thread, and the card says where each person is sitting.
 - **Taste-match**: % agreement and films-in-common on each friend's profile.
 - **Notifications**: in-app bell plus iOS Web Push and [ntfy](https://ntfy.sh) for comments, friend bookings, and seeing-together alerts.
 

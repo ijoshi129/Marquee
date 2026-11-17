@@ -6,6 +6,7 @@ const TOGGLES = [
   { key: 'share_activity', label: 'Recent watches', hint: 'The films you log, with posters and dates.' },
   { key: 'share_ratings', label: 'Your ratings', hint: 'Star ratings on shared films.' },
   { key: 'share_now_playing', label: 'Upcoming', hint: 'Reservations you have booked.' },
+  { key: 'share_seats', label: 'Your seat', hint: 'The auditorium and seat on those reservations, so friends at the same showing see where you are.' },
   { key: 'share_stats', label: 'Year-in-review stats', hint: 'Counts, runtime, top genres and directors.' },
 ];
 

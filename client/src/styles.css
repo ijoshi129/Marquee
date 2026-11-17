@@ -3693,6 +3693,7 @@ input[type='date'].input-naked { color-scheme: dark; }
   margin: 1px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .feed-meta { font-size: 0.72rem; color: var(--fg-mute); }
+.feed-seats { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.04em; color: var(--accent); }
 .feed-metarow { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .feed-metarow .feed-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed-unseen {
