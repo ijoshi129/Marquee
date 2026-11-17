@@ -10,6 +10,7 @@ const fed = require('../services/federation');
 const { fetchWithTimeout } = require('../services/http');
 const federationSync = require('../workers/federation-sync');
 const { cleanSeats, cleanAuditorium } = require('../utils/seats');
+const tailcat = require('../services/tailcat');
 
 const router = express.Router();
 
@@ -21,12 +22,17 @@ router.param('id', (req, res, next, id) => {
   next();
 });
 
-function baseUrl() {
-  return (process.env.FEDERATION_BASE_URL || '').replace(/\/+$/, '') || null;
-}
+const NO_URL_ERROR =
+  'Set FEDERATION_BASE_URL or turn on Tailcat (TAILCAT_ENABLED=1) to add friends';
 
-function myUrlFor(token) {
-  return `${baseUrl()}/api/federation/${token}`;
+// A pasted URL, checked: null when absent, { error } when unusable.
+function readFriendUrl(raw) {
+  const url = fed.parseFriendUrl(raw);
+  if (!url) return { error: 'That URL doesn’t look like a Marquee friend URL' };
+  if (tailcat.isTailcatUrl(url) && !tailcat.isEnabled()) {
+    return { error: 'That is a Tailcat link. Turn on Tailcat here (TAILCAT_ENABLED=1) to use it.' };
+  }
+  return { url };
 }
 
 const FRIEND_COLUMNS = `id, remote_instance_id, display_name, avatar_url,
@@ -114,16 +120,15 @@ router.put('/identity', async (req, res) => {
 // it. my_url is shown exactly once — only its hash is kept.
 router.post('/', async (req, res) => {
   try {
-    if (!baseUrl()) {
-      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to add friends' });
-    }
+    if (!fed.canMint()) return res.status(503).json({ error: NO_URL_ERROR });
     const name = ((req.body || {}).display_name || '').trim().slice(0, 120);
     if (!name) return res.status(400).json({ error: 'display_name is required' });
 
     let friendUrl = null;
     if ((req.body || {}).friend_url) {
-      friendUrl = fed.parseFriendUrl(req.body.friend_url);
-      if (!friendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+      const checked = readFriendUrl(req.body.friend_url);
+      if (checked.error) return res.status(400).json({ error: checked.error });
+      friendUrl = checked.url;
     }
 
     const token = fed.generateSecret();
@@ -133,14 +138,18 @@ router.post('/', async (req, res) => {
        RETURNING ${FRIEND_COLUMNS}`,
       [name, friendUrl, fed.sha256(token)]
     );
-    const myUrl = myUrlFor(token);
+    const urls = fed.myUrlsFor(token);
     if (friendUrl) {
       federationSync.syncFriendById(rows[0].id).catch(() => {});
       // Hand them our URL over the channel they just gave us, so they don't have
       // to paste ours back — the connection goes two-way from a single add.
-      fed.sendConnect(friendUrl, myUrl).catch(() => {});
+      fed.sendConnect(friendUrl, fed.urlForPeer(urls, friendUrl)).catch(() => {});
     }
-    res.status(201).json({ ...rows[0], my_url: myUrl });
+    res.status(201).json({
+      ...rows[0],
+      my_url: urls.web || urls.tailcat,
+      my_urls: urls,
+    });
   } catch (err) {
     logger.error({ err }, 'add friend');
     res.status(500).json({ error: 'Server error' });
@@ -163,8 +172,9 @@ router.patch('/:id', async (req, res) => {
     let newFriendUrl = null;
     if ('friend_url' in body) {
       if (body.friend_url) {
-        newFriendUrl = fed.parseFriendUrl(body.friend_url);
-        if (!newFriendUrl) return res.status(400).json({ error: 'That URL doesn’t look like a Marquee friend URL' });
+        const checked = readFriendUrl(body.friend_url);
+        if (checked.error) return res.status(400).json({ error: checked.error });
+        newFriendUrl = checked.url;
       }
       params.push(newFriendUrl);
       updates.push(`friend_url = $${params.length}`);
@@ -196,13 +206,13 @@ router.patch('/:id', async (req, res) => {
       // link goes two-way from a single paste. We only hold the hash of our old
       // token, so minting a new one is the only way to advertise ourselves; the
       // fresh URL reaches them via their inbox and their broken/empty slot fills.
-      if (wasEmpty && baseUrl()) {
+      if (wasEmpty && fed.canMint()) {
         const token = fed.generateSecret();
         await pool.query(
           'UPDATE friends SET inbound_token_hash = $2, updated_at = NOW() WHERE id = $1',
           [rows[0].id, fed.sha256(token)]
         );
-        fed.sendConnect(newFriendUrl, myUrlFor(token)).catch(() => {});
+        fed.sendConnect(newFriendUrl, fed.urlForPeer(fed.myUrlsFor(token), newFriendUrl)).catch(() => {});
       }
     }
     res.json(rows[0]);
@@ -216,9 +226,7 @@ router.patch('/:id', async (req, res) => {
 // The old URL stops matching immediately; hand them the new one.
 router.post('/:id/rotate', async (req, res) => {
   try {
-    if (!baseUrl()) {
-      return res.status(503).json({ error: 'FEDERATION_BASE_URL must be set to rotate URLs' });
-    }
+    if (!fed.canMint()) return res.status(503).json({ error: NO_URL_ERROR });
     const token = fed.generateSecret();
     const { rows } = await pool.query(
       `UPDATE friends SET inbound_token_hash = $2, updated_at = NOW()
@@ -226,7 +234,8 @@ router.post('/:id/rotate', async (req, res) => {
       [req.params.id, fed.sha256(token)]
     );
     if (!rows.length) return res.status(404).json({ error: 'Friend not found' });
-    res.json({ my_url: myUrlFor(token) });
+    const urls = fed.myUrlsFor(token);
+    res.json({ my_url: urls.web || urls.tailcat, my_urls: urls });
   } catch (err) {
     logger.error({ err }, 'rotate friend url');
     res.status(500).json({ error: 'Server error' });

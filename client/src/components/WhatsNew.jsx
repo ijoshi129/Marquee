@@ -2,12 +2,25 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.17';
+const WHATS_NEW_VERSION = '2.18';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.18',
+    sections: [
+      {
+        title: 'Friends without a public address',
+        items: [
+          'Marquee can now reach a friend over Tailcat, an encrypted tunnel that needs no domain, open port or shared VPN on either side. Whoever runs your Marquee turns it on with TAILCAT_ENABLED=1.',
+          'With it on, Add a friend gives you a Tailcat link as well as the usual web link. Send whichever suits: a friend who also has Tailcat on can use the Tailcat one.',
+          'Existing friends keep working as before.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.17',
     sections: [

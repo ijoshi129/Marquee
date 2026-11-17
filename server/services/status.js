@@ -9,6 +9,7 @@ const jobStatus = require('./job-status');
 const fed = require('./federation');
 const trakt = require('./trakt');
 const ntfy = require('./ntfy');
+const tailcat = require('./tailcat');
 const nowPlaying = require('./now-playing');
 const nowPlayingAlerts = require('./now-playing-alerts');
 
@@ -140,6 +141,20 @@ const JOBS = [
         };
       }
       return { summary: rows.length ? `${plural(rows.length, 'friend')} in sync` : 'No friends yet' };
+    },
+  },
+  {
+    key: 'tailcat',
+    name: 'Tailcat',
+    schedule: 'Always on',
+    enabled: () => fed.isEnabled() && tailcat.isEnabled(),
+    off: 'Tailcat is switched off',
+    async describe(state) {
+      if (!tailcat.myAddress()) {
+        return state.last_error ? {} : { warning: 'Starting up' };
+      }
+      const via = tailcat.relayName();
+      return { summary: via ? `Reachable, relay ${via}` : 'Reachable' };
     },
   },
   {

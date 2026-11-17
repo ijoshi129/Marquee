@@ -155,6 +155,12 @@ reachable from your friends' instances. Any of these works:
   the Marquee port; restrict it to `/api/federation/` if it supports path rules.
 - **Same network / VPN**: if you and your friend already share a LAN or VPN, a
   plain `http://<ip>:<port>` address works; no public exposure needed.
+- **Tailcat (no domain, nothing exposed).** Set `TAILCAT_ENABLED=1` and your
+  friend links also come as `tailcat://…`, carried over an encrypted tunnel
+  through Tailscale's free public relays (no Tailscale account). Your friend
+  needs `TAILCAT_ENABLED=1` too. `FEDERATION_BASE_URL` is optional with
+  Tailcat: set both and Add friend offers a web link and a Tailcat link.
+  The tunnel only ever answers `/api/federation/*`.
 
 Either way, only `/api/federation/*` needs to be reachable by friends; it answers
 only to a valid secret URL and 404s everything else. `OWNER_PASSCODE` gates
@@ -249,7 +255,8 @@ All settings live in `.env` at the repo root (every field is documented inline i
 | `DATABASE_IMPORT_LIMIT` | `200mb` | Max request body size for the database import API. |
 | `OWNER_PASSCODE` | unset | Passcode gating everything except the federation API. **Required before sharing your instance.** |
 | `FEDERATION_ENABLED` | unset | Set to `1` to enable the Friends layer. |
-| `FEDERATION_BASE_URL` | unset | This instance's externally-reachable URL; required to invite/accept friends. |
+| `FEDERATION_BASE_URL` | unset | This instance's externally-reachable URL. Friends need it or Tailcat. |
+| `TAILCAT_ENABLED` | unset | Set to `1` to also reach friends over Tailcat, with no public address. |
 | `INSTANCE_NAME` | `Marquee` | The name friends see for your instance. |
 | `FEDERATION_SYNC_INTERVAL_MIN` | `15` | How often to poll friends (change pushes are near-instant regardless). |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | unset | Web Push (iOS) credentials. |

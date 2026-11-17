@@ -9,6 +9,7 @@ export default function AddFriendModal({ onClose, onChanged }) {
   const [name, setName] = useState('');
   const [theirUrl, setTheirUrl] = useState('');
   const [myUrl, setMyUrl] = useState('');
+  const [myUrls, setMyUrls] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -29,6 +30,7 @@ export default function AddFriendModal({ onClose, onChanged }) {
       if (theirUrl.trim()) body.friend_url = theirUrl.trim();
       const created = await api.addFriend(body);
       setMyUrl(created.my_url);
+      setMyUrls(created.my_urls || null);
       onChanged?.();
     } catch (e) {
       setErr(e.message);
@@ -68,7 +70,7 @@ export default function AddFriendModal({ onClose, onChanged }) {
               rows={3}
               value={theirUrl}
               onChange={(e) => setTheirUrl(e.target.value)}
-              placeholder="https://…/api/federation/…"
+              placeholder="https://…/api/federation/… or tailcat://…"
             />
             <button className="friends-primary" onClick={add} disabled={busy || !name.trim()}>
               {busy ? 'Adding…' : 'Add friend'}
@@ -78,7 +80,8 @@ export default function AddFriendModal({ onClose, onChanged }) {
           <div className="friends-form">
             <UrlReveal
               url={myUrl}
-              label={`Send this URL to ${name.trim()} — or let them scan it. It’s shown only once; if it’s lost, rotate it from Manage friends.`}
+              urls={myUrls}
+              label={`Send this URL to ${name.trim()}, or let them scan it. It’s shown only once; if it’s lost, rotate it from Manage friends.`}
             />
             <button className="friends-secondary" onClick={onClose}>
               Done
