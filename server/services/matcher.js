@@ -22,6 +22,9 @@ const TIEBREAKER_OFFSET_HOURS = 2; // typical post-show email delay
 async function ingestReservation({ fields, gmail_message_id }) {
   const { title, theater_name, showtime, order_number, tags: parsedTags } = fields;
   const theater = await upsertTheater(theater_name);
+  const auditorium = fields.auditorium || null;
+  const seats = Array.isArray(fields.seats) && fields.seats.length ? fields.seats : null;
+  const ticketCount = fields.ticket_count || null;
 
   // Idempotency: same reservation email or same order_number.
   const existing = await pool.query(
@@ -32,6 +35,13 @@ async function ingestReservation({ fields, gmail_message_id }) {
     [gmail_message_id, order_number]
   );
   if (existing.rows.length) {
+    // An email read again fills in what an older version did not keep.
+    await pool.query(
+      `UPDATE watches SET auditorium = COALESCE(auditorium, $2), seats = COALESCE(seats, $3),
+              ticket_count = COALESCE(ticket_count, $4)
+        WHERE id = $1 AND (auditorium IS NULL OR seats IS NULL OR ticket_count IS NULL)`,
+      [existing.rows[0].id, auditorium, seats, ticketCount]
+    );
     return { watch_id: existing.rows[0].id, deduped: true };
   }
 
@@ -56,10 +66,11 @@ async function ingestReservation({ fields, gmail_message_id }) {
   const insert = await pool.query(
     `INSERT INTO watches
        (tmdb_id, title, theater_id, showtime, status, source,
-        reservation_email_id, order_number, tmdb_needs_review, tags)
-     VALUES ($1, $2, $3, $4, 'pending', 'amc_email', $5, $6, $7, $8)
+        reservation_email_id, order_number, tmdb_needs_review, tags,
+        auditorium, seats, ticket_count)
+     VALUES ($1, $2, $3, $4, 'pending', 'amc_email', $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
-    [tmdbId, title, theater?.id || null, showtime, gmail_message_id, order_number || null, needsReview, tags]
+    [tmdbId, title, theater?.id || null, showtime, gmail_message_id, order_number || null, needsReview, tags, auditorium, seats, ticketCount]
   );
   return { watch_id: insert.rows[0].id, deduped: false };
 }

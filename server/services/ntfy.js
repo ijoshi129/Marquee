@@ -11,6 +11,8 @@ const KINDS = {
   comment: { column: 'notify_comment', tags: ['speech_balloon'] },
   together: { column: 'notify_together', tags: ['popcorn'] },
   booked: { column: 'notify_booked', tags: ['tickets'] },
+  showtime: { column: 'notify_showtime', tags: ['clapper'] },
+  nowplaying: { column: 'notify_nowplaying', tags: ['movie_camera'] },
 };
 
 async function getSettings() {
@@ -21,7 +23,7 @@ async function getSettings() {
   return (await pool.query(`SELECT * FROM ntfy_settings WHERE id = TRUE`)).rows[0];
 }
 
-const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_together', 'notify_booked'];
+const FIELDS = ['enabled', 'server_url', 'topic', 'token', 'notify_comment', 'notify_together', 'notify_booked', 'notify_showtime', 'notify_nowplaying'];
 
 async function updateSettings(body) {
   const updates = [];

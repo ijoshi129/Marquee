@@ -6,6 +6,8 @@ const KIND_TOGGLES = [
   { key: 'notify_comment', label: 'Comments', hint: 'A friend comments on one of your films.' },
   { key: 'notify_together', label: 'Seeing together', hint: 'You and a friend booked the same showing.' },
   { key: 'notify_booked', label: 'Friend bookings', hint: 'A friend books a showing you’re not part of.' },
+  { key: 'notify_showtime', label: 'Showtime reminders', hint: 'Before a film you’ve booked: where to go and where you’re sitting.' },
+  { key: 'notify_nowplaying', label: 'Now Playing alerts', hint: 'An Unseen goes on sale, new films arrive, or a showing you’re watching fills up.' },
 ];
 
 function urlB64ToUint8Array(base64) {

@@ -48,6 +48,8 @@ const ICON = {
   friend_added: '👋',
   comment: '💬',
   booked: '🎟️',
+  showtime: '🎬',
+  nowplaying: '📽️',
   identify: '🔎',
   status: '⚠️',
 };

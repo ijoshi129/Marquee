@@ -475,6 +475,15 @@ async function cluesFor(date, type) {
   };
 }
 
+// The screenings the megathread lists as still to come. Empty when Reddit
+// cannot be read: the caller has nothing to go on then.
+async function upcomingUnseens() {
+  const id = await findCurrentMegathreadId();
+  if (!id) return [];
+  const thread = await loadThread(id);
+  return thread.upcoming || [];
+}
+
 // Resolve a watch's actual movie via Reddit + TMDB, update DB. Returns:
 //   { resolved: true, tmdbId, title }   on success
 //   { resolved: false, reason: '...' }  otherwise (idempotent — does not touch DB)
@@ -569,6 +578,7 @@ module.exports = {
   resolveAndAssign,
   lookupByDate,
   cluesFor,
+  upcomingUnseens,
   parseMegathread,
   parseUnrevealed,
   parseDateString,

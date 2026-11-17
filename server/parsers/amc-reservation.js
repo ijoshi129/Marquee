@@ -16,8 +16,10 @@ const { extractTags, extractFormatsFromHtml } = require('../utils/normalize');
 //   <Title>
 //   <H:MM AM|PM> <M/D/YYYY>
 //   <AMC Theater>
-// followed by either "The listed showtime is when..." (modern) or "Auditorium:"
-// (older). The end anchor allows for either, plus end-of-input as a fallback.
+// followed by either "The listed showtime is when..." (modern), "This showing
+// will start promptly..." (screenings with no trailers) or "Auditorium:"
+// (older). The end anchor allows for any of them, plus end-of-input as a
+// fallback.
 const RESERVATION_BLOCK = new RegExp(
   [
     'Ticket\\s+Confirmation#?:\\s*(?<ticket>\\d+)\\s+',
@@ -25,7 +27,7 @@ const RESERVATION_BLOCK = new RegExp(
     '(?<time>\\d{1,2}:\\d{2}\\s*[AP]M)\\s+',
     '(?<date>\\d{1,2}\\/\\d{1,2}\\/\\d{4})\\s+',
     '(?<theater>AMC\\s+.+?)',
-    '\\s+(?:The\\s+listed\\s+showtime|Auditorium:|Reserved\\s+Seats|Photo\\s+ID|$)',
+    '\\s+(?:The\\s+listed\\s+showtime|This\\s+showing\\s+will|Auditorium:|Reserved\\s+Seats|Photo\\s+ID|$)',
   ].join(''),
   'i'
 );
@@ -61,6 +63,17 @@ function parse({ subject, html, text }) {
   const orderM = /Order\s+Number:\s*(\d+)/i.exec(body);
   const order_number = orderM ? orderM[1] : null;
 
+  // Where to sit. "Reserved Seats: G8" or "F8, F9"; a wheelchair space is "WC1".
+  const audM = /Auditorium:\s*([A-Za-z0-9]{1,6})\b/i.exec(body);
+  const auditorium = audM ? audM[1] : null;
+  const seatsM = /Reserved\s+Seats?:\s*([A-Z]{1,2}\d{1,3}(?:\s*,\s*[A-Z]{1,2}\d{1,3})*)/.exec(body);
+  const seats = seatsM ? seatsM[1].split(',').map((s) => s.trim()) : [];
+  // "Ticket: 1 Adult; $7.25" or "2 Adult; $14.50 1 Child; $6.00". General
+  // admission has no seats to count, so the ticket lines are the fallback.
+  const ticketsM = /\bTicket:\s*(.+?)\s+(?:Ticket\s+Total|\d+\s+[^;$]*?Savings)/i.exec(body);
+  const priced = ticketsM ? [...ticketsM[1].matchAll(/(\d+)\s+[A-Za-z][A-Za-z -]*;\s*\$/g)] : [];
+  const ticket_count = seats.length || priced.reduce((n, m) => n + Number(m[1]), 0) || null;
+
   // Format tags: titles sometimes carry trailing suffixes (e.g. "in RealD 3D"),
   // and HTML bodies sometimes carry <img alt="..."> badges for the format.
   // Merge both sources, dedup.
@@ -74,6 +87,9 @@ function parse({ subject, html, text }) {
     order_number,
     ticket_confirmation,
     tags,
+    auditorium,
+    seats,
+    ticket_count,
   };
 
   return {

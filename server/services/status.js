@@ -10,6 +10,7 @@ const fed = require('./federation');
 const trakt = require('./trakt');
 const ntfy = require('./ntfy');
 const nowPlaying = require('./now-playing');
+const nowPlayingAlerts = require('./now-playing-alerts');
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -73,6 +74,29 @@ const JOBS = [
     async describe() {
       const { home } = await nowPlaying.getTheatres();
       return { summary: home ? home.name : 'No home theatre picked' };
+    },
+  },
+  {
+    key: 'reminders',
+    name: 'Showtime reminders',
+    schedule: 'Every 5 minutes',
+    staleMs: 30 * MIN,
+    async describe() {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM watches WHERE status = 'pending' AND showtime > NOW() - INTERVAL '1 day'`
+      );
+      const n = rows[0].n;
+      return { summary: n ? `${plural(n, 'booking')} coming up` : 'No bookings coming up' };
+    },
+  },
+  {
+    key: 'alerts',
+    name: 'Now Playing alerts',
+    schedule: 'Every 10 minutes',
+    staleMs: 60 * MIN,
+    async describe() {
+      const watching = await nowPlayingAlerts.listWatching();
+      return { summary: watching.length ? `Watching ${plural(watching.length, 'showing')}` : 'No showings being watched' };
     },
   },
   {

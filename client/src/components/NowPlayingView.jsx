@@ -35,7 +35,7 @@ function seatsLabel(c) {
   return `${c.available} left`;
 }
 
-function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch, onInfo }) {
+function FilmCard({ film, counts, watched, onNeedCounts, onPick, onOpenWatch, onInfo }) {
   const ref = useRef(null);
   // 'own' is the listing's poster, a string is the stand-in found after that
   // one failed to load, 'none' means there is nothing to show but initials.
@@ -108,6 +108,7 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch, onInfo }) {
               {film.booked && (
                 <button type="button" className="np-flag booked" onClick={() => onOpenWatch(film.booked.watch_id)}>
                   Booked{film.booked.showtime ? ` · ${fmtShowtime(film.booked.showtime)}` : ''}
+                  {film.booked.seats?.length ? ` · ${film.booked.seats.join(', ')}` : ''}
                 </button>
               )}
               {film.seen_watch_id && (
@@ -135,7 +136,7 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch, onInfo }) {
                 <button
                   key={s.starts_at + (s.hash || '')}
                   type="button"
-                  className={`np-time ${full ? 'is-full' : ''} ${low ? 'is-low' : ''}`}
+                  className={`np-time ${full ? 'is-full' : ''} ${low ? 'is-low' : ''} ${s.hash && watched.has(s.hash) ? 'is-watched' : ''} ${isMine(film, s) ? 'is-mine' : ''}`}
                   disabled={!s.hash}
                   onClick={() => onPick(film, g, s)}
                 >
@@ -155,7 +156,13 @@ function FilmCard({ film, counts, onNeedCounts, onPick, onOpenWatch, onInfo }) {
 
 // What is showing at one AMC theatre on one day, with a seat map behind every
 // showtime. The home theatre opens first; the picker holds the rest.
-export default function NowPlayingView({ onOpenWatch }) {
+// A booking's showtime is the theatre's clock labelled UTC; a listing's is the
+// same clock with no zone. The first sixteen characters of each line up.
+function isMine(film, s) {
+  return Boolean(film.booked && film.booked.showtime && String(film.booked.showtime).slice(0, 16) === s.starts_at);
+}
+
+export default function NowPlayingView({ onOpenWatch, focus }) {
   const [theatres, setTheatres] = useState(null);
   const [theatreId, setTheatreId] = useState(storedTheatre);
   const [date, setDate] = useState(null);
@@ -168,6 +175,8 @@ export default function NowPlayingView({ onOpenWatch }) {
   const [picking, setPicking] = useState(false);
   const [seat, setSeat] = useState(null);
   const [about, setAbout] = useState(null);
+  // Showings the owner asked to hear about when they fill up.
+  const [watching, setWatching] = useState([]);
   const asked = useRef(new Set());
 
   useEffect(() => {
@@ -176,6 +185,14 @@ export default function NowPlayingView({ onOpenWatch }) {
       .then(setTheatres)
       .catch((e) => setErr(e.message));
   }, []);
+
+  useEffect(() => {
+    api
+      .npWatching()
+      .then(setWatching)
+      .catch(() => {});
+  }, []);
+  const watched = useMemo(() => new Set(watching.map((w) => w.hash)), [watching]);
 
   // Home first, then the diary's theatres by visits, then any others saved.
   const all = useMemo(() => {
@@ -197,6 +214,15 @@ export default function NowPlayingView({ onOpenWatch }) {
       localStorage.setItem(THEATRE_KEY, id);
     } catch {}
   }, []);
+
+  // A notification asked for a particular theatre and day.
+  useEffect(() => {
+    if (!focus || !theatres) return;
+    if (focus.theatre && all.some((t) => t.id === focus.theatre)) chooseTheatre(focus.theatre);
+    if (focus.date && focus.date >= today) setDate(focus.date === today ? null : focus.date);
+    // Only a new notification should move the board, not a later change to the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus && focus.key, Boolean(theatres)]);
 
   // The day is always named in the request. Left out, the showtimes source
   // answers for its own today, which turns over at midnight UTC: early evening
@@ -403,6 +429,7 @@ export default function NowPlayingView({ onOpenWatch }) {
             film={f}
             counts={counts}
             onNeedCounts={needCounts}
+            watched={watched}
             onPick={(film, group, showtime) => setSeat({ film, group, showtime })}
             onInfo={setAbout}
             onOpenWatch={onOpenWatch}
@@ -418,6 +445,22 @@ export default function NowPlayingView({ onOpenWatch }) {
           group={seat.group}
           showtime={seat.showtime}
           theatre={theatre}
+          mine={isMine(seat.film, seat.showtime) ? seat.film.booked : null}
+          watching={watched.has(seat.showtime.hash)}
+          onWatch={(on) =>
+            (on
+              ? api.npWatch({
+                  hash: seat.showtime.hash,
+                  title: seat.film.title,
+                  starts_at: seat.showtime.starts_at,
+                  label: seat.showtime.label,
+                  format: seat.group.format,
+                  theatre_id: theatre.id,
+                  theatre_name: theatre.name,
+                })
+              : api.npUnwatch(seat.showtime.hash)
+            ).then(setWatching)
+          }
           onCounts={(c) => setCounts((prev) => ({ ...prev, [seat.showtime.hash]: c }))}
           onClose={() => setSeat(null)}
         />

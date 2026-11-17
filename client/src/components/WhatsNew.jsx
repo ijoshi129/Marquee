@@ -2,12 +2,39 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.15';
+const WHATS_NEW_VERSION = '2.16';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '2.16',
+    sections: [
+      {
+        title: 'Your seat, from the email',
+        items: [
+          'Every AMC reservation email says which auditorium and seat you have. Marquee now keeps both: they show on the film in your diary, for past bookings too.',
+          'In Now Playing, a showing you have booked is marked, and its seat map shows your seat in green so you can see what has filled in around you.',
+        ],
+      },
+      {
+        title: 'A reminder before the show',
+        items: [
+          'Two hours before a film you have booked, a notification with the theatre, auditorium and seat, when the film itself starts after the trailers, and roughly when it lets out.',
+        ],
+      },
+      {
+        title: 'Alerts from Now Playing',
+        items: [
+          'When an upcoming Screen Unseen or Scream Unseen goes on sale at one of your theatres, you are told, with its rating and runtime.',
+          'When new films appear at your main theatre, one notification names them.',
+          'Open any showtime and tap Tell me when it fills up: you hear when a quarter of the seats are left, and if it sells out.',
+          'Tapping one of these opens Now Playing on that theatre and day. Each kind can be switched off in notification settings.',
+        ],
+      },
+    ],
+  },
   {
     version: '2.15',
     sections: [

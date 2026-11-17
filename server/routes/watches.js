@@ -39,6 +39,7 @@ const SELECT_WATCH = `
     w.reservation_email_id, w.thankyou_email_id,
     w.trakt_sync_requested_at, w.trakt_synced_at, w.trakt_sync_error,
     w.tags, w.is_private,
+    w.auditorium, w.seats, w.ticket_count,
     w.watched_at, w.created_at, w.updated_at,
     t.id  AS theater_id,
     t.name AS theater_name,
