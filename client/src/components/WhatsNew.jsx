@@ -12,11 +12,43 @@ const RELEASES = [
     version: '3.0',
     sections: [
       {
-        title: 'Friends without a public address',
+        title: 'Now Playing',
         items: [
-          'Marquee can now reach a friend over Tailcat, an encrypted tunnel that needs no domain, open port or shared VPN on either side. Whoever runs your Marquee turns it on with TAILCAT_ENABLED=1.',
-          'With it on, Add a friend gives you a Tailcat link as well as the usual web link. Send whichever suits: a friend who also has Tailcat on can use the Tailcat one.',
-          'Existing friends keep working as before.',
+          'A tab of what is on at the AMCs you go to, picked up from your diary with nothing to set up. Switch theatres in one tap, see every showtime with its seats left, and open a full seat map.',
+          'Tap a film for its synopsis, cast, score and trailer.',
+          'Upcoming Screen Unseens and Scream Unseens come with a short list of likely films, kept behind a tap so nothing is spoiled.',
+        ],
+      },
+      {
+        title: 'Your seat and a reminder',
+        items: [
+          'Marquee reads your auditorium and seat from each AMC email, for past bookings too, and marks your seat on the seat map.',
+          'Two hours before a booked show you get a notification with the theatre, auditorium, seat, and when the film itself starts after the trailers.',
+        ],
+      },
+      {
+        title: 'Alerts worth having',
+        items: [
+          'Hear when an Unseen can actually be booked at one of your theatres, when new films arrive, and when a showing you are watching fills up or sells out.',
+        ],
+      },
+      {
+        title: 'Friends',
+        items: [
+          'The Friends feed reads like a conversation, comments look like messages, and when you book the same showing it says where each of you is sitting.',
+          'New: Marquee can reach a friend over Tailcat, an encrypted tunnel that needs no domain, open port or shared VPN on either side. Whoever runs your Marquee turns it on with TAILCAT_ENABLED=1, and Add a friend then offers a Tailcat link beside the web link. Existing friends keep working as before.',
+        ],
+      },
+      {
+        title: 'A Status page',
+        items: [
+          'The Status line under notifications shows whether email, friends, backups and the rest are running, and you are told if something has been failing for a day.',
+        ],
+      },
+      {
+        title: 'Gone',
+        items: [
+          'The Watchlist and recommendations, replaced by Now Playing.',
         ],
       },
     ],
