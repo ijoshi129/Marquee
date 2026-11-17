@@ -715,3 +715,55 @@ test('a re-release is matched to the original film, whatever year it is listed u
   };
   assert.equal(await nowPlaying.tmdbPoster('Top Gun 40th Anniversary', 2026), 'https://image.tmdb.org/t/p/w185/TopGun1986.jpg');
 });
+
+// ---------- your seat on the map ----------
+
+const board = {
+  films: [
+    {
+      title: 'Wicked: For Good',
+      formats: [
+        { format: 'IMAX', showtimes: [{ hash: 'h-imax-7', starts_at: '2026-11-21T19:00', label: '7:00 PM' }] },
+        { format: 'Standard', showtimes: [{ hash: 'h-std-7', starts_at: '2026-11-21T19:15', label: '7:15 PM' }, { hash: null, starts_at: '2026-11-21T21:00' }] },
+      ],
+    },
+    {
+      title: 'AMC Screen Unseen: December 14',
+      formats: [{ format: 'Standard', showtimes: [{ hash: 'h-unseen', starts_at: '2026-12-14T19:00', label: '7:00 PM' }] }],
+    },
+  ],
+};
+
+test('findShowing: the booked film at the booked minute, in whatever format', () => {
+  const { findShowing } = nowPlaying._internal;
+  const hit = findShowing(board, { title: 'Wicked: For Good', showtime: '2026-11-21T19:15:00Z' });
+  assert.equal(hit.showtime.hash, 'h-std-7');
+  assert.equal(hit.format, 'Standard');
+  assert.equal(findShowing(board, { title: 'Wicked: For Good', showtime: '2026-11-21T20:00:00Z' }), null);
+  assert.equal(findShowing(board, { title: 'Frankenstein', showtime: '2026-11-21T19:00:00Z' }), null);
+});
+
+test('findShowing: an Unseen is found by which Unseen and which day', () => {
+  const { findShowing } = nowPlaying._internal;
+  const hit = findShowing(board, { title: 'AMC Screen Unseen: Mystery Movie', showtime: '2026-12-14T19:00:00Z' });
+  assert.equal(hit.showtime.hash, 'h-unseen');
+});
+
+test('probeOrder: one showing per film before a second of any', () => {
+  const { probeOrder } = nowPlaying._internal;
+  const b = {
+    films: [
+      { formats: [{ showtimes: [{ hash: 'a1' }, { hash: 'a2' }, { hash: 'a3', past: true }] }] },
+      { formats: [{ showtimes: [{ hash: 'b1' }] }, { showtimes: [{ hash: 'b2' }] }] },
+      { formats: [{ showtimes: [{ hash: null }, { hash: 'c1' }] }] },
+    ],
+  };
+  assert.deepEqual(probeOrder(b), ['a1', 'b1', 'c1', 'a2', 'b2']);
+});
+
+test('layoutOf: keeps where every seat is, not who has it', () => {
+  const { layoutOf } = nowPlaying._internal;
+  const l = layoutOf({ auditorium: '7', width: 100, height: 50, seats: [{ id: 'G8', row: 'G', x: 1, y: 2, w: 3, h: 4, kind: 'standard', open: false }] });
+  assert.equal(l.auditorium, '7');
+  assert.deepEqual(l.seats, [{ id: 'G8', row: 'G', x: 1, y: 2, w: 3, h: 4, kind: 'standard' }]);
+});

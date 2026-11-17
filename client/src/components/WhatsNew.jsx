@@ -2,12 +2,33 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '3.0';
+const WHATS_NEW_VERSION = '3.1';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
+  {
+    version: '3.1',
+    sections: [
+      {
+        title: 'A tidier film sheet',
+        items: [
+          'Tap a poster and the sheet now says when and where your showing is, right under the title.',
+          'Changes save as you make them, so the row of buttons along the bottom is gone. Status is one row: Booked, Watched, No-show or Cancelled.',
+          'Seen on, Theatre and Show friends sit together in one list. Show friends replaces Keep private and is on unless you switch it off.',
+          'Assign a different movie, and Re-check on a Screen Unseen, are under the ⋯ button.',
+        ],
+      },
+      {
+        title: 'See your seat on the map',
+        items: [
+          'Tap See seat map on any film with a seat. For a show still to come you get the live map, with your seat and how full it is, and a link to that showing in Now Playing.',
+          'For a film you have seen, it draws the auditorium with where you sat. The layout comes from a showing there now, so it can take a moment the first time.',
+        ],
+      },
+    ],
+  },
   {
     version: '3.0',
     sections: [
@@ -512,10 +533,16 @@ function readState() {
 }
 
 // Each major version shows its x.0 release in full; the point releases that
-// followed sit folded underneath it.
+// followed sit folded underneath it. The newest release is always shown in
+// full, since it is what the card is opening for.
 function seriesOf(releases) {
   const out = [];
+  const [newest] = releases;
+  if (newest && !newest.version.endsWith('.0')) {
+    out.push({ major: `latest-${newest.version}`, main: newest, minors: [] });
+  }
   for (const rel of releases) {
+    if (rel === out[0]?.main) continue;
     const major = rel.version.split('.')[0];
     let group = out.find((g) => g.major === major);
     if (!group) {

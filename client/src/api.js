@@ -84,6 +84,7 @@ export const api = {
   npWatch: (body) => request('/api/now-playing/watching', { method: 'POST', body: JSON.stringify(body) }),
   npUnwatch: (hash) => request(`/api/now-playing/watching/${encodeURIComponent(hash)}`, { method: 'DELETE' }),
   npPoster: (title, year) => request(`/api/now-playing/poster${qs({ title, year })}`),
+  npBookingSeats: (watchId) => request(`/api/now-playing/booking/${encodeURIComponent(watchId)}`),
   npSeatMap: (hash) => request(`/api/now-playing/seats/${encodeURIComponent(hash)}`),
   npSeatCounts: (hashes) =>
     request('/api/now-playing/seats/counts', { method: 'POST', body: JSON.stringify({ hashes }) }),
