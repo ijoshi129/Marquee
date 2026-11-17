@@ -9,6 +9,7 @@ const { pool } = require('../db');
 const fed = require('../services/federation');
 const { fetchWithTimeout } = require('../services/http');
 const federationSync = require('../workers/federation-sync');
+const { cleanSeats, cleanAuditorium } = require('../utils/seats');
 
 const router = express.Router();
 
@@ -56,7 +57,7 @@ router.get('/settings', async (req, res) => {
 });
 
 // PUT /api/friends/settings — update sharing toggles.
-const SETTING_FIELDS = ['share_ratings', 'share_activity', 'share_now_playing', 'share_stats', 'activity_limit'];
+const SETTING_FIELDS = ['share_ratings', 'share_activity', 'share_now_playing', 'share_seats', 'share_stats', 'activity_limit'];
 router.put('/settings', async (req, res) => {
   try {
     const updates = [];
@@ -327,7 +328,7 @@ router.get('/feed', async (req, res) => {
            FROM friend_profiles fp JOIN friends f ON f.id = fp.friend_id`
       ),
       pool.query(
-        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.showtime, t.name AS theater_name, tc.payload AS tmdb,
+        `SELECT w.id AS watch_id, w.tmdb_id, w.title, w.showtime, w.auditorium, w.seats, t.name AS theater_name, tc.payload AS tmdb,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('name', se.author_name, 'by', se.author_instance_id, 'body', se.body, 'at', se.created_at) ORDER BY se.created_at)
                             FROM social_events se WHERE se.watch_id = w.id AND se.kind = 'comment'), '[]'::jsonb) AS comments
            FROM watches w
@@ -500,7 +501,7 @@ router.get('/feed', async (req, res) => {
       }
     }
     for (const p of mine.rows) {
-      add(p, { you: true, instance_id: myInstanceId, watch_id: p.watch_id, comments: p.comments });
+      add(p, { you: true, instance_id: myInstanceId, watch_id: p.watch_id, comments: p.comments, p });
     }
 
     const upcomingItems = [];
@@ -535,9 +536,13 @@ router.get('/feed', async (req, res) => {
         kind: 'upcoming',
         together: people.length > 1,
         you: youIn,
-        people: people.map((w) =>
-          w.you ? { name: 'You', you: true } : { name: w.name, friend_id: w.friend_id }
-        ),
+        // Each person's seat, when they share it: yours from your own booking,
+        // a friend's from what their instance sent.
+        people: people.map((w) => ({
+          ...(w.you ? { name: 'You', you: true } : { name: w.name, friend_id: w.friend_id }),
+          seats: cleanSeats(w.p.seats),
+          auditorium: cleanAuditorium(w.p.auditorium),
+        })),
         // Tapping the card opens a profile only when there's exactly one friend.
         friend_id: profileFriend ? profileFriend.friend_id : null,
         friend_name: profileFriend ? profileFriend.name : null,

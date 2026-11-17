@@ -1842,6 +1842,13 @@ button.overview-cell {
   color: var(--fg-dim);
   text-transform: uppercase;
 }
+.sheet-seats {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
 .sheet-director {
   font-size: 13px;
   color: var(--fg-dim);
@@ -3158,6 +3165,8 @@ input[type='date'].input-naked { color-scheme: dark; }
   white-space: nowrap;
 }
 .np-time.is-low .np-time-seats { color: var(--warn); }
+.np-time.is-mine { border-color: var(--accent); background: var(--accent-soft); }
+.np-time.is-watched .np-time-clock::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
 .np-time.is-full { opacity: 0.55; }
 .np-time.is-full .np-time-clock { text-decoration: line-through; }
 .np-time.is-full .np-time-seats { color: var(--danger); }
@@ -3345,6 +3354,7 @@ input[type='date'].input-naked { color-scheme: dark; }
 .seat { stroke-width: 2; }
 .seat.is-open { fill: var(--accent); stroke: var(--accent); }
 .seat.is-taken { fill: var(--bg-elev-2); stroke: var(--fg-faint); }
+.seat.is-mine, .seat.is-mine.is-wheelchair, .seat.is-mine.is-companion { fill: var(--success); stroke: #fff; stroke-width: 5; }
 .seat.is-open.is-wheelchair, .seat.is-open.is-companion { fill: #6aa6e8; stroke: #6aa6e8; }
 .seat-screen { fill: none; stroke: var(--fg-mute); stroke-width: 6; stroke-linecap: round; }
 .seat-screen-label { fill: var(--fg-mute); font-family: var(--font-mono); font-size: 20px; letter-spacing: 0.3em; }
@@ -3362,6 +3372,23 @@ input[type='date'].input-naked { color-scheme: dark; }
 .seat-key.is-open { background: var(--accent); }
 .seat-key.is-taken { background: var(--bg-elev-2); border: 1px solid var(--fg-faint); }
 .seat-key.is-open.is-wheelchair { background: #6aa6e8; }
+.seat-key.is-mine { background: var(--success); border: 1.5px solid #fff; }
+.seat-mine { margin: 12px 12px 0; font-size: 13px; color: var(--success); }
+.seat-watch { display: flex; flex-direction: column; gap: 7px; margin: 14px 12px 0; }
+.seat-watch-btn {
+  padding: 11px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-tint);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.seat-watch-btn.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.seat-watch-btn:disabled { opacity: 0.6; cursor: default; }
+.seat-watch-note { font-size: 12px; line-height: 1.45; color: var(--fg-mute); }
 .seat-prices { margin: 10px 12px 0; font-family: var(--font-mono); font-size: 11px; color: var(--fg-mute); }
 .seat-stale { margin: 10px 12px 0; font-size: 12px; color: var(--warn); }
 
@@ -3666,6 +3693,7 @@ input[type='date'].input-naked { color-scheme: dark; }
   margin: 1px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .feed-meta { font-size: 0.72rem; color: var(--fg-mute); }
+.feed-seats { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.04em; color: var(--accent); }
 .feed-metarow { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .feed-metarow .feed-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed-unseen {

@@ -62,6 +62,22 @@ function fmtChip(iso) {
 }
 
 // "You & Alice" / "Alice & Bob" / "You, Alice & Bob" — You first.
+// Where everyone at a showing is sitting, for those who share it:
+// "You G8 · Kiran G9 · side by side". Null when nobody's seat is known.
+function seatLine(people) {
+  const known = (people || []).filter((p) => p.seats && p.seats.length);
+  if (!known.length) return null;
+  const parts = [...known].sort((a, b) => (a.you ? -1 : b.you ? 1 : 0)).map((p) => `${p.name} ${p.seats.join(', ')}`);
+  const auditoriums = [...new Set(known.map((p) => p.auditorium).filter(Boolean))];
+  const all = known.flatMap((p) => p.seats.map((s) => /^([A-Z]+)(\d+)$/.exec(s))).filter(Boolean);
+  const oneRow = known.length > 1 && all.length > 1 && new Set(all.map((m) => m[1])).size === 1;
+  const nums = all.map((m) => Number(m[2])).sort((a, b) => a - b);
+  const together = oneRow && nums.every((n, i) => i === 0 || n - nums[i - 1] === 1);
+  return [auditoriums.length === 1 ? `Auditorium ${auditoriums[0]}` : null, ...parts, together ? 'side by side' : null]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function peopleLabel(people) {
   const ns = [...(people || [])].sort((a, b) => (a.you ? -1 : b.you ? 1 : 0)).map((p) => p.name);
   if (ns.length <= 1) return ns[0] || '';
@@ -240,9 +256,11 @@ export default function FriendsView({ onAddFriend, focus }) {
                   {it.theater_name ? ` · ${it.theater_name}` : ''}
                 </span>
               )
-            ) : it.rating ? (
-              <Stars value={it.rating} />
             ) : null}
+            {it.kind === 'upcoming' && seatLine(it.people) ? (
+              <span className="feed-seats">{seatLine(it.people)}</span>
+            ) : null}
+            {it.kind !== 'upcoming' && it.rating ? <Stars value={it.rating} /> : null}
             {it.kind !== 'upcoming' &&
               (unseen || it.director || it.release_year ? (
                 <span className="feed-metarow">

@@ -12,6 +12,7 @@ const { pool } = require('../db');
 const fed = require('../services/federation');
 const { notify } = require('../services/notifications');
 const federationSync = require('../workers/federation-sync');
+const { forFriends } = require('../utils/seats');
 
 const router = express.Router();
 
@@ -112,11 +113,14 @@ router.get('/:token/feed', async (req, res) => {
 
     let upcoming = [];
     if (settings.share_now_playing) {
+      // The seat goes out only with a reservation still to come, never with a
+      // film already watched, and only if the owner shares it.
       const up = await pool.query(
-        `${SELECT_SHARED} WHERE w.status = 'pending' AND w.is_private = FALSE
+        `${SELECT_SHARED.replace('w.rating, w.tags, w.watched_at,', 'w.rating, w.tags, w.watched_at, w.auditorium, w.seats,')}
+          WHERE w.status = 'pending' AND w.is_private = FALSE
            ORDER BY w.showtime ASC NULLS LAST LIMIT 20`
       );
-      upcoming = up.rows;
+      upcoming = forFriends(up.rows, settings.share_seats !== false);
     }
 
     let watches = [];

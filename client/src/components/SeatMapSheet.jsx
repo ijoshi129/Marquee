@@ -12,10 +12,21 @@ function money(n) {
 
 // The auditorium for one showing: every seat where it sits, lit if it is still
 // open. Refreshes while it is up, since seats go as you look at them.
-export default function SeatMapSheet({ film, group, showtime, theatre, onCounts, onClose }) {
+export default function SeatMapSheet({ film, group, showtime, theatre, mine, watching, onWatch, onCounts, onClose }) {
   const [map, setMap] = useState(null);
   const [err, setErr] = useState(null);
   const [zoom, setZoom] = useState(false);
+  const [watchBusy, setWatchBusy] = useState(false);
+  const [watchErr, setWatchErr] = useState(null);
+  const mySeats = new Set(mine ? mine.seats || [] : []);
+
+  function toggleWatch() {
+    setWatchBusy(true);
+    setWatchErr(null);
+    onWatch(!watching)
+      .catch((e) => setWatchErr(e.message))
+      .finally(() => setWatchBusy(false));
+  }
 
   useEffect(() => {
     let alive = true;
@@ -116,14 +127,14 @@ export default function SeatMapSheet({ film, group, showtime, theatre, onCounts,
                 {map.seats.map((s) => (
                   <rect
                     key={s.id}
-                    className={`seat ${s.open ? 'is-open' : 'is-taken'} ${s.kind !== 'standard' ? `is-${s.kind}` : ''}`}
+                    className={`seat ${mySeats.has(s.id) ? 'is-mine' : s.open ? 'is-open' : 'is-taken'} ${s.kind !== 'standard' ? `is-${s.kind}` : ''}`}
                     x={s.x + s.w * 0.08}
                     y={s.y + s.h * 0.08}
                     width={s.w * 0.84}
                     height={s.h * 0.84}
                     rx={Math.min(s.w, s.h) * 0.22}
                   >
-                    <title>{`${s.id}${s.open ? '' : ' (taken)'}`}</title>
+                    <title>{`${s.id}${mySeats.has(s.id) ? ' (yours)' : s.open ? '' : ' (taken)'}`}</title>
                   </rect>
                 ))}
               </svg>
@@ -132,8 +143,29 @@ export default function SeatMapSheet({ film, group, showtime, theatre, onCounts,
             <div className="seat-legend">
               <span><i className="seat-key is-open" /> Open</span>
               <span><i className="seat-key is-taken" /> Taken</span>
+              {mySeats.size > 0 && <span><i className="seat-key is-mine" /> Yours</span>}
               {hasAccessible && <span><i className="seat-key is-open is-wheelchair" /> Wheelchair and companion</span>}
             </div>
+
+            {mine && (
+              <div className="seat-mine">
+                You&rsquo;re booked for this one
+                {mine.seats?.length ? `: ${mine.seats.length > 1 ? 'seats' : 'seat'} ${mine.seats.join(', ')}` : ''}
+                {mine.auditorium ? `, auditorium ${mine.auditorium}` : ''}.
+              </div>
+            )}
+
+            {!mine && onWatch && (
+              <div className="seat-watch">
+                <button type="button" className={`seat-watch-btn ${watching ? 'is-on' : ''}`} onClick={toggleWatch} disabled={watchBusy}>
+                  {watching ? 'Watching this showing' : 'Tell me when it fills up'}
+                </button>
+                <span className="seat-watch-note">
+                  {watching ? 'You’ll hear when a quarter of the seats are left, and if it sells out. Tap to stop.' : 'A notification when a quarter of the seats are left, and if it sells out.'}
+                </span>
+                {watchErr && <span className="seat-stale">Could not save: {watchErr}</span>}
+              </div>
+            )}
 
             {map.prices.length > 0 && (
               <div className="seat-prices">{map.prices.map((p) => `${p.label} ${money(p.price)}`).join(' · ')}</div>

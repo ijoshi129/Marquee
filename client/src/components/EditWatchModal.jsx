@@ -189,6 +189,16 @@ export default function EditWatchModal({ watch, onClose, onUpdated, onDeleted, o
                 .filter(Boolean)
                 .join(' · ')}
             </div>
+            {(watch.auditorium || watch.seats?.length > 0) && (
+              <div className="sheet-seats">
+                {[
+                  watch.auditorium ? `Auditorium ${watch.auditorium}` : null,
+                  watch.seats?.length ? `${watch.seats.length > 1 ? 'Seats' : 'Seat'} ${watch.seats.join(', ')}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+            )}
             {tmdb.director && (
               <div className="sheet-director">
                 Directed by{' '}

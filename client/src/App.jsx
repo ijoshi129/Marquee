@@ -47,6 +47,8 @@ export default function App() {
   const [sharing, setSharing] = useState(false);
   // Set by a bell tap: FriendsView scrolls to and opens the film's thread.
   const [friendFocus, setFriendFocus] = useState(null);
+  // Set by a bell tap: Now Playing opens on that theatre and day.
+  const [npFocus, setNpFocus] = useState(null);
 
   const [q, setQ] = useState('');
   const [statusKey, setStatusKey] = useState(DEFAULT_STATUS_KEY);
@@ -268,7 +270,12 @@ export default function App() {
           </button>
           <NotificationsBell
             onOpen={async (n) => {
-              // A comment alert points at one of your own films — open the film
+              // An alert from Now Playing opens the board it is about.
+              if (n?.payload?.now_playing) {
+                setNpFocus({ ...n.payload.now_playing, key: n.id });
+                return setView('nowplaying');
+              }
+              // A comment alert points at one of your own films: open the film
               // (its thread lives there now), not the friends feed.
               if (n?.payload?.watch_id) {
                 const w =
@@ -309,7 +316,7 @@ export default function App() {
         {view === 'friends' ? (
           <FriendsView onAddFriend={() => setAddFriend(true)} focus={friendFocus} />
         ) : view === 'nowplaying' ? (
-          <NowPlayingView onOpenWatch={openWatchById} />
+          <NowPlayingView onOpenWatch={openWatchById} focus={npFocus} />
         ) : (
           <>
             <Notifications

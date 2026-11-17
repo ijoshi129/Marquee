@@ -29,6 +29,8 @@ share what you're watching.
 **Your diary**
 - **Automatic logging**: reads your AMC emails and records every movie, no manual entry.
 - **Rich metadata**: pulls posters, runtimes, genres, and directors from TMDB.
+- **Your seat**: the auditorium and seats from each reservation email, shown on the film and marked on the seat map of an upcoming booking.
+- **Showtime reminders**: a notification two hours before a booked film with where to go, where you are sitting and when it lets out (`SHOWTIME_REMINDER_MINUTES` changes the lead time).
 - **Screen Unseen reveals**: resolves AMC Screen/Scream Unseen mysteries via r/AMCsAList, keeping the title hidden until the showing lets out.
 - **Showtimes on posters**: upcoming films show their release date; booked reservations show the showtime.
 - **Year-in-Review**: cadence chart, top genres/directors/theatres, 5★ picks, and a per-month/per-year A-List savings breakdown. Every stat is tappable for a plain-English detail sheet.
@@ -39,6 +41,7 @@ share what you're watching.
 - **Showtimes at your AMC**: no setup. It opens on the theatre you go to most, found from your reservation emails, and you can add others or set a home theatre. Each day's films are listed by screen (IMAX, Dolby Cinema, PRIME, 3D, standard) for as far ahead as tickets are on sale.
 - **Film details**: tap a poster or title for the synopsis, director, cast, TMDB score and trailer.
 - **Guess the Unseen**: an upcoming Screen or Scream Unseen offers a ranked shortlist of likely films, worked out from AMC's rating and runtime, what opens soon, and how past Unseens went. Hidden until you ask.
+- **Alerts**: an Unseen going on sale at your theatres, new films at your main theatre, and any showing you choose to watch filling up or selling out.
 - **Seats left and seat maps**: every showtime shows how many seats are open; tap it for the auditorium, seat by seat, refreshed while you look.
 - **Knows your diary**: films you have seen or already booked are marked, and the theatres you have been to appear as one-tap chips, most visited first.
 - Showtimes and seats are read from Fandango's public site endpoints, with no key or account. They are undocumented, so this tab can break if Fandango changes them; the Status page reports it when it does.
@@ -46,7 +49,7 @@ share what you're watching.
 **Friends (federation)**
 - **Connect instances directly**: no central server; you and a friend swap secret URLs and the two instances sync over HTTP. Each URL is its own credential: revoke or rotate one friend without touching the rest.
 - **Activity feed**: see what friends have logged and what's coming up.
-- **Seeing together**: matching upcoming reservations merge into one card with a shared comment thread.
+- **Seeing together**: matching upcoming reservations merge into one card with a shared comment thread, and the card says where each person is sitting.
 - **Taste-match**: % agreement and films-in-common on each friend's profile.
 - **Notifications**: in-app bell plus iOS Web Push and [ntfy](https://ntfy.sh) for comments, friend bookings, and seeing-together alerts.
 
@@ -241,6 +244,8 @@ All settings live in `.env` at the repo root (every field is documented inline i
 | `POSTGRES_HOST_PORT` | `5433` | Host port for the bundled Postgres. |
 | `BACKUP_RETENTION_DAYS` | `30` | How many days of backups to keep. |
 | `ADMIN_API_TOKEN` | unset | Bearer token for the database export/import API. Strongly recommended if reachable beyond localhost. |
+| `APP_TIMEZONE` | `America/New_York` | The timezone your theatres are in. Showtime reminders and the Unseen reveal delay are timed by it. |
+| `SHOWTIME_REMINDER_MINUTES` | `120` | How long before a booked show the reminder is sent. |
 | `DATABASE_IMPORT_LIMIT` | `200mb` | Max request body size for the database import API. |
 | `OWNER_PASSCODE` | unset | Passcode gating everything except the federation API. **Required before sharing your instance.** |
 | `FEDERATION_ENABLED` | unset | Set to `1` to enable the Friends layer. |
@@ -342,6 +347,7 @@ node server/scripts/trakt-backfill.js      # queue previously-logged movies (opt
 | `GET /api/now-playing/poster?title=&year=` | A TMDB poster for a film whose own poster is missing or dead. |
 | `GET /api/now-playing/film?title=&year=` | Synopsis, cast, score and trailer for a film on the board, from TMDB. |
 | `GET /api/now-playing/unseen-guesses?date=&kind=&rating=` | Ranked guesses at what an upcoming Unseen is. |
+| `GET\|POST /api/now-playing/watching` · `DELETE /api/now-playing/watching/:hash` | Showings to be told about when they fill up. |
 
 **Friends & social**
 

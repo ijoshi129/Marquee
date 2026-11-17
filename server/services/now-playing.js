@@ -246,7 +246,7 @@ async function flagFilms(films) {
   let rows = [];
   try {
     ({ rows } = await pool.query(
-      `SELECT w.id, w.title, w.status, w.showtime, tc.payload->>'title' AS tmdb_title
+      `SELECT w.id, w.title, w.status, w.showtime, w.auditorium, w.seats, tc.payload->>'title' AS tmdb_title
          FROM watches w
          LEFT JOIN tmdb_cache tc ON tc.tmdb_id = w.tmdb_id
         WHERE w.status IN ('watched', 'pending')`
@@ -264,7 +264,7 @@ async function flagFilms(films) {
         if (k) seen.set(k, w.id);
       }
     } else {
-      const entry = { watch_id: w.id, showtime: w.showtime };
+      const entry = { watch_id: w.id, showtime: w.showtime, auditorium: w.auditorium || null, seats: w.seats || [] };
       const k = titleKey(w.title);
       if (k) booked.set(k, entry);
       const u = unseenKeyFromWatch(w);
@@ -277,7 +277,7 @@ async function flagFilms(films) {
     return {
       ...f,
       seen_watch_id: seen.get(k) || null,
-      booked: b ? { watch_id: b.watch_id, showtime: b.showtime } : null,
+      booked: b || null,
     };
   });
 }
@@ -406,6 +406,7 @@ module.exports = {
   JOB,
   getTheatres,
   setTheatres,
+  unseenKind,
   theatresForView,
   flagFilms,
   fillPosters,

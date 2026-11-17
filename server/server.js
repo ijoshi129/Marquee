@@ -36,6 +36,8 @@ const tmdbRechecker = require('./workers/tmdb-rechecker');
 const traktSync = require('./workers/trakt-sync');
 const federationSync = require('./workers/federation-sync');
 const statusMonitor = require('./workers/status-monitor');
+const showtimeReminder = require('./workers/showtime-reminder');
+const nowPlayingAlerts = require('./workers/now-playing-alerts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -194,6 +196,8 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     traktSync.start();
     federationSync.start();
     statusMonitor.start();
+    showtimeReminder.start();
+    nowPlayingAlerts.start();
 
     const shutdown = async (sig) => {
       logger.info({ signal: sig }, `${sig} received, shutting down`);
@@ -204,6 +208,8 @@ app.get(/^\/(?!api\/|health$).*/, (req, res) => {
       traktSync.stop();
       federationSync.stop();
       statusMonitor.stop();
+      showtimeReminder.stop();
+      nowPlayingAlerts.stop();
       server.close(() => pool.end().then(() => process.exit(0)));
       setTimeout(() => process.exit(1), 10_000).unref();
     };

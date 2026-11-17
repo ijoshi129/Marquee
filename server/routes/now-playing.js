@@ -3,6 +3,7 @@ const logger = require('../logger');
 const fandango = require('../services/fandango');
 const nowPlaying = require('../services/now-playing');
 const unseenGuess = require('../services/unseen-guess');
+const alerts = require('../services/now-playing-alerts');
 
 const router = express.Router();
 
@@ -105,6 +106,37 @@ router.get('/unseen-guesses', async (req, res) => {
   } catch (err) {
     logger.warn(`now-playing: unseen guesses failed for ${date}: ${err.message}`);
     res.status(502).json({ error: 'Could not work out candidates right now' });
+  }
+});
+
+// Showings the owner asked to be told about when they fill up.
+router.get('/watching', async (req, res) => {
+  try {
+    res.json(await alerts.listWatching());
+  } catch (err) {
+    logger.error({ err }, 'now-playing: list watched showings');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/watching', async (req, res) => {
+  try {
+    const added = await alerts.watchShowing(req.body);
+    if (!added) return res.status(400).json({ error: 'That showing cannot be watched' });
+    res.json(await alerts.listWatching());
+  } catch (err) {
+    logger.error({ err }, 'now-playing: watch a showing');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/watching/:hash', async (req, res) => {
+  try {
+    await alerts.unwatchShowing(req.params.hash);
+    res.json(await alerts.listWatching());
+  } catch (err) {
+    logger.error({ err }, 'now-playing: stop watching a showing');
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
