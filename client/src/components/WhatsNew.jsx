@@ -2,14 +2,14 @@ import { useState } from 'react';
 
 // Bump this string whenever the SECTIONS below change. Existing users will
 // see the card again on next launch when their stored version doesn't match.
-const WHATS_NEW_VERSION = '2.18';
+const WHATS_NEW_VERSION = '3.0';
 const STORAGE_KEY = `marquee.whatsNew.v${WHATS_NEW_VERSION}`;
 
 // Newest release first. Each release keeps its own sections so older notes stay
 // visible under their version tag rather than being overwritten.
 const RELEASES = [
   {
-    version: '2.18',
+    version: '3.0',
     sections: [
       {
         title: 'Friends without a public address',
@@ -479,6 +479,41 @@ function readState() {
   return 'fresh';
 }
 
+// Each major version shows its x.0 release in full; the point releases that
+// followed sit folded underneath it.
+function seriesOf(releases) {
+  const out = [];
+  for (const rel of releases) {
+    const major = rel.version.split('.')[0];
+    let group = out.find((g) => g.major === major);
+    if (!group) {
+      group = { major, main: null, minors: [] };
+      out.push(group);
+    }
+    if (rel.version === `${major}.0`) group.main = rel;
+    else group.minors.push(rel);
+  }
+  return out;
+}
+
+function Release({ rel }) {
+  return (
+    <>
+      <div className="whats-new-version">v{rel.version}</div>
+      {rel.sections.map((s) => (
+        <section key={s.title} className="whats-new-section">
+          <div className="whats-new-section-title">{s.title}</div>
+          <ul className="whats-new-list">
+            {s.items.map((it, i) => (
+              <li key={i}>{it}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
+  );
+}
+
 export default function WhatsNew() {
   // 'fresh': user has never seen this version → show expanded card.
   // 'collapsed': user closed it once → show the bottom-left icon.
@@ -542,19 +577,24 @@ export default function WhatsNew() {
         <h2 className="whats-new-title">Marquee v{WHATS_NEW_VERSION}</h2>
       </header>
       <div className="whats-new-body">
-        {RELEASES.map((rel) => (
-          <div key={rel.version} className="whats-new-release">
-            <div className="whats-new-version">v{rel.version}</div>
-            {rel.sections.map((s) => (
-              <section key={s.title} className="whats-new-section">
-                <div className="whats-new-section-title">{s.title}</div>
-                <ul className="whats-new-list">
-                  {s.items.map((it, i) => (
-                    <li key={i}>{it}</li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+        {seriesOf(RELEASES).map(({ major, main, minors }) => (
+          <div key={major} className="whats-new-release">
+            {main && <Release rel={main} />}
+            {minors.length > 0 && (
+              <details className="whats-new-minors">
+                <summary>
+                  {main ? 'Smaller updates' : `Version ${major}`}
+                  <span className="whats-new-minors-range">
+                    v{minors[minors.length - 1].version} to v{minors[0].version}
+                  </span>
+                </summary>
+                {minors.map((rel) => (
+                  <div key={rel.version} className="whats-new-minor">
+                    <Release rel={rel} />
+                  </div>
+                ))}
+              </details>
+            )}
           </div>
         ))}
       </div>
