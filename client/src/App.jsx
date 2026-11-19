@@ -69,7 +69,11 @@ export default function App() {
     filterAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  // Each load gets a sequence number; only the newest one may write the list,
+  // so a slow earlier response can't overwrite fresher rows.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setErr(null);
     try {
@@ -95,11 +99,11 @@ export default function App() {
         params.include_pending = 1;
       }
       const rows = await api.listWatches(params);
-      setWatches(rows);
+      if (seq === loadSeq.current) setWatches(rows);
     } catch (e) {
-      setErr(e.message);
+      if (seq === loadSeq.current) setErr(e.message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [q, statusKey, sortKey, genre, director, tag, minRating, year]);
 
@@ -205,6 +209,21 @@ export default function App() {
     if (locked === false) load();
   }, [load, locked]);
 
+  // iOS keeps the PWA alive in the background, so refetch when it comes back
+  // to the foreground; otherwise changes made elsewhere only show on relaunch.
+  useEffect(() => {
+    if (locked !== false) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onVisible);
+    };
+  }, [load, locked]);
+
   function handleCreated(watch) {
     setAdding(false);
     setRefreshKey((k) => k + 1);
@@ -214,6 +233,9 @@ export default function App() {
   function handleUpdated(watch) {
     // Functional, so a save that lands after the sheet closed does not reopen it.
     setEditing((cur) => (cur && cur.id === watch.id ? watch : cur));
+    // Patch the row in place right away, so reopening its poster shows the
+    // saved version even before the refetch below lands.
+    setWatches((rows) => rows.map((r) => (r.id === watch.id ? { ...r, ...watch } : r)));
     setRefreshKey((k) => k + 1);
     // Re-fetch so server-side filters (status, search, period) are reapplied —
     // a row whose new status no longer matches the current filter should drop out.
