@@ -421,9 +421,11 @@ async function bookingSeats(watchId) {
   if (w.showtime && w.status === 'pending' && new Date(w.showtime).getTime() > Date.now() - 6 * 3600 * 1000) {
     const date = new Date(w.showtime).toISOString().slice(0, 10);
     const hit = findShowing(await fandango.showtimes(theatre.id, date), w);
-    if (hit) {
-      const map = await fandango.seatMap(hit.showtime.hash).catch(() => null);
-      if (map) keepLayouts(theatre.id, [map]).catch(() => {});
+    // Around start time AMC stops selling the showing and its live map 404s
+    // while the listing still has it; then fall through to the saved layout.
+    const map = hit ? await fandango.seatMap(hit.showtime.hash).catch(() => null) : null;
+    if (map) {
+      keepLayouts(theatre.id, [map]).catch(() => {});
       return {
         mode: 'live',
         mine,
